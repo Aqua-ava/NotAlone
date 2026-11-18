@@ -1,8 +1,8 @@
 // A3：启动期 helper 核验在同一次启动进程内按资源目录记忆；成功与失败都只执行一次 codesign。
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtemp, mkdir, realpath, rm } from 'node:fs/promises';
+import { cp, mkdtemp, mkdir, realpath, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { resolveSyncProbePath, resolveHeaderChangeSourcePath, testCodesignExecutor } from '../../src/main/backend/bundled-helpers.ts';
@@ -10,14 +10,26 @@ import { resolveSyncProbePath, resolveHeaderChangeSourcePath, testCodesignExecut
 const identifierFor = (file) => file === 'notalone-header-change-source'
   ? 'com.notalone.sync-probe.header-change' : 'com.notalone.sync-probe.cli';
 
-async function prepare(t) {
-  const owned = await realpath(await mkdtemp(path.join(tmpdir(), 'notalone-runtime-cache-')));
-  t.after(() => rm(owned, { recursive: true, force: true }));
+// 同一文件的两个用例共用一次真实的仓库探针搬运（约 35s），各自复制到独立资源目录；
+// 记忆按资源目录区分，路径不同则互不影响，两个用例的断言与注入方式不变。
+let template;
+async function buildTemplate() {
+  const owned = await realpath(await mkdtemp(path.join(tmpdir(), 'notalone-runtime-cache-template-')));
   const destination = path.join(owned, 'Resources', 'notalone-probe');
   await mkdir(path.dirname(destination));
   const prepared = spawnSync(process.execPath, [path.resolve('scripts/prepare-probe.mjs'), '--destination', destination],
     { encoding: 'utf8', timeout: 120_000, env: { PATH: '/usr/bin:/bin' } });
   assert.equal(prepared.status, 0, `仓库探针搬运应成功：${prepared.stdout}\n${prepared.stderr}`);
+  return owned;
+}
+after(async () => { if (template) await rm(await template.catch(() => ''), { recursive: true, force: true }); });
+
+async function prepare(t) {
+  template ??= buildTemplate();
+  const source = await template;
+  const owned = await realpath(await mkdtemp(path.join(tmpdir(), 'notalone-runtime-cache-')));
+  t.after(() => rm(owned, { recursive: true, force: true }));
+  await cp(path.join(source, 'Resources'), path.join(owned, 'Resources'), { recursive: true, verbatimSymlinks: true, preserveTimestamps: true });
   return owned;
 }
 
