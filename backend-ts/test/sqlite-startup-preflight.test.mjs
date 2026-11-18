@@ -6,13 +6,13 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 import {loadManifest} from '../src/platform/cutover/control.ts';
-import * as startup from '../src/platform/cutover/startup.ts';
+import {runDefaultDatabaseStartup} from './fixtures/cutover/default-startup.mjs';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 
 async function fixture(t){
  const userData=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-startup-preflight-')));
  t.after(()=>rm(userData,{recursive:true,force:true}));
- const ready=await startup.runDefaultDatabaseStartup({userData});
+ const ready=await runDefaultDatabaseStartup({userData});
  assert.equal(ready.phase,'ready');
  return {userData,ready};
 }
@@ -58,7 +58,7 @@ test('首次资料准备仍完整创建并验证，已有目录中新出现的�
 for(const mode of ['complete','prepared'])test(`已有本人身份缺失后${mode}阻断重试仍保留原身份，不生成新本人`,async t=>{
  const {userData,ready}=await fixture(t),file=path.join(userData,'managed/sqlite/notalone.sqlite');
  const remove=new DatabaseSync(file);remove.exec('DELETE FROM owner');remove.close();
- const run=mode==='complete'?startup.runDefaultDatabaseStartup:prepareDatabaseStartup;
+ const run=mode==='complete'?runDefaultDatabaseStartup:prepareDatabaseStartup;
  if(mode==='prepared')await chmod(file,0o644);
  const first=await run({userData});assert.equal(first.phase,'maintenance');
  if(mode==='prepared')await chmod(file,0o600);
@@ -77,7 +77,7 @@ test('接管已有启动配置时沿用现存本人，缺失本人不能按首�
   const {userData,ready}=await fixture(sub),file=path.join(userData,'managed/sqlite/notalone.sqlite');
   if(missing){const db=new DatabaseSync(file);db.exec('DELETE FROM owner');db.close();}
   await rm(path.join(userData,'database-cutover/manifest.json'));
-  const result=await startup.runDefaultDatabaseStartup({userData});
+  const result=await runDefaultDatabaseStartup({userData});
   if(!missing){assert.equal(result.phase,'ready');assert.equal(result.ownerId,ready.ownerId);return;}
   assert.equal(result.phase,'maintenance');
   const check=new DatabaseSync(file,{readOnly:true});

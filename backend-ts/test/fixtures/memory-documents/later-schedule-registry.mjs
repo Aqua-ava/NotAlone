@@ -1,12 +1,8 @@
 import {registry as base} from '../../../src/storage/sqlite/registry.ts';
-import {laterScheduleMigration,memoryDocumentsLaterScheduleActions} from '../../../src/memory/sqlite/documents/later-schedule.ts';
 
-const installed=base.migrations.some(migration=>migration.sql.includes('CREATE TABLE memory_document_later_schedule'));
-const version=Math.max(...base.migrations.map(migration=>migration.version))+1;
 export const registry={
  ...base,
- migrations:installed?base.migrations:[...base.migrations,laterScheduleMigration(version)],
- actions:[...(installed?base.actions:[...base.actions,...memoryDocumentsLaterScheduleActions]),{
+ actions:[...base.actions,{
   name:'fixture.laterScheduleHistory',mode:'read',retryBusy:false,execute(tx,input){
    return tx.all('SELECT generation,stage,state,due_at,error_code FROM memory_document_later_schedule WHERE owner_id=? AND scope_key=? ORDER BY generation',[input.ownerId,input.scopeKey]);
   }

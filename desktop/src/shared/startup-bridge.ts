@@ -7,8 +7,7 @@ export type StartupCode = 'ready' | 'launch_unconfigured' | 'configuration_inval
   | 'sqlite_business_unavailable' | 'sqlite_storage_failed'
   | 'runtime_components_unavailable' | 'runtime_configuration_invalid' | 'runtime_cancelled'
   | 'database_prepare_failed' | 'database_start_failed' | 'database_already_running' | 'local_setup_required' | 'runtime_stop_unconfirmed'
-  | 'database_cutover_required' | 'database_maintenance' | 'cutover_manifest_invalid' | 'cutover_authorization_required'
-  | 'cutover_authorization_invalid' | 'cutover_legacy_target_unclassified' | 'cutover_legacy_writer_running' | 'cutover_cleanup_failed'
+  | 'cutover_manifest_invalid' | 'cutover_legacy_target_unclassified' | 'cutover_legacy_writer_running' | 'cutover_cleanup_failed'
   | 'cutover_checks_failed' | 'cutover_target_unrecorded' | 'cutover_configuration_conflict' | 'cutover_storage_failed' | 'sqlite_cancelled';
 
 // 只传递非秘密绝对路径与固定状态，配置文件内容和握手凭据不进入界面。

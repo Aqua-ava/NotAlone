@@ -55,20 +55,13 @@ function check(name: CutoverCheckRecord['name'], state: CutoverCheckRecord['stat
   return detail === undefined ? { name, state } : { name, state, detail };
 }
 
-/** 完成态重开：打开数据库核验本人身份并返回 ready；首次创建走同一入口。仅使用 SQLite，不创建第二个空库。 */
-export async function runDefaultDatabaseStartup(options: DefaultDatabaseOptions): Promise<CutoverResult> {
-  return runDatabaseStartup(options, 'reopen');
-}
-
 export interface PreparedDatabaseStartup {
   phase: 'prepared'; code: 'sqlite_prepared'; databaseId: string; ownerId: string;
   configuration: SqliteCapabilitiesConfiguration; manifestRevision: number;
 }
 
-/** 'prepare' 不打开数据库：完成态只核验实例配置并返回 prepared，由桌面宿主随后正式打开；未完成时才创建目标实例。 */
-export async function runDatabaseStartup(options: DefaultDatabaseOptions, mode: 'reopen'): Promise<CutoverResult>;
-export async function runDatabaseStartup(options: DefaultDatabaseOptions, mode: 'prepare'): Promise<PreparedDatabaseStartup | CutoverResult>;
-export async function runDatabaseStartup(options: DefaultDatabaseOptions, mode: StartupMode): Promise<PreparedDatabaseStartup | CutoverResult> {
+/** 不打开数据库：完成态只核验实例配置并返回 prepared，由桌面宿主随后正式打开；未完成时才创建目标实例。 */
+export async function runDatabaseStartup(options: DefaultDatabaseOptions): Promise<PreparedDatabaseStartup | CutoverResult> {
   const userData = path.resolve(options.userData);
   const now = () => options.now?.() ?? Date.now();
   let manifest: CutoverManifest | undefined;
@@ -80,9 +73,9 @@ export async function runDatabaseStartup(options: DefaultDatabaseOptions, mode: 
     if (unrecognizedManagedTargets(userData).length) {
       throw new Blocked('cutover_legacy_target_unclassified', 'unsupported_managed_entry', manifest ?? initialManifest(now()));
     }
-    if (manifest?.phase === 'completed') return await completeStartup(userData, manifest, options, mode);
+    if (manifest?.phase === 'completed') return prepareCompleted(userData, manifest);
     // 旧缺陷曾把存活宿主自己的运行锁写成阻断；宿主仍存活时只准备原目标，宿主退出后再走切换自愈。
-    if (mode === 'prepare' && manifest && blockedByOwnRuntime(userData, manifest)) return await completeStartup(userData, manifest, options, mode);
+    if (manifest && blockedByOwnRuntime(userData, manifest)) return prepareCompleted(userData, manifest);
     return await switchDatabase(userData, manifest ?? initialManifest(now()), options);
   } catch (error) {
     if (error instanceof Blocked) return { phase: 'maintenance', code: error.code, detail: error.detail, manifestRevision: error.manifest.revision };
@@ -95,14 +88,10 @@ export async function runDatabaseStartup(options: DefaultDatabaseOptions, mode: 
   }
 }
 
-type StartupMode = 'prepare' | 'reopen';
-function completedConfiguration(userData: string, manifest: CutoverManifest, mode: StartupMode): StartupConfiguration {
+function completedConfiguration(userData: string, manifest: CutoverManifest): StartupConfiguration {
   const configuration = loadStartupConfiguration(userData);
   if (!configuration) throw new Blocked('cutover_configuration_conflict', 'startup_configuration_missing', manifest);
   if (!manifest.target || configuration.expectedDatabaseId !== manifest.target.databaseId) throw new Blocked('cutover_configuration_conflict', 'startup_configuration_identity_mismatch', manifest);
-  // 重开会打开数据库并推进实例租约，不能与存活宿主并行；这是暂时占用，不改写已完成的切换清单。
-  const live = checkRuntimeWriters(userData).filter(record => record.state !== 'stopped');
-  if (live.length && mode === 'reopen') throw new Blocked('cutover_legacy_writer_running', describeWriters(live), manifest);
   return configuration;
 }
 const describeWriters = (records: WriterCheckRecord[]): string => records.map(record => `${record.name}:${record.state}`).join(',');
@@ -118,28 +107,12 @@ function blockedByOwnRuntime(userData: string, manifest: CutoverManifest): boole
 function configuredCapabilities(configuration: StartupConfiguration): SqliteCapabilitiesConfiguration {
   return {capabilities: configuration.capabilities, ...(configuration.skillPackageRoot ? {skillPackageRoot: configuration.skillPackageRoot} : {})};
 }
-async function completeStartup(userData: string, manifest: CutoverManifest, options: DefaultDatabaseOptions, mode: StartupMode): Promise<CutoverReady | PreparedDatabaseStartup> {
-  return mode === 'reopen' ? await reopenCompleted(userData, manifest, options) : prepareCompleted(userData, manifest);
-}
 function prepareCompleted(userData: string, manifest: CutoverManifest): PreparedDatabaseStartup {
-  const configuration = completedConfiguration(userData, manifest, 'prepare');
+  const configuration = completedConfiguration(userData, manifest);
   controlledFiles(userData, false).verify();
   return {phase: 'prepared', code: 'sqlite_prepared', databaseId: configuration.expectedDatabaseId,
     ownerId: manifest.target!.ownerId, configuration: configuredCapabilities(configuration), manifestRevision: manifest.revision};
 }
-async function reopenCompleted(userData: string, manifest: CutoverManifest, options: DefaultDatabaseOptions): Promise<CutoverReady> {
-  const configuration = completedConfiguration(userData, manifest, 'reopen');
-  const factory = options.storageFactory ?? defaultFactory;
-  let storage: CutoverStorage | undefined;
-  try {
-    storage = await factory.open({ userData, intent: 'open', expectedDatabaseId: configuration.expectedDatabaseId, role: 'test' });
-    const ownerId = await storage.execute<string>('identity.resolveOwner', { proposedOwnerId: randomUUID(), expectedOwnerId: manifest.target!.ownerId, at: Date.now() });
-    if (ownerId !== manifest.target!.ownerId) throw new Blocked('cutover_checks_failed', 'target_owner_mismatch', manifest);
-    return { phase: 'ready', code: 'sqlite_reopened', databaseId: storage.status.databaseId, ownerId, schemaVersion: storage.status.schemaVersion,
-      sqliteVersion: storage.status.sqliteVersion, created: false, configuration: configuredCapabilities(configuration), manifestRevision: manifest.revision };
-  } finally { await storage?.close().catch(() => {}); }
-}
-
 async function switchDatabase(userData: string, manifest: CutoverManifest, options: DefaultDatabaseOptions): Promise<CutoverResult> {
   const factory = options.storageFactory ?? defaultFactory;
   const recorded = new Map(manifest.legacyTargets.map(target => [target.id, target]));

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { runDefaultDatabaseStartup } from '../src/platform/cutover/startup.ts';
+import { runDefaultDatabaseStartup } from './fixtures/cutover/default-startup.mjs';
 import { launchDsh } from '../src/launch.ts';
 import { waitForHostReady } from './host-readiness-support.mjs';
 

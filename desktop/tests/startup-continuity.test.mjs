@@ -199,7 +199,7 @@ test('配置读取在诊断前失败时仍提供恢复入口，不会一直显�
 
 test('旧数据库维护态提供重试与诊断入口，不提供本机设置或备份操作', () => {
   const html = renderToStaticMarkup(React.createElement(StartupReadiness, {
-    state: { mode: 'external', phase: 'blocked', code: 'cutover_authorization_required', revision: 1, helperWarnings: [] },
+    state: { mode: 'external', phase: 'blocked', code: 'cutover_legacy_writer_running', revision: 1, helperWarnings: [] },
   }));
   assert.doesNotMatch(html, /备份|搬库|本机设置/);
   assert.match(html, /重试连接/);
@@ -213,7 +213,7 @@ test('默认 SQLite 启动进度直接显示，不再出现首次本机设置流
   assert.match(existing, /正在准备本机资料/);
   assert.doesNotMatch(existing, /备份|搬库|首次设置/);
   const maintenance = renderToStaticMarkup(React.createElement(StartupReadiness, {
-    state: { mode: 'external', phase: 'blocked', code: 'database_cutover_required', revision: 1, helperWarnings: [] },
+    state: { mode: 'external', phase: 'blocked', code: 'cutover_legacy_writer_running', revision: 1, helperWarnings: [] },
   }));
   assert.doesNotMatch(maintenance, /开始本机设置|取消本次设置/);
   assert.match(maintenance, /维护态|旧数据库/);

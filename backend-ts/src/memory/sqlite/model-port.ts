@@ -1,6 +1,5 @@
 /** 固定范围提取的模型端口；沿正式 DSH provider 和许可合同。 */
 import type {Context} from '@deepseek-ai/cordis';
-import {sha256} from '../../platform/sha256.ts';
 import type {HostReplyConfiguration} from '../../host/host-reply-config.ts';
 import type {ModelLedgerReceipt} from '../../platform/models/model-ledger-contract.ts';
 import type {ModelTaskClaim} from '../../platform/models/model-permit-port.ts';
@@ -10,6 +9,7 @@ import {createExtractionModelCaller,type ExtractionPermitEndpoint} from '../extr
 import {DIRECT_EXTRACTION_SCHEMA} from '../extraction/prompts.ts';
 import {DEEPSEEK_STRICT_VERIFICATION_TOOL} from '../../platform/models/deepseek-strict.ts';
 import type {ModelImageManifest} from '../../platform/models/model-images.ts';
+import {acceptsImages,hasModelCredential,modelPreparation,modelSnapshot,ownedCalls,validBudget} from './model-port-core.ts';
 
 export interface SqliteExtractionModelScope {owner_id:string;contact_id:string;}
 export interface SqliteExtractionModelInvocation {
@@ -45,44 +45,29 @@ const fail=(code:string):never=>{throw new SqliteExtractionModelPortError(code);
 export function createSqliteExtractionModelPort(options:SqliteExtractionModelPortOptions) {
   const configuration=options.configuration;
   if(configuration.status!=='configured')throw new SqliteExtractionModelPortError('extraction_model_unconfigured');
-  const providerConfiguration={...configuration.provider,connection:structuredClone(configuration.provider.connection)};
-  const model=structuredClone(configuration.model);
-  const binding={provider:model.provider,model:model.model,maxTokens:model.maxTokens,
-    temperature:model.temperature,reasoningEffort:model.reasoningEffort};
-  const profile=structuredClone(model.budgetProfile);
-  const positive=(n:number)=>Number.isSafeInteger(n)&&n>0;
-  if(!positive(binding.maxTokens)||!positive(profile.context_window_tokens)||!positive(profile.safety_margin_tokens)
-    ||profile.context_window_tokens<=binding.maxTokens+profile.safety_margin_tokens
-    ||providerConfiguration.provider!==binding.provider||!positive(model.deadline_ms)
-    ||typeof options.authorizePurpose!=='function'||!options.provider&&typeof options.resolveUserId!=='function')fail('extraction_model_configuration_invalid');
-  const preparation:SqliteExtractionModelPreparation={provider:binding.provider,model:binding.model,
-    configurationId:sha256(JSON.stringify({binding,profile,
-      baseURL:providerConfiguration.connection.baseURL,deadline:model.deadline_ms})),
-    maxInputTokens:profile.context_window_tokens-binding.maxTokens-profile.safety_margin_tokens,
-    maxOutputTokens:binding.maxTokens,contextWindowTokens:profile.context_window_tokens,safetyMarginTokens:profile.safety_margin_tokens};
+  const snapshot=modelSnapshot(configuration),{provider:providerConfiguration,model,binding,profile}=snapshot;
+  if(!validBudget(snapshot)||typeof options.authorizePurpose!=='function'||!options.provider&&typeof options.resolveUserId!=='function')
+    fail('extraction_model_configuration_invalid');
+  const preparation:SqliteExtractionModelPreparation=modelPreparation(snapshot);
   const ownsProvider=!options.provider;
   const provider=options.provider??installModelProvider(options.ctx,{...providerConfiguration,resolveUserId:options.resolveUserId!});
   const caller=createExtractionModelCaller({ctx:options.ctx,provider,permit:options.permit});
-  const stopped=new AbortController();
-  const active=new Set<Promise<unknown>>();
-  let closing:Promise<void>|undefined;
+  const calls=ownedCalls(model.deadline_ms);
   async function prepare(request:ExtractionInvocation,input:Pick<SqliteExtractionModelInvocation,'scope'|'signal'|'requireCurrent'>):Promise<SqliteExtractionModelPreparation> {
-    if(stopped.signal.aborted)fail('extraction_model_closed');
+    if(calls.closed)fail('extraction_model_closed');
     input.signal.throwIfAborted();
     if(!request||!['extraction','verification'].includes(request.purpose)||typeof request.system!=='string'
       ||typeof request.user!=='string'||!request.user.trim()||!request.tool
       ||request.tool.name!==(request.purpose==='extraction'?DIRECT_EXTRACTION_SCHEMA.title:DEEPSEEK_STRICT_VERIFICATION_TOOL))
       fail('extraction_model_purpose_invalid');
     await input.requireCurrent();
-    if(request.images?.length&&!providerConfiguration.connection.models.find(entry=>entry.id===binding.model)?.inputModalities?.includes('image'))
+    if(request.images?.length&&!acceptsImages(snapshot))
       fail('extraction_model_image_unsupported');
     await options.authorizePurpose({purpose:request.purpose,scope:{...input.scope}},input.signal);
     const auth=await providerConfiguration.resolveAuth(providerConfiguration.connection);
-    if(!auth||!auth.headers||!Object.entries(auth.headers).some(([name,value])=>
-      ['x-api-key','authorization'].includes(name.toLowerCase())&&typeof value==='string'&&value.trim()&&!/[\r\n]/.test(value)))
-      fail('extraction_model_credentials_unavailable');
+    if(!hasModelCredential(auth))fail('extraction_model_credentials_unavailable');
     input.signal.throwIfAborted();
-    if(stopped.signal.aborted)fail('extraction_model_closed');
+    if(calls.closed)fail('extraction_model_closed');
     return {...preparation};
   }
   function invoke(request:ExtractionInvocation,input:SqliteExtractionModelInvocation) {
@@ -90,7 +75,7 @@ export function createSqliteExtractionModelPort(options:SqliteExtractionModelPor
     const frozenRequest={...request,tool:structuredClone(request.tool),images:request.images?structuredClone(request.images):undefined};
     const scope={...input.scope},claim={...input.claim};
     const {requestId,attemptId,requireCurrent,onReceipt,onImageInputs}=input;
-    const signal=AbortSignal.any([input.signal,stopped.signal,AbortSignal.timeout(model.deadline_ms)]);
+    const signal=calls.signalFor(input.signal);
     const current=async()=>{
       signal.throwIfAborted();await requireCurrent();
       await options.authorizePurpose({purpose:frozenRequest.purpose,scope:{...scope}},signal);signal.throwIfAborted();
@@ -103,13 +88,12 @@ export function createSqliteExtractionModelPort(options:SqliteExtractionModelPor
         tools:[frozenRequest.tool],validateOutput:frozenRequest.validateOutput});
       return frozenRequest.images?.length?provider.withImages(frozenRequest.images,signal,invoke):invoke([]);
     })();
-    active.add(work);void work.then(()=>active.delete(work),()=>active.delete(work));
-    return work;
+    return calls.track(work);
   }
   return {
     prepare,invoke,
     close():Promise<void>{
-      return closing??=(async()=>{stopped.abort();await Promise.allSettled([...active]);if(ownsProvider)await provider.dispose();})().catch(error=>{closing=undefined;throw error;});
+      return calls.close(ownsProvider?()=>provider.dispose():undefined);
     },
   };
 }

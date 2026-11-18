@@ -60,11 +60,6 @@ export class ModelPermitArbiter {
       this.dispatch();
     });
   }
-  /** 运行期全局暂停：等待全部许可（含孤儿）真实结算；孤儿在运行期继续冻结所属类别。 */
-  pauseAndDrain(): Promise<void> {
-    this.paused = true;
-    return this.drainedFor(false) ? Promise.resolve() : new Promise(resolve => this.drainWaiters.push({ ignoreOrphans: false, resolve }));
-  }
   /**
    * 退出专用排空：只等待真正在途的调用，孤儿不再等待（进程内没有任何路径会结算孤儿，其权威记录在 SQLite 台账，
    * 下次启动仍按未知调用阻塞，退出本身即证明执行者已停止）；真实在途调用也有上限，到期返回而不是无限等待。

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm,writeFile,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {runDefaultDatabaseStartup} from '../src/platform/cutover/startup.ts';
+import {runDefaultDatabaseStartup} from './fixtures/cutover/default-startup.mjs';
 import {loadStartupConfiguration,saveStartupConfiguration} from '../src/platform/cutover/control.ts';
 
 test('切换完成后的桌面准备只核验当前实例，不再解释或清理旧写入器记录',async t=>{

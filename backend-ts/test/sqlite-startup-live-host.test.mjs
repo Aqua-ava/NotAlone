@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { loadManifest } from '../src/platform/cutover/control.ts';
-import { runDefaultDatabaseStartup } from '../src/platform/cutover/startup.ts';
+import { runDefaultDatabaseStartup } from './fixtures/cutover/default-startup.mjs';
 import { launchDsh } from '../src/launch.ts';
 import { waitForHostReady } from './host-readiness-support.mjs';
 

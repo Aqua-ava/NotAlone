@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
-import { runDefaultDatabaseStartup } from '../src/platform/cutover/startup.ts';
+import { runDefaultDatabaseStartup } from './fixtures/cutover/default-startup.mjs';
 import { unrecognizedManagedTargets } from '../src/platform/cutover/targets.ts';
 
 async function fixture(t) {

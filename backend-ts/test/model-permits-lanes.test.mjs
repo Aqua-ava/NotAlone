@@ -74,18 +74,6 @@ for (const kind of ['foreground', 'background']) test(`${kind}取消等待不发
   running.permit.settle(); await turn(); assert.ok(next.permit);
 });
 
-test('全局暂停等待两个类别真实结算，再恢复各类FIFO且不借槽', async t => {
-  const arbiter = new ModelPermitArbiter(2), request = requests(t, arbiter);
-  const foreground = request('foreground'), background = request('background'); await turn();
-  assert.ok(foreground.permit); assert.ok(background.permit);
-  let drained = false; const drain = arbiter.pauseAndDrain().then(() => { drained = true; });
-  const nextForeground = request('foreground'), nextBackground = request('background');
-  foreground.permit.settle(); await turn(); assert.equal(drained, false);
-  background.permit.settle(); await drain;
-  assert.equal(nextForeground.permit, undefined); assert.equal(nextBackground.permit, undefined);
-  arbiter.resume(); await turn(); assert.ok(nextForeground.permit); assert.ok(nextBackground.permit);
-});
-
 test('stop全局拒绝两个类别等待者，保留在途直到全部结算', async t => {
   const arbiter = new ModelPermitArbiter(1), request = requests(t, arbiter);
   const foreground = request('foreground'), background = request('background'); await turn();
@@ -95,7 +83,7 @@ test('stop全局拒绝两个类别等待者，保留在途直到全部结算', a
   for (const item of [nextForeground, nextBackground]) assert.match(item.error?.message ?? '', /model_work_stopped/);
   await assert.rejects(arbiter.acquire('foreground'), /model_work_stopped/);
   await assert.rejects(arbiter.acquire('background'), /model_work_stopped/);
-  let drained = false; const drain = arbiter.pauseAndDrain().then(() => { drained = true; });
+  let drained = false; const drain = arbiter.drainForExit(5000).then(() => { drained = true; });
   foreground.permit.settle(); await turn(); assert.equal(drained, false);
   background.permit.settle(); await drain; assert.throws(() => arbiter.resume(), /model_work_stopped/);
 });
@@ -122,12 +110,4 @@ test('退出排空对真实在途调用有上限：到期返回而不是无限�
   assert.deepEqual(await arbiter.drainForExit(30), {timedOut: true, inFlight: 1, orphaned: 0});
   running.permit.settle(); // 迟到的结算不再有等待者，也不抛错
   assert.deepEqual(await arbiter.drainForExit(30), {timedOut: false, inFlight: 0, orphaned: 0});
-});
-
-test('运行期全局暂停仍等待孤儿，孤儿冻结语义不因退出排空改变', async t => {
-  const arbiter = new ModelPermitArbiter(1), request = requests(t, arbiter);
-  const lost = request('background'); await lost.done; lost.permit.orphan();
-  let drained = false; const drain = arbiter.pauseAndDrain().then(() => { drained = true; });
-  await turn(); assert.equal(drained, false);
-  lost.permit.settle(); await drain; assert.equal(drained, true);
 });

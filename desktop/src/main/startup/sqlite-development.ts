@@ -10,8 +10,7 @@ type ReadyResult = { phase: 'ready'; code: 'sqlite_ready' | 'sqlite_reopened'; d
   created: boolean; configuration: { capabilities: SqliteLaunchConfiguration['capabilities']; skillPackageRoot?: string } };
 type PreparedResult = {phase: 'prepared'; code: 'sqlite_prepared'; databaseId: string; ownerId: string; configuration: ReadyResult['configuration']};
 type MaintenanceResult = { phase: 'maintenance'; code: string; detail?: string; manifestRevision?: number };
-const failureCodes = new Set(['database_cutover_required', 'database_maintenance', 'cutover_manifest_invalid', 'cutover_authorization_required',
-  'cutover_authorization_invalid', 'cutover_legacy_target_unclassified', 'cutover_legacy_writer_running', 'cutover_cleanup_failed',
+const failureCodes = new Set(['cutover_manifest_invalid', 'cutover_legacy_target_unclassified', 'cutover_legacy_writer_running', 'cutover_cleanup_failed',
   'cutover_checks_failed', 'cutover_target_unrecorded', 'cutover_configuration_conflict', 'cutover_storage_failed']);
 const blocked = (code: string): SqliteDevelopmentState => ({ phase: 'blocked', code, maintenance: true });
 

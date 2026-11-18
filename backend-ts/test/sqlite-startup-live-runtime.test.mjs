@@ -5,13 +5,13 @@ import {mkdir,mkdtemp,realpath,rm,writeFile,readFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {loadManifest,saveManifest} from '../src/platform/cutover/control.ts';
-import * as startup from '../src/platform/cutover/startup.ts';
+import {runDefaultDatabaseStartup} from './fixtures/cutover/default-startup.mjs';
 
 // 全部使用隔离的合成 userData；存活宿主用当前测试进程号表示，不启动真实后台。
 async function fixture(t){
  const userData=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-startup-live-runtime-')));
  t.after(()=>rm(userData,{recursive:true,force:true}));
- const ready=await startup.runDefaultDatabaseStartup({userData});
+ const ready=await runDefaultDatabaseStartup({userData});
  assert.equal(ready.phase,'ready');
  return {userData,ready};
 }
@@ -50,11 +50,11 @@ test('重开会打开数据库，自有宿主存活时拒绝但不把已完成�
  const {userData}=await fixture(t);
  await liveRuntime(userData);
  const before=kept(userData);
- const blocked=await startup.runDefaultDatabaseStartup({userData});
+ const blocked=await runDefaultDatabaseStartup({userData});
  assert.equal(blocked.phase,'maintenance');assert.equal(blocked.code,'cutover_legacy_writer_running');
  assert.deepEqual(kept(userData),before);
  await rm(path.join(userData,'managed/sqlite-backend.info'));await rm(path.join(userData,'managed/sqlite-backend.info.dsh-lock'));
- const reopened=await startup.runDefaultDatabaseStartup({userData});
+ const reopened=await runDefaultDatabaseStartup({userData});
  assert.equal(reopened.phase,'ready',JSON.stringify(reopened));assert.equal(reopened.code,'sqlite_reopened');
 });
 

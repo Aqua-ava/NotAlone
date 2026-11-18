@@ -12,7 +12,7 @@ export async function prepareDatabaseStartup(options:DefaultDatabaseOptions):Pro
   assertPrivateUserData(userData);manifest=loadManifest(userData);
   if(!manifest||manifest.phase!=='completed'){
    const {runDatabaseStartup}=await import('./cutover/startup.ts');
-   return await runDatabaseStartup(options,'prepare');
+   return await runDatabaseStartup(options);
   }
   if(manifest.configPath!==CUTOVER_STARTUP_CONFIG)throw new CutoverControlError('cutover_manifest_invalid');
   // 受管目录边界仍核验；退役写入器、旧备份及其清理状态不再参与完成态启动。

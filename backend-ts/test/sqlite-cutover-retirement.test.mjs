@@ -209,5 +209,5 @@ test('受管 PostgreSQL 运行时与旧 schema 准备不再被桌面正常入口
   }
   const diagnostics = await readFile(path.join(root, 'desktop/src/main/startup/diagnostics.ts'), 'utf8');
   assert.doesNotMatch(diagnostics, /ManagedRuntime|managed-runtime|manag(e|ed)-manifest|historicalUpdateComplete|schema-prepare-cli/);
-  assert.match(diagnostics, /runDefaultDatabaseStartup|SqliteDevelopmentProbe/);
+  assert.match(diagnostics, /SqliteDevelopmentProbe/);
 });

@@ -8,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import { SqliteStorage } from '../src/storage/sqlite/client.ts';
 import { registry } from '../src/storage/sqlite/registry.ts';
 import { SqliteSkillLibrary } from '../src/skills/sqlite/library.ts';
-import { runDefaultDatabaseStartup } from '../src/platform/cutover/startup.ts';
+import { runDefaultDatabaseStartup } from './fixtures/cutover/default-startup.mjs';
 import { unrecognizedManagedTargets } from '../src/platform/cutover/targets.ts';
 import { cutoverDirectory, loadManifest, manifestPath, startupConfigPath } from '../src/platform/cutover/control.ts';
 

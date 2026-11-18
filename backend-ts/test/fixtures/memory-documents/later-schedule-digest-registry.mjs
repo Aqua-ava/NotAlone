@@ -1,11 +1,8 @@
 import {randomUUID,createHash} from 'node:crypto';
 import {registry as laterRegistry} from './later-schedule-registry.mjs';
-import {laterScheduleMigration,memoryDocumentsLaterScheduleActions} from '../../../src/memory/sqlite/documents/later-schedule.ts';
 import {StorageFailure} from '../../../src/storage/sqlite/contracts.ts';
 import {finishLaterStagePublication} from '../../../src/memory/sqlite/documents/later-schedule.ts';
 
-const installed=laterRegistry.migrations.some(migration=>migration.sql.includes('CREATE TABLE memory_document_later_schedule'));
-const version=Math.max(...laterRegistry.migrations.map(migration=>migration.version))+1;
 
 // 原实现（N+1 查询 + 逐次比较器序列化）逐字保留作摘要参照；用于证明新实现产出逐字节相同。
 const legacyBodyDigest=(tx,ownerId,publicationId)=>{
@@ -18,9 +15,8 @@ const legacyBodyDigest=(tx,ownerId,publicationId)=>{
 
 export const registry={
  ...laterRegistry,
- migrations:installed?laterRegistry.migrations:[...laterRegistry.migrations,laterScheduleMigration(version)],
  actions:[
-  ...(installed?laterRegistry.actions:[...laterRegistry.actions,...memoryDocumentsLaterScheduleActions]),
+  ...laterRegistry.actions,
   // 直接种出一份可用 publication 与运行中的 scene 阶段行，供 finishLaterStagePublication 走真实 bodyDigest。
   {name:'fixture.digestSeed',mode:'write',retryBusy:false,execute(tx,input){
    try{

@@ -4,7 +4,7 @@ import {mkdtemp,mkdir,realpath,rm,writeFile,chmod,symlink,readFile} from 'node:f
 import path from 'node:path';
 import {tmpdir} from 'node:os';
 import {randomUUID} from 'node:crypto';
-import {runDefaultDatabaseStartup} from '../src/platform/cutover/startup.ts';
+import {runDefaultDatabaseStartup} from './fixtures/cutover/default-startup.mjs';
 import {legacyProofDigest} from '../src/storage/sqlite/migrations/history-legacy-proof-v1.ts';
 import {unrecognizedManagedTargets} from '../src/platform/cutover/targets.ts';
 async function fixture(t){const root=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-cutover-intent-')));t.after(()=>rm(root,{recursive:true,force:true}));const ready=await runDefaultDatabaseStartup({userData:root});assert.equal(ready.phase,'ready');const directory=path.join(root,'managed/maintenance'),file=path.join(directory,'legacy-terminal-proof.json');await mkdir(directory,{mode:0o700});const contact=randomUUID(),proof={format:'notalone-legacy-recall-mapping-v1',token:{owner_id:ready.ownerId,contact_id:contact},observedAt:1,legacy:{scope:{},schema:{},report:{},target:{}},current:{scope:{},schema:{},report:{},target:{}},keys:[{from:JSON.stringify(['old','partition','table','1']),to:JSON.stringify(['new','partition','table','1']),reason:'source_recalled'}]},intent={format:'notalone-legacy-terminal-maintenance-v1',databaseId:ready.databaseId,ownerId:ready.ownerId,contactId:contact,legacyExecutable:'/synthetic/old/bin/tool',currentExecutable:'/synthetic/new/bin/tool',proof,proofDigest:legacyProofDigest(proof)};await writeFile(file,JSON.stringify(intent),{mode:0o600});return{root,ready,directory,file,intent};}

@@ -52,7 +52,6 @@ export interface LaterScheduleSnapshot {scene:Record<string,unknown>|null;profil
 export interface LaterStagesProjection {state:'completed'|'pending'|'scheduled'|'running'|'unknown'|'failed'|'revoked';reasons:string[];nextDueAt:number|null;stage:'document_scene'|'document_profile'|null}
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,input:any)=>unknown):StorageAction=>observedProcessingAction({name:`memoryDocuments.${name}`,mode,retryBusy:false,execute:(tx,input)=>withDocumentSourceQualifications(tx,()=>execute(tx,input))});
 const scopeParts=(scope:MemoryScope)=>({scopeKind:scope.scopeKind,contactId:scope.contactId,scopeKey:scope.scopeKind==='self'?'self':scope.contactId!});
-const exists=(tx:StorageTransaction)=>!!tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name='memory_document_later_schedule'");
 const safeTime=(value:unknown)=>typeof value==='number'&&Number.isSafeInteger(value)&&value>=0?value:(()=>{throw new StorageFailure('document_schedule_time_invalid')})();
 const scopeRow=(tx:StorageTransaction,ownerId:string,scope:MemoryScope)=>scope.scopeKind==='self'
  ?tx.get("SELECT memory_revision,document_revision,current_publication_id FROM owner WHERE owner_id=? AND state='active'",[ownerId])
@@ -67,7 +66,6 @@ function scheduleRow(tx:StorageTransaction,ownerId:string,scope:MemoryScope,stag
  const p=scopeParts(scope);return tx.get('SELECT * FROM memory_document_later_schedule WHERE owner_id=? AND scope_key=? AND stage=? ORDER BY generation DESC LIMIT 1',[ownerId,p.scopeKey,stage]);
 }
 function snapshot(tx:StorageTransaction,ownerId:string,scope:MemoryScope):LaterScheduleSnapshot {
- if(!exists(tx))return {scene:null,profile:null};
  const convert=(row:any)=>row?{state:String(row.state),stage:String(row.stage),generation:Number(row.generation),firstChangedAt:Number(row.first_changed_at),lastChangedAt:Number(row.last_changed_at),dueAt:Number(row.due_at),memoryRevision:String(row.requested_memory_revision),frozenMemoryRevision:row.frozen_memory_revision===null?null:String(row.frozen_memory_revision),taskId:row.task_id===null?null:String(row.task_id),errorCode:row.error_code===null?null:String(row.error_code)}:null;
  const cursor=tx.get('SELECT last_profile_success_at FROM memory_document_later_cursor WHERE owner_id=? AND scope_key=?',[ownerId,scopeParts(scope).scopeKey]);
  const profile:any=convert(scheduleRow(tx,ownerId,scope,'document_profile'));
@@ -104,7 +102,6 @@ function maybeCompleteL1Run(tx:StorageTransaction,ownerId:string,runId:string):v
 
 /** 在正式记忆 revision 已递增的同一事务内登记；同一待执行 L2 窗口只保留首个 due anchor。 */
 export function scheduleMemoryChange(tx:StorageTransaction,ownerId:string,scope:MemoryScope,changedAt=Date.now(),runId?:string):LaterScheduleSnapshot|null {
- if(!exists(tx))return null;
  const now=safeTime(changedAt),parts=scopeParts(scope),base=scopeRow(tx,ownerId,scope);
  if(!base)throw new StorageFailure('document_scope_stale');
  const memoryRevision=base.memory_revision as bigint;
@@ -131,7 +128,6 @@ export function scheduleMemoryChange(tx:StorageTransaction,ownerId:string,scope:
 
 /** 即时 L1 轮登记：仅绑定本轮同一 scope 的 dirty generation，其他 scope 落为持久 no-op。 */
 export function enrollRun(tx:StorageTransaction,ownerId:string,runId:string,now=Date.now(),contactId?:string):boolean {
- if(!exists(tx))return false;
  if(!tx.get('SELECT 1 FROM processing_run WHERE owner_id=? AND id=?',[ownerId,runId]))return false;
  const changed=safeTime(now);
  for(const t of tx.all(`SELECT scope_kind,contact_id FROM processing_task WHERE owner_id=? AND run_id=?${contactId===undefined?'':" AND scope_kind='contact' AND contact_id=?"} ORDER BY scope_kind,contact_id`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId])){
@@ -146,7 +142,6 @@ export function enrollRun(tx:StorageTransaction,ownerId:string,runId:string,now=
 
 /** pause只作用于该 run 已登记的未完成后续窗口，返回是否确有可暂停工作。 */
 export function setRunSchedulePaused(tx:StorageTransaction,ownerId:string,runId:string,paused:boolean,now=Date.now()):boolean {
- if(!exists(tx))return false;
  const p=safeTime(now),rows=tx.all(`SELECT s.scope_key,s.generation,s.state,s.task_id,s.stage FROM memory_document_later_run_requirement q JOIN memory_document_later_schedule s ON s.owner_id=q.owner_id AND s.scope_key=q.scope_key AND s.generation=q.generation
   WHERE q.owner_id=? AND q.run_id=? AND q.outcome='pending' AND s.state IN ('scheduled','running')`,[ownerId,runId]);
  const row=rows[0];
@@ -188,7 +183,6 @@ function reconcileSettledUnknownStage(tx:StorageTransaction,ownerId:string,row:S
 
 /** 仅用户明确继续时重排回执已知的失败；未结算的unknown不会自动重发，旧记录保留供审计。 */
 export function resumeRunSchedule(tx:StorageTransaction,ownerId:string,runId:string,now=Date.now()):boolean {
- if(!exists(tx))return false;
  const instant=safeTime(now),unknown=tx.all(`SELECT s.* FROM memory_document_later_run_requirement q JOIN memory_document_later_schedule s
    ON s.owner_id=q.owner_id AND s.scope_key=q.scope_key AND s.generation=q.generation
    WHERE q.owner_id=? AND q.run_id=? AND q.outcome='unknown' AND s.state='unknown' ORDER BY s.scope_key,s.generation`,[ownerId,runId]);
@@ -227,7 +221,7 @@ export function resumeRunSchedule(tx:StorageTransaction,ownerId:string,runId:str
 }
 
 export function laterStagesState(tx:StorageTransaction,ownerId:string,runId:string,contactId?:string):LaterStagesProjection|null {
- if(!exists(tx)||!tx.get('SELECT 1 FROM memory_document_later_run_requirement WHERE owner_id=? AND run_id=?',[ownerId,runId]))return null;
+ if(!tx.get('SELECT 1 FROM memory_document_later_run_requirement WHERE owner_id=? AND run_id=?',[ownerId,runId]))return null;
  const rows=tx.all(`SELECT q.scope_key,q.generation,q.outcome,q.paused,q.reason,s.stage,s.state,s.due_at,s.error_code FROM memory_document_later_run_requirement q
   LEFT JOIN memory_document_later_schedule s ON s.owner_id=q.owner_id AND s.scope_key=q.scope_key AND s.generation=q.generation
   WHERE q.owner_id=? AND q.run_id=?${contactId===undefined?'':" AND q.scope_kind='contact' AND q.contact_id=?"} ORDER BY q.scope_key`,contactId===undefined?[ownerId,runId]:[ownerId,runId,contactId]);
@@ -266,7 +260,6 @@ export function laterStagesState(tx:StorageTransaction,ownerId:string,runId:stri
 }
 
 export function queueSummary(tx:StorageTransaction,ownerId:string,now=Date.now(),contactId?:string):{pending:number;nextDueAt:number|null;stage:'document_scene'|'document_profile'|null} {
- if(!exists(tx))return {pending:0,nextDueAt:null,stage:null};
  const pending=tx.get(`SELECT count(*) AS n FROM memory_document_later_schedule WHERE owner_id=? AND state IN ('scheduled','running','failed','unknown')${contactId===undefined?'':" AND scope_kind='contact' AND contact_id=?"}`,contactId===undefined?[ownerId]:[ownerId,contactId])!;
  const due=dueRows(tx,ownerId,now,true).find(row=>contactId===undefined||row.scope_kind==='contact'&&row.contact_id===contactId);
  return {pending:Number(pending.n),nextDueAt:due?Number(due.due_at):null,stage:due?String(due.stage) as 'document_scene'|'document_profile':null};
@@ -311,7 +304,6 @@ function scopeBlocked(tx:StorageTransaction,ownerId:string,row:StorageRow,releas
  return false;
 }
 export function laterTaskPaused(tx:StorageTransaction,ownerId:string,taskId:string):boolean {
- if(!exists(tx))return false;
  return !!tx.get("SELECT 1 FROM memory_document_later_schedule s JOIN memory_document_later_run_requirement q ON q.owner_id=s.owner_id AND q.scope_key=s.scope_key AND q.generation=s.generation WHERE s.owner_id=? AND s.task_id=? AND q.paused=1 LIMIT 1",[ownerId,taskId]);
 }
 function dueRows(tx:StorageTransaction,ownerId:string,now:number,includeFuture=false):StorageRow[]{
@@ -478,10 +470,9 @@ function finishLaterStage(tx:StorageTransaction,ownerId:string,taskId:string,now
  for(const item of runIds)maybeCompleteL1Run(tx,ownerId,String(item.run_id));
  return true;
 }
-export function finishLaterStagePublication(tx:StorageTransaction,ownerId:string,taskId:string,now=Date.now()):boolean{return exists(tx)?finishLaterStage(tx,ownerId,taskId,now):false;}
+export function finishLaterStagePublication(tx:StorageTransaction,ownerId:string,taskId:string,now=Date.now()):boolean{return finishLaterStage(tx,ownerId,taskId,now);}
 /** 仅结清专用文档轮的已知终态；不发布内容，不把活租约、未决调用或用户暂停当作已完成。 */
 export function reconcileTerminalLaterRuns(tx:StorageTransaction,ownerId:string):number {
- if(!exists(tx))return 0;
  const rows=tx.all(`SELECT DISTINCT r.id,s.state AS schedule_state FROM memory_document_later_schedule s
   JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id
   JOIN processing_run r ON r.owner_id=t.owner_id AND r.id=t.run_id
@@ -503,7 +494,6 @@ export function reconcileTerminalLaterRuns(tx:StorageTransaction,ownerId:string)
  return settled;
 }
 export function failLaterStage(tx:StorageTransaction,ownerId:string,taskId:string,code:string,now=Date.now()):boolean {
- if(!exists(tx))return false;
  const row=tx.get("SELECT * FROM memory_document_later_schedule WHERE owner_id=? AND task_id=? AND state='running'",[ownerId,taskId]);if(!row)return false;
  const instant=safeTime(now),scope={scopeKind:String(row.scope_kind) as MemoryScope['scopeKind'],contactId:row.contact_id===null?null:String(row.contact_id)} as MemoryScope;
  const unknown=!!tx.get("SELECT 1 FROM processing_step s LEFT JOIN step_attempt a ON a.owner_id=s.owner_id AND a.step_id=s.id LEFT JOIN model_call c ON c.owner_id=a.owner_id AND c.step_attempt_id=a.id WHERE s.owner_id=? AND s.task_id=? AND (s.state='unknown' OR a.state='unknown' OR c.state='unknown') LIMIT 1",[ownerId,taskId]);
