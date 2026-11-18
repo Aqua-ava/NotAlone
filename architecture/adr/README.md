@@ -58,15 +58,15 @@
 - [ADR-046：维度依据绑定当前来源，第四门采用合取](superseded/046-source-bound-dimension-evidence.md)
 - [ADR-047：同次来源核验的有界提案与版本二语义依据](superseded/047-bounded-source-semantic-proof.md)
 - [ADR-048：记忆演进与自动 Skill 的受控生命周期](048-memory-skill-evolution-lifecycle.md)
-- [ADR-049：前台微信窗口自动布局与局部名称 OCR](049-automatic-foreground-window-layout.md)
-- [ADR-050：持续单帧前台定位与联系人内容、任务归属](050-continuous-single-frame-contact-follow.md)
+- [ADR-049：前台微信窗口自动布局与局部名称 OCR](superseded/049-automatic-foreground-window-layout.md)（已合并入ADR-198）
+- [ADR-050：持续单帧前台定位与联系人内容、任务归属](superseded/050-continuous-single-frame-contact-follow.md)（已合并入ADR-198）
 - [ADR-051：原文分句结构提取与确定性候选编译](051-grounded-memory-extraction.md)
-- [ADR-052：顶部名称 OCR 接入正式前台定位](052-header-ocr-foreground-locator.md)
-- [ADR-053：前台定位刷新与稳定结果展示](053-stable-foreground-refresh.md)
-- [ADR-054：前台采集上下文变化后的可靠绑定恢复](054-foreground-context-recovery.md)
-- [ADR-055：群聊前台暂停与私聊恢复](055-group-foreground-pause.md)
-- [ADR-056：前台观察繁忙恢复与有限执行预算](056-foreground-busy-and-observation-budget.md)
-- [ADR-057：顶部局部变化提示优先触发正式前台观察](057-header-change-triggered-foreground-observation.md)
+- [ADR-052：顶部名称 OCR 接入正式前台定位](superseded/052-header-ocr-foreground-locator.md)（已合并入ADR-198）
+- [ADR-053：前台定位刷新与稳定结果展示](superseded/053-stable-foreground-refresh.md)（已合并入ADR-198）
+- [ADR-054：前台采集上下文变化后的可靠绑定恢复](superseded/054-foreground-context-recovery.md)（已合并入ADR-198）
+- [ADR-055：群聊前台暂停与私聊恢复](superseded/055-group-foreground-pause.md)（已合并入ADR-198）
+- [ADR-056：前台观察繁忙恢复与有限执行预算](superseded/056-foreground-busy-and-observation-budget.md)（已合并入ADR-198）
+- [ADR-057：顶部局部变化提示优先触发正式前台观察](superseded/057-header-change-triggered-foreground-observation.md)（已合并入ADR-198）
 - [ADR-058：显式受控歧义标签与程序固定解释](superseded/058-controlled-ambiguity-labels.md)
 - [ADR-059：显式未知类型与完整日历月的离线编译](superseded/059-closed-unknown-kinds-and-calendar-month.md)
 - [ADR-060：作者到家原事件的有限引句表示](superseded/060-author-arrival-quote-representation.md)
@@ -82,13 +82,13 @@
 - [ADR-070：默认自动维护记忆并退役旧资料升级](070-automatic-memory-maintenance.md)
 - [ADR-071：区分错误纠正与状态变化的历史生成资格](071-memory-retirement-and-generation-eligibility.md)
 - [ADR-072：个人主题与画像允许有据推断，排除行动指导](072-personal-memory-insights-without-action-guidance.md)
-- [ADR-073：前台观察与后台同步独立执行](073-foreground-observation-independent-of-background-sync.md)
+- [ADR-073：前台观察与后台同步独立执行](superseded/073-foreground-observation-independent-of-background-sync.md)（已合并入ADR-198）
 - [ADR-074：当前对话自动判断并加载回复 Skill](superseded/074-automatic-conversation-skill-loading.md)（已合并入ADR-196）
 - [ADR-074：参考腾讯源码自行实现自动记忆](074-tencent-reference-python-memory.md)
-- [ADR-075：孤立尾部表情的独立文字证据](075-isolated-emoji-tail-text-evidence.md)
-- [ADR-076：结合完整会话名单核验标题 OCR](076-session-list-assisted-name-matching.md)
-- [ADR-077：完整名称命中优先于编辑近邻](077-exact-session-name-before-edit-neighbors.md)
-- [ADR-078：按请求复用原生前台观察进程](078-request-driven-native-observation-worker.md)
+- [ADR-075：孤立尾部表情的独立文字证据](superseded/075-isolated-emoji-tail-text-evidence.md)（已合并入ADR-198）
+- [ADR-076：结合完整会话名单核验标题 OCR](superseded/076-session-list-assisted-name-matching.md)（已合并入ADR-198）
+- [ADR-077：完整名称命中优先于编辑近邻](superseded/077-exact-session-name-before-edit-neighbors.md)（已合并入ADR-198）
+- [ADR-078：按请求复用原生前台观察进程](superseded/078-request-driven-native-observation-worker.md)（已合并入ADR-198）
 - [ADR-079：统一表达工作区与直接建议候选](079-unified-expression-workspace.md)
 - [ADR-080：统一记忆列表与失效记忆禁用](080-unified-memory-list-and-retired-exclusion.md)
 - [ADR-081：来源锚点、日期精度与条件性记忆](081-source-grounded-memory-time-and-conditions.md)
@@ -98,7 +98,7 @@
 - [ADR-085：以来源核验统一默认自动采纳边界](085-source-verified-automatic-adoption.md)
 - [ADR-086：按来源含义采纳记忆，不设统一重复次数门槛](086-source-meaning-without-repetition-threshold.md)
 - [ADR-087：新联系人只从微信会话确认加入](087-wechat-confirmed-contact-onboarding.md)
-- [ADR-088：一秒作为正常联系人切换的优化目标](088-normal-switch-one-second-optimization-target.md)
+- [ADR-088：一秒作为正常联系人切换的优化目标](superseded/088-normal-switch-one-second-optimization-target.md)（已合并入ADR-198）
 - [ADR-089：一次授权同步全部微信私聊](089-all-private-wechat-sync-scope.md)
 - [ADR-090：回复运行时按需补查受控历史](superseded/090-bounded-runtime-history-retrieval.md)（已合并入ADR-195）
 - [ADR-091：不增加运行计划和自动过程摘要](091-retire-runtime-todos-and-auto-summary.md)
@@ -115,7 +115,7 @@
 - [ADR-102：以精简 DSH 和 TypeScript 统一后端](102-dsh-typescript-backend-migration.md)
 - [ADR-103：统一业务后台任务的查看、停止与恢复](103-unified-background-task-management.md)
 - [ADR-104：记忆生成逻辑按领域模块维护](104-tencent-source-memory-engine.md)
-- [ADR-105：以当前有效绑定观察恢复前台确认](105-fresh-verified-foreground-recovery.md)
+- [ADR-105：以当前有效绑定观察恢复前台确认](superseded/105-fresh-verified-foreground-recovery.md)（已合并入ADR-198）
 - [ADR-106：持久助手会话、空闲分段与恢复职责](106-persistent-assistant-conversations.md)
 - [ADR-107：统一记忆处理入口与安全自动恢复](107-unified-memory-processing-lifecycle.md)
 - [ADR-108：隔离无法核验的存量记忆任务](108-isolate-unresolved-legacy-memory-processing.md)
@@ -157,7 +157,7 @@
 - [ADR-155：图片资源角色展示与缩略图复查](superseded/155-image-variant-display-and-thumbnail-refresh.md)（已合并入ADR-197）
 - [ADR-156：授权范围内自动补查全部图片](superseded/156-automatic-image-reconciliation.md)（已合并入ADR-197）
 - [ADR-157：Skill 业务身份与可迁移物理定位分离](superseded/157-portable-skill-directory-identity.md)（已合并入ADR-196）
-- [ADR-158：显式选择联系人后继续前台跟随](158-contact-selection-keeps-foreground-follow.md)
+- [ADR-158：显式选择联系人后继续前台跟随](superseded/158-contact-selection-keeps-foreground-follow.md)（已合并入ADR-198）
 - [ADR-159：前台联系人识别独立读取通道](159-foreground-read-channel-isolation.md)
 - [ADR-160：助手回看与 Skill 核验分离执行队列](160-assistant-read-and-skill-worker-isolation.md)
 - [ADR-161：旧读取器来源的有界抑制映射](161-proved-legacy-source-suppression-mapping.md)（创建／认证传承流程已由ADR-177替代；既有有效删除等价范围仍保留）
@@ -205,7 +205,7 @@
 
 - [ADR-191：收敛回复检索合同并退役未使用适配](superseded/191-reply-retrieval-contract-simplification.md)——强制按需读者与已有排名，退役旧词法／未确认候选选择接口，保留历史材料和删除合同。（已合并入ADR-195）
 
-- [ADR-192：前台定位仅保留名称观察与已有联系人关联](192-retire-foreground-observation-compatibility.md)——退役旧双区域协议及前台再次确认写证明链，保留名称质量、手选和授权边界。
+- [ADR-192：前台定位仅保留名称观察与已有联系人关联](superseded/192-retire-foreground-observation-compatibility.md)——退役旧双区域协议及前台再次确认写证明链，保留名称质量、手选和授权边界。（已合并入ADR-198）
 
 - [ADR-193：回复 Skill 统一按需目录并退役显式预加载](superseded/193-retire-explicit-reply-skill-preload.md)——新请求拒绝显式选包，保留历史材料及删除约束。（已合并入ADR-196）
 
@@ -216,3 +216,5 @@
 - [ADR-196：回复 Skill 的发现、启用与按需加载现行合并决定](196-reply-skill-library-consolidated.md)——合并 ADR-019／074／093／096／098／129／135／136／157／178／193：授权目录只读包为权威来源，默认启用，联系人分组限定范围，官方 skill 工具按需组合，退役显式预加载；原条目归档于 superseded/。
 
 - [ADR-197：聊天图片取得与记忆图片输入现行合并决定](197-chat-image-and-memory-image-input-consolidated.md)——合并 ADR-137／138／140／153／154／155／156／169／170／171／179／180：缩略图不保存、标准图优先、持久退避补查、图文共同输入、内存规范化与失败隔离；原条目归档于 superseded/。
+
+- [ADR-198：前台观察与联系人跟随现行合并决定](198-foreground-contact-follow-consolidated.md)——合并 ADR-049／050／052／053／054／055／056／057／073／075／076／077／078／088／105／158／192：单帧顶部名称观察、名称匹配算法、新鲜有效观察独立授予资格、变化提示源、选人后继续跟随；原条目归档于 superseded/。

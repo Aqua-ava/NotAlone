@@ -100,7 +100,7 @@ Q33 已确认本次先定清消息占位结构，用户补充图片、语音、�
 
 代码查证：当前后台同步按用户、账号范围、稳定会话定位标识和活动绑定查找，不用展示名决定消息归属，见[同步绑定校验](../../backend-ts/src/sync/sync-incremental-store.ts)。已存在绑定是否自动刷新显示名称仍需查证，不能据身份绑定直接推断界面已更新。
 
-前台自动定位属于独立产品边界：当前前台只能从微信窗口标题识别名称，再通过 CLI 名单查找候选会话；现行规则和代码在检测到绑定名称变化时要求用户选择，见[前台定位](../../backend-ts/src/foreground/foreground-location-locator.ts)和 [ADR-076](../../architecture/adr/076-session-list-assisted-name-matching.md)。这不改变后台绑定的身份归属；本数据库草稿不修改该规则。用户是否希望进一步调整前台识别，尚未决定。
+前台自动定位属于独立产品边界：当前前台只能从微信窗口标题识别名称，再通过 CLI 名单查找候选会话；现行规则和代码在检测到绑定名称变化时要求用户选择，见[前台定位](../../backend-ts/src/foreground/foreground-location-locator.ts)和 [ADR-076](../../architecture/adr/superseded/076-session-list-assisted-name-matching.md)。这不改变后台绑定的身份归属；本数据库草稿不修改该规则。用户是否希望进一步调整前台识别，尚未决定。
 
 单独保存历史昵称是另一个问题。用户尚未选择是否保留名称历史；不应把“身份不依赖昵称”误记成不保留旧名称的决定。来源原始记录和完整记忆追踪仍按已确认的来源与删除规则处理。
 

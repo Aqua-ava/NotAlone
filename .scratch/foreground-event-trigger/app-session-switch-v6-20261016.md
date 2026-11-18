@@ -33,7 +33,7 @@ Computer Use端侧核对原A；打开并置顶正式助手后，通过微信原�
 
 close后至退出前有89次`permit_present`更新带`freshProof=true`、90条`scope_blocked`；这是更新次数，不是89份独立proof。最后一次blocked距close为111507.561ms；这段没有permit缺口，首个`permit_absent`直到退出才出现。诊断的freshProof仅表示与本源启动时的observation不同；实际年龄未保存。控制器只有在正式观察年龄小于5000ms等条件满足时才生成permit，不能把布尔值解释为某个精确年龄。
 
-现有分支与[ADR-057](../../architecture/adr/057-header-change-triggered-foreground-observation.md)一致，尚无证据证明此处违反恢复合同：
+现有分支与[ADR-057](../../architecture/adr/superseded/057-header-change-triggered-foreground-observation.md)一致，尚无证据证明此处违反恢复合同：
 
 - `HeaderChangeSource.swift:143–146`在每次上下文复验不等／不可读时停止并清detector；同文件116–125行只有完整55秒到期返回true。
 - `RegionCalibration.swift:123–159`的上下文只含PID、窗口ID、frame、版本与build，不含会话名称。`read`将唯一实例、前台、版本、可见唯一窗口等resolve失败统一为nil，当前固定原因不足以区分是哪一项变化。

@@ -36,7 +36,7 @@ Blocked by: 01, 02
 
 - [功能规格](../spec.md)：持续观察、展示联系人与任务归属；用户故事 2、6–10、20–21、24–25。
 - [01 单帧定位](01-single-frame-locator.md)、[02 内容恢复](02-contact-content-restore.md)。
-- [ADR-050](../../../architecture/adr/050-continuous-single-frame-contact-follow.md)、[ADR-030](../../../architecture/adr/030-confirmed-contact-background-sync-consent.md)。
+- [ADR-050](../../../architecture/adr/superseded/050-continuous-single-frame-contact-follow.md)、[ADR-030](../../../architecture/adr/030-confirmed-contact-background-sync-consent.md)。
 - [领域语言](../../../CONTEXT.md)、[领域读取路由](../../../docs/agents/domain.md)、[工程工作流](../../../docs/agents/engineering.md)。
 
 ## Comments

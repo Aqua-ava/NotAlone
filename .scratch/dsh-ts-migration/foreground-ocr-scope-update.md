@@ -15,7 +15,7 @@
 - 用户可沿用已明确选择且资格有效的已有联系人进行本阶段验收；每次请求仍绑定本次确认的 `owner_id + contact_id`、助手会话、输入及有效版本，不从展示名猜测身份。
 - 手动输入确认不冒充微信会话绑定，不新增微信读取、同步或发送权限；失败或低置信度时仍不能自动确认联系人，跨联系人资料与任务继续隔离。
 - 手动选择路径的功能、来源、授权、持久化、删除／取消及联系人切换仍需按原合同验证；前台识别暂缓不能替代这些证据。
-- 继续遵循[隐私与删除规则](../../architecture/current/privacy-deletion.md)及[顶部名称 OCR 边界](../../architecture/adr/052-header-ocr-foreground-locator.md)：原始视觉帧默认仅在端侧内存处理，不持久化或上传，不对聊天正文或其他联系人列表做 OCR，不读取其他 App。
+- 继续遵循[隐私与删除规则](../../architecture/current/privacy-deletion.md)及[顶部名称 OCR 边界](../../architecture/adr/superseded/052-header-ocr-foreground-locator.md)：原始视觉帧默认仅在端侧内存处理，不持久化或上传，不对聊天正文或其他联系人列表做 OCR，不读取其他 App。
 - 公开文档不记录私人联系人名称、识别原文或视觉帧；本次只记录用户决定和已有状态。
 
 ## 继续有效的验收与推进顺序

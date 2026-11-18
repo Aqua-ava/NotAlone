@@ -1,10 +1,12 @@
 # ADR-052：顶部名称 OCR 接入正式前台定位
 
+已合并入[ADR-198：前台观察与联系人跟随现行合并决定](../198-foreground-contact-follow-consolidated.md)（2026-11-18）：前台微信窗口观察、名称匹配、失败恢复、变化提示与联系人跟随的约束已收拢到该 ADR。下文保留为历史决定与原因，现行条款以该 ADR 为准。
+
 > 后续局部修订：[ADR-192](192-retire-foreground-observation-compatibility.md)退役本文“旧单帧 v2 保持兼容”条款，只保留顶部名称 v3／v4 协议；名称分数和已有联系人关联按 ADR-132 及现行规格核验。
 
 > 后续局部修订：[ADR-105](105-fresh-verified-foreground-recovery.md)以当前新鲜有效绑定观察自动恢复确认，替代历史失败持续阻断及按原因限定恢复的条款；当前识别、绑定和时效规则保持；主动手动模式已由 [ADR-158](158-contact-selection-keeps-foreground-follow.md) 替代，显式选人不再停止跟随。
 
-> 状态：已采纳；代码及正式 App 集成验证分别记录
+> 状态：已合并（ADR-198）。原记录：已采纳；代码及正式 App 集成验证分别记录
 > 后续局部修订：[ADR-078](078-request-driven-native-observation-worker.md)允许按请求串行复用原生观察进程，替代短生命周期要求；新帧、前台、身份和隐私门保留。
 > 决策日期：2026-10-15
 > 后续局部修订：[ADR-076](076-session-list-assisted-name-matching.md)以完整会话名单核验普通增漏错字及尾部证据；保留原始分数、已有绑定和其他安全门。

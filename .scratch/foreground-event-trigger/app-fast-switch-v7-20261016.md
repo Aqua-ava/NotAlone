@@ -50,7 +50,7 @@ npm run test:app -- --interactive --coordinator root-v7-fast-switch \
 
 唯一changed属于源2，宿主相对时间413947.558ms，距该源launch为17090.513ms；当时permitPresent=true、epochCurrent=true、paused=false、stopping=false。它证明辅助源stdout提示进入宿主监听，未被记录为迟到或停止事件。宿主相对时间没有绝对墙钟锚点，也没有event ID→正式HTTP请求的关联记录；因此不能精确归到本表任一菜单动作，不能证明短间隔请求一定由它引起，不能计算相对周期观察节省多少时间。一次changed也不代表两次切换都被事件覆盖。
 
-源2close后记录107次freshProof=true的permit更新、108条scope_blocked；末次blocked距close135522.993ms。它们是更新次数，不是独立proof数，精确proof年龄未记录。停止分类仍只是[既定唯一实例查询门](app-context-stop-v7-20261016.md)：既有查询未满足恰好1个微信实例，0个／多个均可能；六null不是六项不等。不确定实际实例数、OS原因或菜单因果。按照[ADR-057](../../architecture/adr/057-header-change-triggered-foreground-observation.md)，不足完整租期的code1在同一连续许可中锁住；未松门、未改为fresh proof无限重启，正式周期观察仍继续并完成返A恢复。
+源2close后记录107次freshProof=true的permit更新、108条scope_blocked；末次blocked距close135522.993ms。它们是更新次数，不是独立proof数，精确proof年龄未记录。停止分类仍只是[既定唯一实例查询门](app-context-stop-v7-20261016.md)：既有查询未满足恰好1个微信实例，0个／多个均可能；六null不是六项不等。不确定实际实例数、OS原因或菜单因果。按照[ADR-057](../../architecture/adr/superseded/057-header-change-triggered-foreground-observation.md)，不足完整租期的code1在同一连续许可中锁住；未松门、未改为fresh proof无限重启，正式周期观察仍继续并完成返A恢复。
 
 ## 资源与精确收尾
 

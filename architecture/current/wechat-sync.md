@@ -88,7 +88,7 @@
 
 每轮只在微信为前台且会话可见的唯一窗口内获取一帧，在端侧内存分析布局，再仅 OCR 顶部名称区域。原始帧默认不持久化或上传；不 OCR 正文或联系人列表，不切换、滚动微信，不读取其他 App。微信离开前台或助手获得焦点时停止新视觉采集，已授权 CLI 同步独立继续；CLI 故障不回退为 OCR 正文。
 
-按 [ADR-192](../adr/192-retire-foreground-observation-compatibility.md)，名称观察只接受顶部区域的 v3／v4 协议，退役旧双区域及缺少受支持协议的正向观察；非微信前台的最小否定结果保持。前台没有独立的再次确认或写桌面证明入口，自动匹配失败时通过顶栏手选确认本次对象，首次绑定与读取授权仍由各自入口管理。
+按 [ADR-198](../adr/198-foreground-contact-follow-consolidated.md)，名称观察只接受顶部区域的 v3／v4 协议，退役旧双区域及缺少受支持协议的正向观察；非微信前台的最小否定结果保持。前台没有独立的再次确认或写桌面证明入口，自动匹配失败时通过顶栏手选确认本次对象，首次绑定与读取授权仍由各自入口管理。
 
 名称匹配关联配置账号的已有稳定联系人：
 
@@ -103,7 +103,7 @@
 
 读取繁忙、超时或失败撤销当轮资格，等待下一次可靠核验，不新增永久人工门。现有 UI／HTTP 3.5 秒、后端 3.2 秒、原生 2.5 秒预算和五秒新鲜度不构成一秒体验保证；一秒仅是正常切换的优化目标，首次启动、预热和恢复分别测量。
 
-依据：[视觉范围](../adr/049-automatic-foreground-window-layout.md)、[单帧跟随](../adr/050-continuous-single-frame-contact-follow.md)、[名称关联](../adr/132-existing-contact-name-matching.md)、[独立读取通道](../adr/159-foreground-read-channel-isolation.md)。
+依据：[前台跟随合并决定](../adr/198-foreground-contact-follow-consolidated.md)、[名称关联](../adr/132-existing-contact-name-matching.md)、[独立读取通道](../adr/159-foreground-read-channel-isolation.md)。
 
 ## 快捷键、内容恢复与任务归属
 
@@ -115,7 +115,7 @@
 
 每次已接纳生成固定原联系人、助手会话、请求和输入版本；切换只改变展示，不取消仍有效的原任务，结果只回到原会话。新消息只提示，不自动替换或重启候选。删除、真实来源失效、授权变化和退出中断按各自合同处理；仅同步暂停或微信不可用不撤销合法本机回复资料。
 
-依据：[显式选择仍跟随](../adr/158-contact-selection-keeps-foreground-follow.md)及[本机回复资格](../adr/162-local-reply-context-and-independent-model-lanes.md)。
+依据：[前台跟随合并决定](../adr/198-foreground-contact-follow-consolidated.md)及[本机回复资格](../adr/162-local-reply-context-and-independent-model-lanes.md)。
 
 ## 实现与验收入口
 

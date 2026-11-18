@@ -195,7 +195,7 @@ schema 修订；旧修订沿原生成终态核对后要求用户重新准备，�
 
 > 后续目标：记忆时效、纠错、可追溯概览、自动 Skill 草稿/审核和明确范围反馈按[ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)及[正式规格](../../.scratch/memory-skill-evolution/spec.md)扩展；联系人／本人概览、回复检索、Skill 草稿审核和反馈已有主线接线，工程签收与剩余验证见[任务索引](../../.scratch/memory-skill-evolution/planning.md)，实际 App／微信和真实模型质量另验。DSH 已按 ADR-102 采纳为迁移目标，当前代码使用TypeScript／DSH回复运行时；质量放行、授权和人工发送边界保持。
 
-> 前台跟随约束：按[ADR-050](../adr/050-continuous-single-frame-contact-follow.md)采用持续单帧识别及按联系人保留内容、任务；行为合同见[正式规格](../../.scratch/foreground-contact-follow/spec.md)，实施进度统一见[任务索引](../../.scratch/foreground-contact-follow/planning.md)，验证范围与剩余缺口见各任务的结果记录。下方描述流程约束，不替代代码、测试及实机证据。
+> 前台跟随约束：按[ADR-050](../adr/superseded/050-continuous-single-frame-contact-follow.md)采用持续单帧识别及按联系人保留内容、任务；行为合同见[正式规格](../../.scratch/foreground-contact-follow/spec.md)，实施进度统一见[任务索引](../../.scratch/foreground-contact-follow/planning.md)，验证范围与剩余缺口见各任务的结果记录。下方描述流程约束，不替代代码、测试及实机证据。
 
 启动与结构更新按[ADR-066](../adr/066-in-place-schema-updates-and-database-reuse.md)：已有配置沿用同一本机数据库，先核对真实迁移历史，仅缺少版本时在认证停读、生成结算与连接排空后原地补齐，再复验连接。结构已就绪直接使用；无既有配置的新安装初始化空受管库。普通启动不再备份、复制或切换数据库，异常历史与未完成旧更新保留现场并停止；不因连接失败新建替代库。实现与实测范围见[本次任务](../../.scratch/in-place-database-startup/spec.md)。
 

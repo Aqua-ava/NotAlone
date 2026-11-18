@@ -6,7 +6,7 @@
 
 # Agent 编排与检索运行时（草案）
 
-> 2026-10-21 设计审查：正常产品入口与方向阶段按 [ADR-079](../../adr/079-unified-expression-workspace.md)修订，受控 Skill 探索见 [ADR-043](../../adr/043-conversation-scenarios-and-direction-exploration.md)。运行计划和自动过程摘要按 [ADR-091](../../adr/091-retire-runtime-todos-and-auto-summary.md)不采用；时间、日历、网络工具按 [ADR-092](../../adr/092-defer-time-calendar-web-tools.md)改为未来可选方向，当前不接入；当时完整 Harness／DSH 未获主线采纳；该选型结论现由 ADR-102 替代，仍不启用无关的完整 Harness 能力。自动前台画面按 [ADR-052](../../adr/052-header-ocr-foreground-locator.md)只作名称定位，不能当作正文输入适配器。
+> 2026-10-21 设计审查：正常产品入口与方向阶段按 [ADR-079](../../adr/079-unified-expression-workspace.md)修订，受控 Skill 探索见 [ADR-043](../../adr/043-conversation-scenarios-and-direction-exploration.md)。运行计划和自动过程摘要按 [ADR-091](../../adr/091-retire-runtime-todos-and-auto-summary.md)不采用；时间、日历、网络工具按 [ADR-092](../../adr/092-defer-time-calendar-web-tools.md)改为未来可选方向，当前不接入；当时完整 Harness／DSH 未获主线采纳；该选型结论现由 ADR-102 替代，仍不启用无关的完整 Harness 能力。自动前台画面按 [ADR-052](../../adr/superseded/052-header-ocr-foreground-locator.md)只作名称定位，不能当作正文输入适配器。
 
 > 后续修订（2026-10-20）：主动收藏表达样本及其生成参考按 [ADR-082](../../adr/082-retire-explicit-style-samples.md)退役；本文相关历史方案不再构成实施要求。当前意图优先、长期表达偏好及其他已采纳约束分别保留。
 

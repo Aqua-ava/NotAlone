@@ -1,10 +1,12 @@
 # ADR-056：前台观察繁忙恢复与有限执行预算
 
+已合并入[ADR-198：前台观察与联系人跟随现行合并决定](../198-foreground-contact-follow-consolidated.md)（2026-11-18）：前台微信窗口观察、名称匹配、失败恢复、变化提示与联系人跟随的约束已收拢到该 ADR。下文保留为历史决定与原因，现行条款以该 ADR 为准。
+
 > 后续局部修订：[ADR-105](105-fresh-verified-foreground-recovery.md)以当前新鲜有效绑定观察自动恢复确认，替代历史失败持续阻断及按原因限定恢复的条款；当前识别、绑定、时效和主动手动模式保护保持。
 
 > 2026-10-21 设计审查：纯质量失败后的人工门后由 [ADR-076](076-session-list-assisted-name-matching.md)、[ADR-077](077-exact-session-name-before-edit-neighbors.md)增加窄例外；独立前台执行见 [ADR-073](073-foreground-observation-independent-of-background-sync.md)。[ADR-088](088-normal-switch-one-second-optimization-target.md)已明确一秒仅为正常切换的优化目标，不是所有场景的硬门；本文执行超时、身份和新鲜度边界保持。
 
-> 状态：已采纳；修复包实机结果另行记录
+> 状态：已合并（ADR-198）。原记录：已采纳；修复包实机结果另行记录
 > 决策日期：2026-10-15
 > 后续局部修订：[ADR-073](073-foreground-observation-independent-of-background-sync.md)将正常后台同步与前台观察执行锁分离，并允许未绑定会话之后的新鲜有效私聊绑定自动恢复；其他人工门保持。
 > 局部修订：ADR-054 只允许三个采集上下文错误自动恢复，以及 ADR-052 的旧900ms探针预算；其余身份与人工门保持。

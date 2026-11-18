@@ -1,12 +1,14 @@
 # ADR-050：持续单帧前台定位与联系人内容、任务归属
 
+已合并入[ADR-198：前台观察与联系人跟随现行合并决定](../198-foreground-contact-follow-consolidated.md)（2026-11-18）：前台微信窗口观察、名称匹配、失败恢复、变化提示与联系人跟随的约束已收拢到该 ADR。下文保留为历史决定与原因，现行条款以该 ADR 为准。
+
 > 后续局部修订：[ADR-105](105-fresh-verified-foreground-recovery.md)以当前新鲜有效绑定观察自动恢复确认，替代历史失败持续阻断及按原因限定恢复的条款；当前识别、绑定和时效规则保持；主动手动模式已由 [ADR-158](158-contact-selection-keeps-foreground-follow.md) 替代，显式选人不再停止跟随。
 
 > 后续局部修订：[ADR-055](055-group-foreground-pause.md)修订群聊展示、人工门和暂停资格（同时修订 ADR-052／053）；已授权私聊后台同步边界保持。
 
 > 2026-10-21 设计审查：下文旧超时预算和失败恢复规则分别由 [ADR-056](056-foreground-busy-and-observation-budget.md)、[ADR-073](073-foreground-observation-independent-of-background-sync.md)、[ADR-076](076-session-list-assisted-name-matching.md)及 [ADR-077](077-exact-session-name-before-edit-neighbors.md)局部修订；局部变化辅助源见 [ADR-057](057-header-change-triggered-foreground-observation.md)，进程复用与变化通知到达时取消正常等待见 [ADR-078](078-request-driven-native-observation-worker.md)。单轮新帧、联系人隔离、助手获焦暂停及任务归属继续有效。
 
-> 状态：已采纳。实施进度统一见[任务索引](../../.scratch/foreground-contact-follow/planning.md)，验证范围与剩余缺口见各任务的结果记录。
+> 状态：已合并（ADR-198）。原记录：已采纳。实施进度统一见[任务索引](../../../.scratch/foreground-contact-follow/planning.md)，验证范围与剩余缺口见各任务的结果记录。
 > 决策日期：2026-10-14
 > 后续局部修订：[ADR-054](054-foreground-context-recovery.md)允许仅采集上下文变化后以新鲜可靠的已有绑定自动恢复，其他人工确认门保持。
 > 后续局部修订：[ADR-053](053-stable-foreground-refresh.md)区分有效识别等待联系人选择与技术失败，前者使用正常刷新间隔，并保持稳定结果展示。
@@ -25,7 +27,7 @@
 
 拒绝保留双帧并仅增大等待时间，也不使用每联系人独立窗口解决归属。代价是需要连续调度、输入恢复和明确的采集时点语义，且须重新验证耗时与正式 App 绑定闭环。CLI 仍按 ADR-023/025/030 独立在已确认范围同步；后台生成只指应用仍运行时，候选回复仍由用户选择、修改并亲自发送。
 
-实施与测试以[正式规格](../../.scratch/foreground-contact-follow/spec.md)为准。本决定记录已确认目标，不证明持续单帧流程、资源开销或实机集成已经可用。
+实施与测试以[正式规格](../../../.scratch/foreground-contact-follow/spec.md)为准。本决定记录已确认目标，不证明持续单帧流程、资源开销或实机集成已经可用。
 
 任务 03 的准备回执现在固定所属输入的有界初始正文，并保存最近 500 条有效来源消息的 ID 与初始消息证据 ID 的并集作为补查范围；后续新增消息不进入该请求。此限制不承诺任意旧历史都可补查，也不复制完整历史。来源、授权、Skill 和版本仍在执行及提交时复验；删除依赖覆盖固定材料和旧讨论，输入失效时清空固定副本。方向确认、纠正和澄清回答只更新输入，须明确点击生成才创建候选。预算预检不调用模型，实际模型调用继续逐轮校验预算。
 

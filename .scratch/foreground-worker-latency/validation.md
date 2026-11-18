@@ -1,6 +1,6 @@
 # 原生观察进程复用验收（2026-10-19）
 
-> 后续解释：[ADR-088](../../architecture/adr/088-normal-switch-one-second-optimization-target.md)将一秒确定为正常切换优化目标；本记录的样本、慢恢复场景和未测屏幕绘制边界保持，不据新口径重算为全部达标。
+> 后续解释：[ADR-088](../../architecture/adr/superseded/088-normal-switch-one-second-optimization-target.md)将一秒确定为正常切换优化目标；本记录的样本、慢恢复场景和未测屏幕绘制边界保持，不据新口径重算为全部达标。
 
 ## 结果与测量边界
 

@@ -30,7 +30,7 @@ Blocked by: None
 ## 依据
 
 - [功能规格](../spec.md)：单帧语义；用户故事 3–5、9。
-- [ADR-050](../../../architecture/adr/050-continuous-single-frame-contact-follow.md)、[ADR-049 及其后续修订](../../../architecture/adr/049-automatic-foreground-window-layout.md)。
+- [ADR-050](../../../architecture/adr/superseded/050-continuous-single-frame-contact-follow.md)、[ADR-049 及其后续修订](../../../architecture/adr/superseded/049-automatic-foreground-window-layout.md)。
 - [领域语言](../../../CONTEXT.md)、[领域读取路由](../../../docs/agents/domain.md)、[工程工作流](../../../docs/agents/engineering.md)。
 
 ## Answer

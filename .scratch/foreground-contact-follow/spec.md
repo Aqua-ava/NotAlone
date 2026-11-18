@@ -15,7 +15,7 @@ Triage: ready-for-agent
 
 ## Solution（解决方案）
 
-保留一个助手窗口，按已确认联系人分别保存输入、候选编辑、当前助手会话和生成状态。应用运行、前台定位允许且微信在前台时连续执行观察：每轮只截一帧，在本机内存定位顶部会话名称并执行局部 OCR；一轮结束后再安排下一轮。按2026-10-15用户实测后的[ADR-052](../../architecture/adr/052-header-ocr-foreground-locator.md)替代原双名称要求。
+保留一个助手窗口，按已确认联系人分别保存输入、候选编辑、当前助手会话和生成状态。应用运行、前台定位允许且微信在前台时连续执行观察：每轮只截一帧，在本机内存定位顶部会话名称并执行局部 OCR；一轮结束后再安排下一轮。按2026-10-15用户实测后的[ADR-052](../../architecture/adr/superseded/052-header-ocr-foreground-locator.md)替代原双名称要求。
 
 唯一匹配到已验证绑定后自动切换展示；切回来恢复该联系人的内容和任务状态。进入助手或其他 App 后暂停视觉采集，保留最后确认的联系人；CLI 继续独立同步已授权范围。识别不可靠时明确显示“当前联系人未确认”，保留内容和旧任务，选定联系人前不接受新的生成。
 
@@ -132,7 +132,7 @@ ADR-042 的助手会话持久化、输入预算、显式替换、退出中断和
 - Q1 确认只在前台微信持续观察，进入助手或其他 App 暂停；用户明确要求每轮单帧。
 - Q2–Q4 确认按联系人保留内容、切回恢复、切换不取消原任务，并为显式生成分别展示排队/生成/完成。
 - Q5 确认识别失败保留内容和任务，但新生成前必须选定联系人；Q6 确认固定发起时上下文，新消息只提示。
-- [领域语言](../../CONTEXT.md)、[现行核心流程](../../architecture/current/core-flows.md)、[隐私与删除](../../architecture/current/privacy-deletion.md)、[ADR-050](../../architecture/adr/050-continuous-single-frame-contact-follow.md)。
+- [领域语言](../../CONTEXT.md)、[现行核心流程](../../architecture/current/core-flows.md)、[隐私与删除](../../architecture/current/privacy-deletion.md)、[ADR-050](../../architecture/adr/superseded/050-continuous-single-frame-contact-follow.md)。
 - [持续助手会话规格](../assistant-session-context/spec.md)及[任务索引](../assistant-session-context/planning.md)：复用现有生成、保存、恢复和删除能力；本规格只补增量缺口。
 - [已有自动窗口定位规格与验证记录](../automatic-foreground-locator/spec.md)：原生预览移动/缩放获用户确认，正式 App 匹配仍有超时缺口。本次双帧改为单帧后必须重新验证相关行为。
 - 代码依据：[前台公开控制器](../../desktop/src/main/foreground/controller.ts)、[联系人选择](../../desktop/src/main/contacts/session.ts)、[回复状态](../../desktop/src/main/reply/session.ts)、[已有生成归属测试](../../desktop/tests/assistant-generation-ownership-http.test.mjs)、[原生观察](../../native/macos/Sources/NotAloneSyncCore/AutomaticSessionCapture.swift)。这些指针用于核对基线，不把内部文件位置固化为实施设计。

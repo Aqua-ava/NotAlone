@@ -108,7 +108,7 @@ PY
 | 1 | 首帧297.263ms；55026.883ms以`lease_expired`结束 | 55034.382ms、code0、signal none、paused=true、stopping=false、epochCurrent=true、renewalEligible=true；24.032ms后启动源2 |
 | 2 | 首帧341.135ms；5440.711ms记录`instances_ambiguous`、六项匹配均null；随后`context_changed`，5443.600ms结束 | 5450.726ms、code1、signal none、paused=true、stopping=false、epochCurrent=true、renewalEligible=false、blocked=true |
 
-源2close后至退出前，记录4次`permit_present`更新带freshProof=true和5条`scope_blocked`；最后一条blocked距close为4543.983ms。这是更新次数，不是4份独立proof。freshProof表示与该源启动时observation不同，日志没有保存精确观察年龄，不能据布尔值补出毫秒时效。code1不满完整租期，连续许可内保留失败锁，符合[ADR-057](../../architecture/adr/057-header-change-triggered-foreground-observation.md)；没有因后续正式观察而重复初始化。
+源2close后至退出前，记录4次`permit_present`更新带freshProof=true和5条`scope_blocked`；最后一条blocked距close为4543.983ms。这是更新次数，不是4份独立proof。freshProof表示与该源启动时observation不同，日志没有保存精确观察年龄，不能据布尔值补出毫秒时效。code1不满完整租期，连续许可内保留失败锁，符合[ADR-057](../../architecture/adr/superseded/057-header-change-triggered-foreground-observation.md)；没有因后续正式观察而重复初始化。
 
 ## 分类能证明什么
 

@@ -30,7 +30,7 @@ Blocked by: None
 ## 依据
 
 - [功能规格](../spec.md)：展示联系人与任务归属；用户故事 1、10–13、24–25。
-- [持续助手会话规格](../../assistant-session-context/spec.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)、[ADR-050](../../../architecture/adr/050-continuous-single-frame-contact-follow.md)。
+- [持续助手会话规格](../../assistant-session-context/spec.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)、[ADR-050](../../../architecture/adr/superseded/050-continuous-single-frame-contact-follow.md)。
 - [领域语言](../../../CONTEXT.md)、[领域读取路由](../../../docs/agents/domain.md)、[工程工作流](../../../docs/agents/engineering.md)。
 
 ## Comments
