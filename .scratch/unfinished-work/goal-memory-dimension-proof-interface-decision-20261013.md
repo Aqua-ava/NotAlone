@@ -18,7 +18,7 @@
 
 [生产装配器](../../backend/src/notalone/memory_extraction/evidence.py)51–77行仅在quote、完整source.text和fact.text三者逐字相同才生成保真对齐；reference／reported恒None，media取actual窗口。[维度判断](../../backend/src/notalone/memory_extraction/dimensions.py)107–125行的5–7项是保守超集；175–201行的目标数量／标签条件不能单独证明唯一人物或内外归属。新接缝不能先把模型选的锚喂到这些条件，就称生产指代／转述有效。
 
-[持久值对象](../../backend/src/notalone/memory/dimension_evidence.py)328–453行只支持version1／十键；[056约束](../../backend/database/migrations/056_memory_candidate_dimension_evidence.sql)12行只允许version1。因此D3确实需要新DTO合同和前向迁移，不是“JSONB任意加key、无DDL”。与ADR-046的“版本1及E14／V4保持”约束需显式复审：原03尚缺真实生产指代、转述及非字面保真依据，现结构不能表达其限定关系。本文不覆写ADR或056。[ADR-033](../../architecture/adr/033-source-semantic-verification-before-adoption.md)的一次核验、同来源、只降不升及不认证现实真伪继续有效。
+[持久值对象](../../backend/src/notalone/memory/dimension_evidence.py)328–453行只支持version1／十键；[056约束](../../backend/database/migrations/056_memory_candidate_dimension_evidence.sql)12行只允许version1。因此D3确实需要新DTO合同和前向迁移，不是“JSONB任意加key、无DDL”。与ADR-046的“版本1及E14／V4保持”约束需显式复审：原03尚缺真实生产指代、转述及非字面保真依据，现结构不能表达其限定关系。本文不覆写ADR或056。[ADR-033](../../architecture/adr/superseded/033-source-semantic-verification-before-adoption.md)的一次核验、同来源、只降不升及不认证现实真伪继续有效。
 
 ## D1：同一次V的有界可空提案
 

@@ -1,6 +1,6 @@
 # 自动定位微信窗口与会话区域
 
-> 2026-10-21 决定收敛：[ADR-088](../../architecture/adr/088-normal-switch-one-second-optimization-target.md)明确一秒是正常切换的优化目标，不作为所有场景硬门；下文一秒预算及其失败记录按历史口径保留。执行超时沿用 ADR-056，调度沿用 ADR-078；不因此关闭本票或补签其他验收。
+> 2026-10-21 决定收敛：[ADR-088](../../architecture/adr/superseded/088-normal-switch-one-second-optimization-target.md)明确一秒是正常切换的优化目标，不作为所有场景硬门；下文一秒预算及其失败记录按历史口径保留。执行超时沿用 ADR-056，调度沿用 ADR-078；不因此关闭本票或补签其他验收。
 
 State: open
 Triage: needs-info

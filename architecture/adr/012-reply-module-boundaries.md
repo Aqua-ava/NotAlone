@@ -1,6 +1,6 @@
 # ADR-012：候选回复流程与内部模块边界
 
-> 后续决定：[ADR-090](090-bounded-runtime-history-retrieval.md)正式替代第 4 条“Runtime 初期不直接检索”的阶段限制，允许在应用层固定范围及预算内按需只读补查历史；应用层确认、来源复验和模块职责保持。下文初期禁令保留为历史，不再限制当前受控工具装配。
+> 后续决定：[ADR-090](superseded/090-bounded-runtime-history-retrieval.md)正式替代第 4 条“Runtime 初期不直接检索”的阶段限制，允许在应用层固定范围及预算内按需只读补查历史；应用层确认、来源复验和模块职责保持。下文初期禁令保留为历史，不再限制当前受控工具装配。
 
 > 状态：已采纳
 > 2026-10-11 局部修订见 [ADR-043](043-conversation-scenarios-and-direction-exploration.md)；不改变既有只读、联系人隔离和禁止发送边界。

@@ -12,7 +12,7 @@
 
 > 当前业务存储为受控本机 SQLite，由 TypeScript 后台注册迁移并装配联系人、来源、消息、记忆和删除操作；具体实现状态与验收范围见 [ADR-109](../adr/109-controlled-sqlite-storage-foundation.md)及切换记录。来源、范围、删除及 DSH 约束继续适用。
 
-> 2026-10-21 决定收敛：新增联系人按 [ADR-087](../adr/087-wechat-confirmed-contact-onboarding.md)及 [ADR-089](../adr/089-all-private-wechat-sync-scope.md)从真实微信会话加入，支持逐会话确认或全部私聊范围授权，独立创建与导入新建的旧接口待退役；历史 `manual_create` 记录保留读取与删除语义。默认自动采纳按 [ADR-085](../adr/085-source-verified-automatic-adoption.md) 取消额外语用、置信度和风险人工门；下文标明的历史协议及评测不得当作默认流水线。
+> 2026-10-21 决定收敛：新增联系人按 [ADR-087](../adr/087-wechat-confirmed-contact-onboarding.md)及 [ADR-089](../adr/089-all-private-wechat-sync-scope.md)从真实微信会话加入，支持逐会话确认或全部私聊范围授权，独立创建与导入新建的旧接口待退役；历史 `manual_create` 记录保留读取与删除语义。默认自动采纳按 [ADR-085](../adr/superseded/085-source-verified-automatic-adoption.md) 取消额外语用、置信度和风险人工门；下文标明的历史协议及评测不得当作默认流水线。
 
 > 状态：已采纳的产品约束；当前独立版以本机 SQLite 作为业务存储，实例身份、迁移与具名动作见 [SQLite 存储合同](../../backend-ts/src/storage/sqlite/README.md)。本文描述关系数据边界，不代替代码与验收证明。
 
@@ -69,7 +69,7 @@
 
 - v1 只实现单用户、单微信账号下的联系人导入，不实现跨账号或跨渠道联系人合并。即使如此，`contact_id` 仍由 NotAlone 创建；`sender_wxid` 等外部标识只作为渠道身份或来源元数据保存（见 ADR-008）。
 - `owner_id` 只能来自 NotAlone 当前运行身份：本地个人版本可读取受控配置，服务器版本必须来自已验证登录身份。首次导入可以在用户显式初始化动作中生成 owner，并把文件中的本人渠道身份保存为 `owner_channel_identity`；导入文件不能直接指定或覆盖 `owner_id`。
-- App 首次连接微信也可按 [ADR-095](../adr/095-first-wechat-connection-and-account-grant.md)从已配置工具的只读核验结果建立本人渠道身份，用户一次明确确认后与全部私聊范围和开启状态原子保存；不接受任意填写的账号，不以展示名称匹配本人，不覆盖已撤销、其他 owner 或不同账号身份。重复恢复保留授权起点、排除记录及用户后续开关决定。
+- App 首次连接微信也可按 [ADR-095](../adr/superseded/095-first-wechat-connection-and-account-grant.md)从已配置工具的只读核验结果建立本人渠道身份，用户一次明确确认后与全部私聊范围和开启状态原子保存；不接受任意填写的账号，不以展示名称匹配本人，不覆盖已撤销、其他 owner 或不同账号身份。重复恢复保留授权起点、排除记录及用户后续开关决定。
 
 原 `architecture/current/domain-data.md:126–126`：
 

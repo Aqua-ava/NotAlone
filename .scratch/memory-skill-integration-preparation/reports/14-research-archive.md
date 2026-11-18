@@ -42,7 +42,7 @@ git show 54e482a6ccfa8ca1ccc7e9dc34b0bfaf27fb1616:.scratch/memory-skill-evolutio
 
 本票没有改产品代码、依赖、迁移、配置或实验结果。[正式回复装配](../../../backend/src/notalone/server/reply_wiring.py)仍使用 `PostgresRetrieval`，[持久化检索](../../../backend/src/notalone/persistence/retrieval.py)仍调用[词法评分](../../../backend/src/notalone/retrieval/ranking.py)；本票没有接入pgvector或启用生产语义补充。此项是仓库静态装配核验，没有读取运行环境或声称已核运行时配置。
 
-[维度放行默认值](../../../backend/src/notalone/memory_extraction/dimensions.py)仍为空；`NOTALONE_MEMORY_DIMENSION_GATE=0` 的显式运维回退边界保持，[放行台账](../../../docs/evaluations/memory/dimension-release/memory-adoption-dimension-release-ledger.md)不变。[ADR-028](../../../architecture/adr/028-lexical-memory-recall-phase-1.md)、[ADR-036](../../../architecture/adr/superseded/036-per-dimension-adoption-release.md)和[ADR-048](../../../architecture/adr/048-memory-skill-evolution-lifecycle.md)均未修改。
+[维度放行默认值](../../../backend/src/notalone/memory_extraction/dimensions.py)仍为空；`NOTALONE_MEMORY_DIMENSION_GATE=0` 的显式运维回退边界保持，[放行台账](../../../docs/evaluations/memory/dimension-release/memory-adoption-dimension-release-ledger.md)不变。[ADR-028](../../../architecture/adr/superseded/028-lexical-memory-recall-phase-1.md)、[ADR-036](../../../architecture/adr/superseded/036-per-dimension-adoption-release.md)和[ADR-048](../../../architecture/adr/048-memory-skill-evolution-lifecycle.md)均未修改。
 
 本票只增加已在固定S内公开的合成研究文档和必要工程索引，不读取私聊、载荷、仓库外日志、`.env`或凭据；不导入端侧research笔记。数据库、模型和桌面均未占用，S分叉库未接触，未新增运行时产物或删除依赖。
 

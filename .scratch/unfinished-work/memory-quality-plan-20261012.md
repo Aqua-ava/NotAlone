@@ -88,7 +88,7 @@ P1/P2 是当前合成样本的观察计划，不把“两轮”视为充分统�
 
 达标签仍为用例数 ≥15、假事 0、记错人 0、一般错误 ≤1，由[当前 summarize](../../backend/src/notalone/memory_extraction/evaluation.py)输出；语义标注覆盖另报，完整原始分母另核。现有 runner 对未捕获异常只写原始失败记录、没有纳入 `results` 的汇总，未来执行须核对计划全量与失败/未运行，不照抄部分 `summarize()` 冒充整场通过。
 
-当前 evaluator 的 auto 是原有三道门的“若该维度放行”理想去向，不叠加生产第 4 道门、不写库。[运行时键](../../backend/src/notalone/memory_extraction/dimensions.py)仅能推导 subject、time、truth_intent；paraphrase、reference、media、reported 缺结构化字段，达标签也不能放行。质量改善和自动采纳是不同执行门，按 [ADR-033](../../architecture/adr/033-source-semantic-verification-before-adoption.md)、[ADR-036](../../architecture/adr/superseded/036-per-dimension-adoption-release.md)及[放行台账](../../docs/evaluations/memory/dimension-release/memory-adoption-dimension-release-ledger.md)保持来源核验、0.7、风险白名单与语用限制；不关闭维度门、不用 `RELEASE_ALL_DIMENSIONS` 改生产。
+当前 evaluator 的 auto 是原有三道门的“若该维度放行”理想去向，不叠加生产第 4 道门、不写库。[运行时键](../../backend/src/notalone/memory_extraction/dimensions.py)仅能推导 subject、time、truth_intent；paraphrase、reference、media、reported 缺结构化字段，达标签也不能放行。质量改善和自动采纳是不同执行门，按 [ADR-033](../../architecture/adr/superseded/033-source-semantic-verification-before-adoption.md)、[ADR-036](../../architecture/adr/superseded/036-per-dimension-adoption-release.md)及[放行台账](../../docs/evaluations/memory/dimension-release/memory-adoption-dimension-release-ledger.md)保持来源核验、0.7、风险白名单与语用限制；不关闭维度门、不用 `RELEASE_ALL_DIMENSIONS` 改生产。
 
 ## 6. 按原工作流承接
 

@@ -23,6 +23,6 @@
 
 ## 对既有决定的修订
 
-本决定局部修订 [ADR-113](113-sqlite-private-history-source-contract.md) 中“每次捕获均保存不可改写的原始出现及其正文”和“已保存文字变为系统记录时撤下旧正文”的条款，以及以完整重扫中消失为由阻止保留消息的相关要求。仅可靠确认撤回时才使用撤回状态，原文保留及使用资格以上述规则为准。保留来源身份、联系人隔离、授权、删除抑制和独立系统记录不猜测撤回等边界；[ADR-127](127-sqlite-history-normal-use-restart-rescan.md)的重启同来源核验与原地回滚限制继续有效，不要求保留每次重扫的正文副本。
+本决定局部修订 [ADR-113](113-sqlite-private-history-source-contract.md) 中“每次捕获均保存不可改写的原始出现及其正文”和“已保存文字变为系统记录时撤下旧正文”的条款，以及以完整重扫中消失为由阻止保留消息的相关要求。仅可靠确认撤回时才使用撤回状态，原文保留及使用资格以上述规则为准。保留来源身份、联系人隔离、授权、删除抑制和独立系统记录不猜测撤回等边界；[ADR-127](superseded/127-sqlite-history-normal-use-restart-rescan.md)的重启同来源核验与原地回滚限制继续有效，不要求保留每次重扫的正文副本。
 
 实施范围以上方状态为准：去重与旧记录清理已有[写入实现](../../backend-ts/src/history/sqlite/ingest.ts)、[正文副本迁移](../../backend-ts/src/history/sqlite/single-text-copy-schema.ts)及[合成迁移测试](../../backend-ts/test/sqlite-single-text-copy.test.mjs)，撤回状态的新展示与使用规则仍暂缓。源码和合成测试不证明所有用户资料已执行迁移，也不构成完整实机验收；旧实现和此前验收继续按对应版本与证据理解。

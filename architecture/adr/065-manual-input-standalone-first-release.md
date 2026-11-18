@@ -2,7 +2,7 @@
 
 > 后续范围修订：[ADR-101](101-local-app-first-use-lifecycle.md)将微信准备重新纳入完整首用目标，不解除下文被中止路线限制，不表示已经交付。
 
-> 后续局部恢复：[ADR-095](095-first-wechat-connection-and-account-grant.md)补充已有可用外置工具的首次连接与一次全部私聊授权；不恢复被中止的特权初始化路线，未配置机器的工具准备及独立交付仍未完成。
+> 后续局部恢复：[ADR-095](superseded/095-first-wechat-connection-and-account-grant.md)补充已有可用外置工具的首次连接与一次全部私聊授权；不恢复被中止的特权初始化路线，未配置机器的工具准备及独立交付仍未完成。
 
 > 后续局部替代：[ADR-084](084-topbar-contact-search.md)移除独立创建入口；[ADR-087](087-wechat-confirmed-contact-onboarding.md)进一步明确新联系人仅从微信会话确认加入，取消空目录无需微信即可首用的承诺。已有联系人手动表达、历史资料和渠道授权边界保持；下文旧首用路径只作历史记录。
 

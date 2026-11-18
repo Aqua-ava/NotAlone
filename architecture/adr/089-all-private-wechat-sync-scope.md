@@ -4,7 +4,7 @@
 
 > 本轮 SQLite 范围修订：[ADR-110](110-selected-sqlite-contact-read-grants.md)在空库重建中仅逐人确认，不迁入全部范围。默认 PG 切换前保留原合同；真实来源、账号隔离、删除排除与人工发送边界继续有效。
 
-> 后续首用补充：[ADR-095](095-first-wechat-connection-and-account-grant.md)将新用户首次确认账号、全部私聊范围与开启同步合并为一次明确动作；本 ADR 的已有用户范围设置仍与总开关独立，不自动重授权。
+> 后续首用补充：[ADR-095](superseded/095-first-wechat-connection-and-account-grant.md)将新用户首次确认账号、全部私聊范围与开启同步合并为一次明确动作；本 ADR 的已有用户范围设置仍与总开关独立，不自动重授权。
 
 > 后续修订：[ADR-100](100-authorized-private-history-sync.md)要求授权私聊首次同步本机可读的全部既有文字，再持续增量；全部私聊的会话集合、账号隔离、排除记录和文字范围保持不变。
 

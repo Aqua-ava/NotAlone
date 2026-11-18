@@ -1,6 +1,6 @@
 # 本地微信 CLI 前台增量观察规格
 
-> 2026-10-21 设计审查：本票是历史前台 CLI 路径。正文后台读取见 [ADR-023](../../architecture/adr/023-global-cli-sync-and-ocr-foreground-locator.md)/030，缺口恢复见 [ADR-025](../../architecture/adr/025-cli-background-sync-gap-backfill.md)，顶部名称 OCR 见 [ADR-052](../../architecture/adr/052-header-ocr-foreground-locator.md)；旧左侧行／头像 OCR、只在前台读取和关闭后不补读不再作为现行约束。原任务签收保留，不等于后继渠道全部验收。
+> 2026-10-21 设计审查：本票是历史前台 CLI 路径。正文后台读取见 [ADR-023](../../architecture/adr/superseded/023-global-cli-sync-and-ocr-foreground-locator.md)/030，缺口恢复见 [ADR-025](../../architecture/adr/superseded/025-cli-background-sync-gap-backfill.md)，顶部名称 OCR 见 [ADR-052](../../architecture/adr/superseded/052-header-ocr-foreground-locator.md)；旧左侧行／头像 OCR、只在前台读取和关闭后不补读不再作为现行约束。原任务签收保留，不等于后继渠道全部验收。
 
 Type: task
 State: resolved
@@ -147,9 +147,9 @@ NotAlone 原计划用 OCR 识别微信聊天正文，但 OCR 还需要判断消�
 
 ## Related Decisions
 
-- [ADR-001：Mac 微信前台会话同步](../../architecture/adr/001-macos-wechat-active-session-sync.md)
-- [ADR-016：用本地微信 CLI 读取消息正文，OCR 只定位当前会话](../../architecture/adr/016-local-wechat-cli-observation.md)
-- [ADR-017：优先用选中会话元数据匹配当前微信会话](../../architecture/adr/017-selected-session-metadata-matching.md)
+- [ADR-001：Mac 微信前台会话同步](../../architecture/adr/superseded/001-macos-wechat-active-session-sync.md)
+- [ADR-016：用本地微信 CLI 读取消息正文，OCR 只定位当前会话](../../architecture/adr/superseded/016-local-wechat-cli-observation.md)
+- [ADR-017：优先用选中会话元数据匹配当前微信会话](../../architecture/adr/superseded/017-selected-session-metadata-matching.md)
 
 ## Comments
 

@@ -74,7 +74,7 @@
 
 自动恢复的次数与查看补查次数分开持久计算：旧首次／查看／轮询结果只提供最近结果与时间，不抬高新策略的退避级别；第一次恢复从最近结果后 1 分钟起，恢复失败后依次等待 5 分钟、30 分钟、6 小时及最多 24 小时。普通重启、重复唤醒或重新开启同步不重置新策略的次数与到期位置。调度按最早到期时间唤醒，不对长期退避图片每分钟全量扫描；在途尝试和同时间窗继续去重。
 
-缩略图太小看不清，不保存：读取程序返回的是缩略图时，后台关闭资源句柄、不读字节，该消息按“仅缩略图”（`media_thumbnail_only`）失败并保持占位。每条图片消息只有已保存、仅缩略图、取失败三种结果，不分原图等级，不按尺寸或文件大小猜版本，聊天界面不显示版本标签（[ADR-170](../adr/170-no-thumbnail-storage-and-no-original-classification.md)）。同一张图标准图与高清图并存时，读取程序取第一张核验通过的（标准图优先，不可用才回退高清图），不比较内容；标准图与高清图的文件都不存在才读缩略图；文件存在却核验失败（关联、解码、缺钥或质量未核实）时按真实原因失败，不退到缩略图掩盖它（[ADR-171](../adr/171-image-pick-standard-over-high-definition.md)）。微信一次发送多张图片时，批次里除第一张外的资源记录 `message_svr_id` 记为 0，而消息表里仍是真实 server_id：读取程序先按消息的真实 server_id 精确关联，查不到时才改认同会话、同类型、同秒、同 local_id 且恰好一行的 `message_svr_id=0` 记录，其缓存 MD5 仍须与消息自身一致，其余核验条件不放宽；这类关联在来源代次里带独立标记，常规关联的来源代次不变。微信偶尔对同一条消息写入两行重复的资源记录（会话、类型、秒、local_id、server_id 与缓存 MD5 全部相同，明细不同，常见为一行记着已下载的标准图、另一行没有）：精确匹配恰好两行时按同一资源处理，逐行核验后合并明细（按资源 ID 升序），仍须按文件大小、缓存 MD5 与实际解码逐项核实；这类关联同样在来源代次里带独立标记。三行及以上、零 server_id 回退出现多行、或任一行缓存 MD5 或明细不合规，仍按关联未核实。读取程序打不开图片资源库且本机密钥表缺该库当前盐的密钥时，后台报 `media_database_key_missing` 而不是关联失败，补取流程见[微信数据库密钥缺失与补取](../../docs/guides/wechat-db-key-refresh.md)。关同步或退出时停止补查。图文记忆处理规则见[记忆处理](memory-processing.md)。
+缩略图太小看不清，不保存：读取程序返回的是缩略图时，后台关闭资源句柄、不读字节，该消息按“仅缩略图”（`media_thumbnail_only`）失败并保持占位。每条图片消息只有已保存、仅缩略图、取失败三种结果，不分原图等级，不按尺寸或文件大小猜版本，聊天界面不显示版本标签（[ADR-197](../adr/197-chat-image-and-memory-image-input-consolidated.md)）。同一张图标准图与高清图并存时，读取程序取第一张核验通过的（标准图优先，不可用才回退高清图），不比较内容；标准图与高清图的文件都不存在才读缩略图；文件存在却核验失败（关联、解码、缺钥或质量未核实）时按真实原因失败，不退到缩略图掩盖它（[ADR-197](../adr/197-chat-image-and-memory-image-input-consolidated.md)）。微信一次发送多张图片时，批次里除第一张外的资源记录 `message_svr_id` 记为 0，而消息表里仍是真实 server_id：读取程序先按消息的真实 server_id 精确关联，查不到时才改认同会话、同类型、同秒、同 local_id 且恰好一行的 `message_svr_id=0` 记录，其缓存 MD5 仍须与消息自身一致，其余核验条件不放宽；这类关联在来源代次里带独立标记，常规关联的来源代次不变。微信偶尔对同一条消息写入两行重复的资源记录（会话、类型、秒、local_id、server_id 与缓存 MD5 全部相同，明细不同，常见为一行记着已下载的标准图、另一行没有）：精确匹配恰好两行时按同一资源处理，逐行核验后合并明细（按资源 ID 升序），仍须按文件大小、缓存 MD5 与实际解码逐项核实；这类关联同样在来源代次里带独立标记。三行及以上、零 server_id 回退出现多行、或任一行缓存 MD5 或明细不合规，仍按关联未核实。读取程序打不开图片资源库且本机密钥表缺该库当前盐的密钥时，后台报 `media_database_key_missing` 而不是关联失败，补取流程见[微信数据库密钥缺失与补取](../../docs/guides/wechat-db-key-refresh.md)。关同步或退出时停止补查。图文记忆处理规则见[记忆处理](memory-processing.md)。
 
 读取程序的 `image-open` 按影响范围返回错误码。关联缺失、本机文件缺失、内容核验、格式或解码失败等单图错误只拒绝当次请求，共享进程与有效选择范围可继续使用，图片保持占位，之后按上表只在打开聊天时再试。后续读取各自核对来源并取得本轮守卫。账号、会话、目标、来源代次、快照或守卫失效，以及取消、超时、资源状态不明、未知错误和非法响应会终止读取。该隔离只用于声明 `imageOpenIsolation: wechat-image-open-local-v1` 的读取程序的 `image-open` 操作。旧制品及 `image-read`、`image-close` 沿原终止规则处理。
 
@@ -82,13 +82,13 @@
 
 已采纳的重复扫描去重不代表撤回功能完成。撤回正文可查看但不得参与新生成或记忆的目标仍暂缓；当前继续执行来源资格与删除保护，不据未核验状态数字推断已读、送达、撤回或正文资格。微信端删除也不自动代表 NotAlone 资料删除。
 
-依据：[图片角色](../adr/155-image-variant-display-and-thumbnail-refresh.md)、[自动补查](../adr/156-automatic-image-reconciliation.md)、[引用同步](../adr/141-inline-quoted-reply-sync.md)、[去重与撤回范围](../adr/128-deduplicated-wechat-message-storage.md)。
+依据：[聊天图片合并决定](../adr/197-chat-image-and-memory-image-input-consolidated.md)、[引用同步](../adr/141-inline-quoted-reply-sync.md)、[去重与撤回范围](../adr/128-deduplicated-wechat-message-storage.md)。
 
 ## 前台识别与联系人跟随
 
 每轮只在微信为前台且会话可见的唯一窗口内获取一帧，在端侧内存分析布局，再仅 OCR 顶部名称区域。原始帧默认不持久化或上传；不 OCR 正文或联系人列表，不切换、滚动微信，不读取其他 App。微信离开前台或助手获得焦点时停止新视觉采集，已授权 CLI 同步独立继续；CLI 故障不回退为 OCR 正文。
 
-按 [ADR-192](../adr/192-retire-foreground-observation-compatibility.md)，名称观察只接受顶部区域的 v3／v4 协议，退役旧双区域及缺少受支持协议的正向观察；非微信前台的最小否定结果保持。前台没有独立的再次确认或写桌面证明入口，自动匹配失败时通过顶栏手选确认本次对象，首次绑定与读取授权仍由各自入口管理。
+按 [ADR-198](../adr/198-foreground-contact-follow-consolidated.md)，名称观察只接受顶部区域的 v3／v4 协议，退役旧双区域及缺少受支持协议的正向观察；非微信前台的最小否定结果保持。前台没有独立的再次确认或写桌面证明入口，自动匹配失败时通过顶栏手选确认本次对象，首次绑定与读取授权仍由各自入口管理。
 
 名称匹配关联配置账号的已有稳定联系人：
 
@@ -103,7 +103,7 @@
 
 读取繁忙、超时或失败撤销当轮资格，等待下一次可靠核验，不新增永久人工门。现有 UI／HTTP 3.5 秒、后端 3.2 秒、原生 2.5 秒预算和五秒新鲜度不构成一秒体验保证；一秒仅是正常切换的优化目标，首次启动、预热和恢复分别测量。
 
-依据：[视觉范围](../adr/049-automatic-foreground-window-layout.md)、[单帧跟随](../adr/050-continuous-single-frame-contact-follow.md)、[名称关联](../adr/132-existing-contact-name-matching.md)、[独立读取通道](../adr/159-foreground-read-channel-isolation.md)。
+依据：[前台跟随合并决定](../adr/198-foreground-contact-follow-consolidated.md)、[名称关联](../adr/132-existing-contact-name-matching.md)、[独立读取通道](../adr/159-foreground-read-channel-isolation.md)。
 
 ## 快捷键、内容恢复与任务归属
 
@@ -115,7 +115,7 @@
 
 每次已接纳生成固定原联系人、助手会话、请求和输入版本；切换只改变展示，不取消仍有效的原任务，结果只回到原会话。新消息只提示，不自动替换或重启候选。删除、真实来源失效、授权变化和退出中断按各自合同处理；仅同步暂停或微信不可用不撤销合法本机回复资料。
 
-依据：[显式选择仍跟随](../adr/158-contact-selection-keeps-foreground-follow.md)及[本机回复资格](../adr/162-local-reply-context-and-independent-model-lanes.md)。
+依据：[前台跟随合并决定](../adr/198-foreground-contact-follow-consolidated.md)及[本机回复资格](../adr/162-local-reply-context-and-independent-model-lanes.md)。
 
 ## 实现与验收入口
 

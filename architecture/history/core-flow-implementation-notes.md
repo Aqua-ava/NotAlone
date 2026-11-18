@@ -124,7 +124,7 @@ ADR-037 纳入独立、可删除的完整追踪；具体要求见 [记忆提取�
 
 按 [ADR-045](../adr/045-explicit-estimated-ecnu-input-budget.md)，已核实的 ECNU 配置允许明确标注的完整输入估算，并另计实际输出预留与安全余量。初始和后续调用均重新检查；计量器、模型实例、接收地址或配置不匹配时拒绝。估算超限或服务端实际超长均提示显式新开、保留历史，不自动摘要或截断；估算不能被标成供应商精确计数或已证明上界。该接入修正已通过生产 SDK 离线与公开 HTTP／桌面桥合成验证，真实 App 与模型验收单独记录。
 
-按 [ADR-090](../adr/090-bounded-runtime-history-retrieval.md)，Runtime 可在应用层固定的本次联系人范围与预算内按需搜索历史和读取邻近消息，正式替代 ADR-012 的初期动态检索禁令。工作区关闭关系语境或存在排除消息时，按现行资格检查停用历史补查；工具只读已保存且当前合法的资料，不直接读取微信、扩大同步授权或执行写入。Context 的初始组装、Retrieval 的范围及来源复验、Store 的保存职责保持，其他外部工具不因本决定获得权限。
+按 [ADR-090](../adr/superseded/090-bounded-runtime-history-retrieval.md)，Runtime 可在应用层固定的本次联系人范围与预算内按需搜索历史和读取邻近消息，正式替代 ADR-012 的初期动态检索禁令。工作区关闭关系语境或存在排除消息时，按现行资格检查停用历史补查；工具只读已保存且当前合法的资料，不直接读取微信、扩大同步授权或执行写入。Context 的初始组装、Retrieval 的范围及来源复验、Store 的保存职责保持，其他外部工具不因本决定获得权限。
 
 ### 3.1 检索排序规则（v1）
 
@@ -189,13 +189,13 @@ schema 修订；旧修订沿原生成终态核对后要求用户重新准备，�
 
 > 首用交互与生命周期补充：[ADR-101](../adr/101-local-app-first-use-lifecycle.md)默认仅所选会话，保留明确选择全部私聊的分支；下文 ADR-095 全部范围原子提交仅用于该选择。列表访问先取得必要同意并丢弃夹带摘要，工具准备不授权正文读取。重装沿用留存资料，彻底删除需明确范围与二次确认；异常诊断脱敏且不自动上传。完整首用及独立交付仍待[新规格](../../.scratch/local-app-first-use/spec.md)验收。
 
-> 2026-10-21 决定收敛：按 [ADR-091](../adr/091-retire-runtime-todos-and-auto-summary.md)不增加运行计划和自动过程摘要；时间、日历、网络工具按 [ADR-092](../adr/092-defer-time-calendar-web-tools.md)保留为未来可选方向，不是当前必备能力。默认自动记忆按 [ADR-085](../adr/085-source-verified-automatic-adoption.md) 取消额外语用、置信度和风险人工门；来源、人工纠错、删除和人工发送边界不变。
+> 2026-10-21 决定收敛：按 [ADR-091](../adr/091-retire-runtime-todos-and-auto-summary.md)不增加运行计划和自动过程摘要；时间、日历、网络工具按 [ADR-092](../adr/092-defer-time-calendar-web-tools.md)保留为未来可选方向，不是当前必备能力。默认自动记忆按 [ADR-085](../adr/superseded/085-source-verified-automatic-adoption.md) 取消额外语用、置信度和风险人工门；来源、人工纠错、删除和人工发送边界不变。
 
 > 状态：已采纳的流程边界；已有 Electron UI 与 HTTP 接线，分项实现及验收范围须分别核验，下文尚未接入的设计目标另作标注。
 
 > 后续目标：记忆时效、纠错、可追溯概览、自动 Skill 草稿/审核和明确范围反馈按[ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)及[正式规格](../../.scratch/memory-skill-evolution/spec.md)扩展；联系人／本人概览、回复检索、Skill 草稿审核和反馈已有主线接线，工程签收与剩余验证见[任务索引](../../.scratch/memory-skill-evolution/planning.md)，实际 App／微信和真实模型质量另验。DSH 已按 ADR-102 采纳为迁移目标，当前代码使用TypeScript／DSH回复运行时；质量放行、授权和人工发送边界保持。
 
-> 前台跟随约束：按[ADR-050](../adr/050-continuous-single-frame-contact-follow.md)采用持续单帧识别及按联系人保留内容、任务；行为合同见[正式规格](../../.scratch/foreground-contact-follow/spec.md)，实施进度统一见[任务索引](../../.scratch/foreground-contact-follow/planning.md)，验证范围与剩余缺口见各任务的结果记录。下方描述流程约束，不替代代码、测试及实机证据。
+> 前台跟随约束：按[ADR-050](../adr/superseded/050-continuous-single-frame-contact-follow.md)采用持续单帧识别及按联系人保留内容、任务；行为合同见[正式规格](../../.scratch/foreground-contact-follow/spec.md)，实施进度统一见[任务索引](../../.scratch/foreground-contact-follow/planning.md)，验证范围与剩余缺口见各任务的结果记录。下方描述流程约束，不替代代码、测试及实机证据。
 
 启动与结构更新按[ADR-066](../adr/066-in-place-schema-updates-and-database-reuse.md)：已有配置沿用同一本机数据库，先核对真实迁移历史，仅缺少版本时在认证停读、生成结算与连接排空后原地补齐，再复验连接。结构已就绪直接使用；无既有配置的新安装初始化空受管库。普通启动不再备份、复制或切换数据库，异常历史与未完成旧更新保留现场并停止；不因连接失败新建替代库。实现与实测范围见[本次任务](../../.scratch/in-place-database-startup/spec.md)。
 

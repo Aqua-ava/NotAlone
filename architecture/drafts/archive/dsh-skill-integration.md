@@ -2,12 +2,12 @@
 
 # DSH Skill 接入与业务校验草案
 
-> 2026-10-31 后续决定：[ADR-136](../../adr/136-multi-skill-reply-composition.md)取消每轮最多使用一个 Skill 的数量限制；正常自动回复可以组合多个已启用且有效的当前修订。每轮最多 5 次模型请求、2 份静态资源和现有输入预算保持，本草案原表述仅作历史记录。
+> 2026-10-31 后续决定：[ADR-136](../../adr/superseded/136-multi-skill-reply-composition.md)取消每轮最多使用一个 Skill 的数量限制；正常自动回复可以组合多个已启用且有效的当前修订。每轮最多 5 次模型请求、2 份静态资源和现有输入预算保持，本草案原表述仅作历史记录。
 
 
 > 2026-10-31 用户后续修正：管理页取消手动添加和手填目录，新增内容由授权根的自动刷新发现；用户仅需明确启用或停用，不要求手动安装或填写导入路径。下方早期实验中的“关联”是历史测试状态，不是当前用户操作入口。
 
-> 后续正式入口：发现、技术更新与启用已由 [ADR-129](../../adr/129-controlled-dsh-reply-skill-discovery.md)及 [DSH 回复 Skill 接入规格](../../../.scratch/dsh-reply-skill-integration/spec.md)收敛；下方实验保留历史，不替代当前实现与验收记录。
+> 后续正式入口：发现、技术更新与启用已由 [ADR-129](../../adr/superseded/129-controlled-dsh-reply-skill-discovery.md)及 [DSH 回复 Skill 接入规格](../../../.scratch/dsh-reply-skill-integration/spec.md)收敛；下方实验保留历史，不替代当前实现与验收记录。
 
 > 状态：讨论与隔离实验记录，不代表已实现或替代现行规格。自动学习的具体规则暂不讨论。现行 Skill 范围和生命周期见 [Skill Library](../../current/skill-library.md)，DSH 接入约束见 [ADR-102](../../adr/102-dsh-typescript-backend-migration.md)。
 
@@ -24,7 +24,7 @@
 
 选中的 Skill 暂时无法读取时，在本次联系人资料和授权仍有效、且未将失效的 Skill 内容带入后续生成的前提下，继续生成不使用该 Skill 的回复，并向用户简短提示“回复策略暂不可用”。联系人资料或本次授权失效时停止生成。实现时须验证实际模型上下文和记录，不能仅靠提示词忽略已经读取的失效内容。
 
-新包通过管理刷新和每轮回复前的检查自动发现，只有用户明确启用后才进入可用目录；技术更新由应用处理。该方向已由 [ADR-129](../../adr/129-controlled-dsh-reply-skill-discovery.md)收敛，手动目录添加入口已按用户要求取消。
+新包通过管理刷新和每轮回复前的检查自动发现，只有用户明确启用后才进入可用目录；技术更新由应用处理。该方向已由 [ADR-129](../../adr/superseded/129-controlled-dsh-reply-skill-discovery.md)收敛，手动目录添加入口已按用户要求取消。
 
 ## 文件读取的实验结果
 

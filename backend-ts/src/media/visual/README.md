@@ -2,7 +2,7 @@
 
 产品合同以[图片同步与来源](../../../../architecture/current/wechat-sync.md)、[图片版本](../../../../architecture/current/domain-data.md)为准；本页只保留本模块的接口、装配和故障处理。
 
-按 [ADR-170](../../../../architecture/adr/170-no-thumbnail-storage-and-no-original-classification.md)，`wechat-message-image-content-v2`仍由读取程序给出实际绑定的主图／缩略图候选、匹配资源原始类型和可选原图内容证明，原生客户端继续核对分类、资源集合及同一份内容证明；后台只用其中“是否缩略图”：缩略图不保存，其余不再持久化分类或证明。旧 content-v1 与已有原图证明形态仍可解析。适配器不自行调度；已保存图片的授权补查由宿主图片协调器按现行同步合同执行。
+按 [ADR-197](../../../../architecture/adr/197-chat-image-and-memory-image-input-consolidated.md)，`wechat-message-image-content-v2`仍由读取程序给出实际绑定的主图／缩略图候选、匹配资源原始类型和可选原图内容证明，原生客户端继续核对分类、资源集合及同一份内容证明；后台只用其中“是否缩略图”：缩略图不保存，其余不再持久化分类或证明。旧 content-v1 与已有原图证明形态仍可解析。适配器不自行调度；已保存图片的授权补查由宿主图片协调器按现行同步合同执行。
 
 `contracts.ts` 的 `VisualResourcePort.open(request)` 是认证资源接点。request只包含当前固定消息、实际来源、完整读取资格、目标、取消信号和checkpoint；没有任意SQL、文件路径、save或批量范围。端口必须先证明当前账号/绑定/来源代次和唯一消息到资源映射，再打开精确资源；无法证明时不读字节，返回 `media_association_unverified`。字节流及打开须响应取消，close等待全部在途读取结算且不留下XML、路径、密钥或字节缓存。
 

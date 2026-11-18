@@ -13,7 +13,7 @@
 - `list/get` 查询已记录状态；`refresh`/`inspect` 自动发现并核验已启用包的有效更新，显示 unknown/enabled/disabled 与 verified/pending/missing/conflict/invalid 两组状态。停用包只检查目录身份，不读取正文；未知项通过完整核验后默认启用。
 - `setEnabled(id, expectedHead, state)` 只供明确用户操作，保留 `user_action` 来历并推进 head；显式停用优先于默认启用，来源资格失效不因技术核验恢复。
 - `verify(id, expectedHead)` 显式核验目录及内容，以 CAS 提交当前修订。目录身份为当前物理定位和 dev/ino，拒绝任何路径段的符号链接；物理标记变化按下述完整核验恢复，不凭同名关联。
-- 目录标记变化或既有 conflict 在已授权根中重新安全读取完整快照。只有正文及全部资源的双摘要与最新历史修订一致时，`skills.rebindDirectory` 才在单个 CAS 事务中重建定位和新修订；保留包 ID、启停与来历，旧修订、旧运行锚点和迟到结果保持失效。停用项到显式重新启用时才读正文，来源撤销不可恢复；无核验历史、内容不符和历史降级仍拒绝。规则见 [ADR-157](../../../../architecture/adr/157-portable-skill-directory-identity.md)。
+- 目录标记变化或既有 conflict 在已授权根中重新安全读取完整快照。只有正文及全部资源的双摘要与最新历史修订一致时，`skills.rebindDirectory` 才在单个 CAS 事务中重建定位和新修订；保留包 ID、启停与来历，旧修订、旧运行锚点和迟到结果保持失效。停用项到显式重新启用时才读正文，来源撤销不可恢复；无核验历史、内容不符和历史降级仍拒绝。规则见 [ADR-196](../../../../architecture/adr/196-reply-skill-library-consolidated.md)。
 - `requireVerification(id, expectedHead)` 在来源资格失效时以 CAS 标为 pending，撤销当前指针与旧修订可用性，保留启停状态和原目录。扫描或字节相同不能恢复来源授权；当前普通 SQLite 管理入口没有绕过来源失效的恢复动作。
 
 刷新在开始和返回前读取权威状态，目录发现复用本轮清单；已启用包的一次原生快照同时核对目录身份和全部内容，摘要未变化时不重复提交观察。停用或来源失效项目仍只检查目录身份。同一库实例只共享在途核验，不缓存已完成结果；显式管理操作开始与完成后均脱离旧一轮刷新，避免操作后的读取复用写入前状态。实际运行的版本、来源和输入核验保持独立执行。
@@ -22,7 +22,7 @@
 
 ## 联系人分组
 
-依据 [ADR-178](../../../../architecture/adr/178-contact-skill-groups.md)。内置“恋人”分组（迁移52 `all_packages`，`skillGroups.ensureBuiltin`，分组 GET 时幂等建立）使用全部 Skill，不逐包绑定且不可改名、改绑定或删除；其余分组须逐包绑定。`groups.ts` 导出迁移51 `skillGroupMigration(51)`（`skill_group`、`skill_group_package`、`contact_skill_group`，联系人／包／分组删除级联清除绑定）、`skillGroupActions`（`skillGroups.list|create|update|delete|assign|scope`）以及运行共用的 `inSkillGroup`／`skillRunGroup`。联系人至多一个分组；未分组联系人范围为空，因此首次模型请求不提供 Skill 工具。
+依据 [ADR-196](../../../../architecture/adr/196-reply-skill-library-consolidated.md)。内置“恋人”分组（迁移52 `all_packages`，`skillGroups.ensureBuiltin`，分组 GET 时幂等建立）使用全部 Skill，不逐包绑定且不可改名、改绑定或删除；其余分组须逐包绑定。`groups.ts` 导出迁移51 `skillGroupMigration(51)`（`skill_group`、`skill_group_package`、`contact_skill_group`，联系人／包／分组删除级联清除绑定）、`skillGroupActions`（`skillGroups.list|create|update|delete|assign|scope`）以及运行共用的 `inSkillGroup`／`skillRunGroup`。联系人至多一个分组；未分组联系人范围为空，因此首次模型请求不提供 Skill 工具。
 
 - 运行：`openSqliteSkillRun` 的目录与 `eligible()` 都先按 `library.groupScope(contactId)` 过滤；冻结的 `SkillRunRevision.group` 带联系人、分组标识和分组修订。回复模块（`reply/sqlite/turns.ts`、`candidates/turns.ts`）用同一函数生成修订，字节须与运行一致。
 - 资格：`requireSkillRun` 同事务调用 `requireSkillGroupScope`——分配或分组修订变化、可用包越出分组绑定都拒绝；修订缺少 `group` 且 `eligible` 非空同样拒绝（失败即关闭）。无实际变化的 `update` 不推进分组修订。
@@ -40,7 +40,7 @@
 
 ## 官方加载与实际输入
 
-`openSqliteSkillRun(library, {contactId,callId}, protection, signal?)` 冻结 owner/contact/call 与目录修订；按 [ADR-193](../../../../architecture/adr/193-retire-explicit-reply-skill-preload.md)仅保留官方按需加载路径，不接收显式选包，不保存另一套定向预加载状态。未知、停用、未核验或来源失效不进入可加载目录。`run.mount(scopedContext)` 只接受官方独占 scope，调用现有 profile 中的 `ctx.skills.registerProvider`；宿主全局目录为空。已挂载的 `@deepseek-ai/dsh-tool-skill` 负责名称与简介目录及 `skill` 加载工具，工具经官方 `ctx.skills.get` 读取所选正文，可在一轮中按需读取多个 Skill；每个包固定一个当时当前的不可变修订。目录发布本身不生成正文输入记录。
+`openSqliteSkillRun(library, {contactId,callId}, protection, signal?)` 冻结 owner/contact/call 与目录修订；按 [ADR-196](../../../../architecture/adr/196-reply-skill-library-consolidated.md)仅保留官方按需加载路径，不接收显式选包，不保存另一套定向预加载状态。未知、停用、未核验或来源失效不进入可加载目录。`run.mount(scopedContext)` 只接受官方独占 scope，调用现有 profile 中的 `ctx.skills.registerProvider`；宿主全局目录为空。已挂载的 `@deepseek-ai/dsh-tool-skill` 负责名称与简介目录及 `skill` 加载工具，工具经官方 `ctx.skills.get` 读取所选正文，可在一轮中按需读取多个 Skill；每个包固定一个当时当前的不可变修订。目录发布本身不生成正文输入记录。
 
 新请求不提供显式选包或主机预加载分支；`recordSelection`／`recordInput` 只记录目录开放及实际模型工具载入。历史候选的 `preloadedSkills` 只读投影继续解释旧 `explicit`／`auto_preload` 回执，不恢复可写预加载入口或旧正文。
 

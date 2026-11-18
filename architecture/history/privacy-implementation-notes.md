@@ -78,7 +78,7 @@
 
 ## 已被明确修订的验证条款
 
-归并前的验证清单仍写“新发现包须用户明确启用”。该句已被 [ADR-135](../adr/135-default-enabled-localized-skill-library.md)的完整核验后默认启用修订；用户明确停用、来源撤销与不可恢复旧修订的约束保持。[ADR-157](../adr/157-portable-skill-directory-identity.md)进一步允许内容与最新历史修订完整一致时恢复物理定位，这不恢复来源资格或用户停用项。
+归并前的验证清单仍写“新发现包须用户明确启用”。该句已被 [ADR-135](../adr/superseded/135-default-enabled-localized-skill-library.md)的完整核验后默认启用修订；用户明确停用、来源撤销与不可恢复旧修订的约束保持。[ADR-157](../adr/superseded/157-portable-skill-directory-identity.md)进一步允许内容与最新历史修订完整一致时恢复物理定位，这不恢复来源资格或用户停用项。
 
 [ADR-128](../adr/128-deduplicated-wechat-message-storage.md)中消息去重与旧记录清理、撤回新展示和使用规则的实施范围分别记录；后者仍暂缓。保留的旧来源资格保护不得误写为已经实现了全部撤回目标。
 

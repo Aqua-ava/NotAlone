@@ -1,6 +1,6 @@
 # Skill Library（Skill 库）规格
 
-> 后续决定：[ADR-093](../../architecture/adr/093-retain-current-skill-resource-budget.md)沿用现有导入大小限制与整轮输入预算，不新增独立资源单次／累计额度，替代下文相关必备要求及整改建议。历史状态与 Comments 保留，其他测试和接口缺口不因本决定自动关闭。
+> 后续决定：[ADR-093](../../architecture/adr/superseded/093-retain-current-skill-resource-budget.md)沿用现有导入大小限制与整轮输入预算，不新增独立资源单次／累计额度，替代下文相关必备要求及整改建议。历史状态与 Comments 保留，其他测试和接口缺口不因本决定自动关闭。
 
 Type: task
 State: resolved
@@ -228,7 +228,7 @@ Skill Library 分为两个接口面：
 
 ## Further Notes
 
-- 本规格与 [Skill Library 现行设计](../../architecture/current/skill-library.md) 和 [ADR-019](../../architecture/adr/019-controlled-reply-skill-resources.md) 对齐；ADR-019 修订了 ADR-010 关于 v1 supporting files 的旧限制。
+- 本规格与 [Skill Library 现行设计](../../architecture/current/skill-library.md) 和 [ADR-019](../../architecture/adr/superseded/019-controlled-reply-skill-resources.md) 对齐；ADR-019 修订了 ADR-010 关于 v1 supporting files 的旧限制。
 - 官方格式依据：[Agent Skills 规范](https://agentskills.io/specification)、[LangChain Skills](https://docs.langchain.com/oss/python/langchain/multi-agent/skills)、[Deep Agents Skills](https://docs.langchain.com/oss/python/deepagents/skills)。
 - 该功能适合按多会话实现：先建立包校验和不可变发布，再建立资源存储与运行时读取，最后补齐管理展示、导出和试用。
 - 实现任何随版本变化的 LangChain、Deep Agents 或 LangGraph 接口前，必须先核对官方文档、项目锁定版本和实际安装版本；文档证明接口约定，代码和测试才证明集成可用。

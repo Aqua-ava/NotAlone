@@ -129,7 +129,7 @@ State: open
 
 - 仅按逐人选择同步与 [ADR-089](../../architecture/adr/089-all-private-wechat-sync-scope.md) 的全部私聊范围授权存在冲突；用户已选择逐人勾选，实施前须明确复审和修订范围。
 - 用户最新明确要求首次同步已选会话的本机可读历史；[ADR-100](../../architecture/adr/100-authorized-private-history-sync.md)已有首次历史同步的决定，并修订旧 ADR 中 baseline 之前不追溯的部分。用户提供的根规则仍写有不追溯新绑定 baseline 之前历史，实施前须统一阅读入口和现行规则，不能静默忽略冲突。
-- 与 [ADR-107](../../architecture/adr/107-unified-memory-processing-lifecycle.md) 的新消息自动排队、有限自动重试、启动自动恢复及后续轮次自动衔接冲突；重新讨论的原因是用户已确认手动启动、失败等待手动继续、退出后保持暂停。同轮协同联系人与本人处理也需说明对其独立控制入口的修订范围。保留固定目标、完整阶段、来源复验、租约、迟到结果及未知回执保护；[ADR-108](../../architecture/adr/108-isolate-unresolved-legacy-memory-processing.md) 的旧任务隔离不能被解释为新库自动发起记忆调用。本次仅记录冲突，不修改已采纳 ADR 或线上行为。
+- 与 [ADR-107](../../architecture/adr/superseded/107-unified-memory-processing-lifecycle.md) 的新消息自动排队、有限自动重试、启动自动恢复及后续轮次自动衔接冲突；重新讨论的原因是用户已确认手动启动、失败等待手动继续、退出后保持暂停。同轮协同联系人与本人处理也需说明对其独立控制入口的修订范围。保留固定目标、完整阶段、来源复验、租约、迟到结果及未知回执保护；[ADR-108](../../architecture/adr/superseded/108-isolate-unresolved-legacy-memory-processing.md) 的旧任务隔离不能被解释为新库自动发起记忆调用。本次仅记录冲突，不修改已采纳 ADR 或线上行为。
 - 关于本次重置后首次同步可能读回旧 NotAlone 曾删除但微信仍保留的消息，依据侧边聊天转述和本次讨论记录；侧边聊天为临时聊天，无法通过线程读取工具核验原文。
 
 ## 本轮技术查证结论

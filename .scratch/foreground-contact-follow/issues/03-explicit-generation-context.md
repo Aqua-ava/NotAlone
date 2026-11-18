@@ -30,7 +30,7 @@ Blocked by: None
 ## 依据
 
 - [功能规格](../spec.md)：生成调度与固定输入；用户故事 19、22–23、25、27。
-- [持续助手会话规格](../../assistant-session-context/spec.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)、[ADR-050](../../../architecture/adr/050-continuous-single-frame-contact-follow.md)。
+- [持续助手会话规格](../../assistant-session-context/spec.md)、[ADR-042](../../../architecture/adr/042-assistant-session-context-boundary.md)、[ADR-050](../../../architecture/adr/superseded/050-continuous-single-frame-contact-follow.md)。
 - [领域语言](../../../CONTEXT.md)、[领域读取路由](../../../docs/agents/domain.md)、[工程工作流](../../../docs/agents/engineering.md)。
 
 ## Comments

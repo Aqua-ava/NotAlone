@@ -5,7 +5,7 @@ State: resolved
 Triage: ready-for-agent
 Implementation: completed
 
-> 2026-10-22 后继说明：本文“Runtime 不直接查询消息或关系记忆”“第一阶段不把动态检索 Tool 交给 Runtime”的阶段限制已由 [ADR-090](../../architecture/adr/090-bounded-runtime-history-retrieval.md) 局部替代；应用层范围、来源复验、预算与模块职责保持，正文旧表述仅历史。
+> 2026-10-22 后继说明：本文“Runtime 不直接查询消息或关系记忆”“第一阶段不把动态检索 Tool 交给 Runtime”的阶段限制已由 [ADR-090](../../architecture/adr/superseded/090-bounded-runtime-history-retrieval.md) 局部替代；应用层范围、来源复验、预算与模块职责保持，正文旧表述仅历史。
 
 ## Problem Statement
 

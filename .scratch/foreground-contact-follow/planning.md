@@ -40,7 +40,7 @@ flowchart LR
 
 ## 执行与状态
 
-1. 新上下文处理单票前，读取该票、[完整规格](spec.md)、[领域语言](../../CONTEXT.md)及[领域读取路由](../../docs/agents/domain.md)指定的现行材料；用 [ADR-050](../../architecture/adr/050-continuous-single-frame-contact-follow.md)区分新单帧目标和旧双帧证据。
+1. 新上下文处理单票前，读取该票、[完整规格](spec.md)、[领域语言](../../CONTEXT.md)及[领域读取路由](../../docs/agents/domain.md)指定的现行材料；用 [ADR-050](../../architecture/adr/superseded/050-continuous-single-frame-contact-follow.md)区分新单帧目标和旧双帧证据。
 2. 只领取所有阻塞票已有有效 `Answer` 且 `resolved` 的任务，开始时改为 `claimed`；依赖仍未完成的票保持 `open`。Triage 表示下一步角色，不替代依赖判断。
 3. 按[工作流](../../docs/agents/workflow.md)在约定公开接缝上推进单票，完成相关测试和 Standards/Spec 评审；将真实结果、命令、数据影响及剩余风险写入 `## Answer` 后才能改为 `resolved`，同步本索引。
 4. 文件编辑与本地提交遵循[工程工作流](../../docs/agents/engineering.md)。需要人类信息或有限实机时段时，按[triage 标签](../../docs/agents/triage-labels.md)如实记录等待原因；不把当前发布解释为实际 App 或微信操作已获本轮测试授权。
@@ -49,7 +49,7 @@ flowchart LR
 
 ## 依据
 
-- [功能规格](spec.md)、[ADR-050](../../architecture/adr/050-continuous-single-frame-contact-follow.md)。
+- [功能规格](spec.md)、[ADR-050](../../architecture/adr/superseded/050-continuous-single-frame-contact-follow.md)。
 - [持续助手会话规格与既有行为](../assistant-session-context/spec.md)、[自动窗口定位的旧实现及实测记录](../automatic-foreground-locator/spec.md)。
 - [任务格式](../../docs/agents/issue-tracker.md)、[triage 标签](../../docs/agents/triage-labels.md)。
 

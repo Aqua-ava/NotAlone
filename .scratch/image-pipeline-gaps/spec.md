@@ -1,6 +1,6 @@
 # 取图链路两处缺口的修复方案
 
-日期：2026-11-05。状态：方案，未实施。相关：[ADR-170](../../architecture/adr/170-no-thumbnail-storage-and-no-original-classification.md)、[ADR-171](../../architecture/adr/171-image-pick-standard-over-high-definition.md)、[微信数据库密钥缺失与补取](../../docs/guides/wechat-db-key-refresh.md)、[图片与视频窄校验器](../../native/media-validation/README.md)、[标准图优先取图的真实验证](../../docs/verification/image-pick-standard-20261105.md)。
+日期：2026-11-05。状态：方案，未实施。相关：[ADR-170](../../architecture/adr/superseded/170-no-thumbnail-storage-and-no-original-classification.md)、[ADR-171](../../architecture/adr/superseded/171-image-pick-standard-over-high-definition.md)、[微信数据库密钥缺失与补取](../../docs/guides/wechat-db-key-refresh.md)、[图片与视频窄校验器](../../native/media-validation/README.md)、[标准图优先取图的真实验证](../../docs/verification/image-pick-standard-20261105.md)。
 
 ## 背景与结论
 

@@ -1,6 +1,6 @@
 # ADR-046：维度依据绑定当前来源，第四门采用合取
 
-> 后续修订：[ADR-070](../070-automatic-memory-maintenance.md) 将正常记忆维护改为默认逐项核验后自动处理；原评测结论不变，旧资料升级功能退役。
+> 后续修订：[ADR-070](070-automatic-memory-maintenance.md) 将正常记忆维护改为默认逐项核验后自动处理；原评测结论不变，旧资料升级功能退役。
 
 > 后续局部修订：[ADR-063](../063-bounded-runtime-evidence-and-source-dependencies.md)修订有限作用域、正式任务接线及新记录删除语义；旧合同保留。
 

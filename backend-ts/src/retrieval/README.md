@@ -1,6 +1,6 @@
 # 本机混合检索 Module
 
-L1 已采纳记忆和 L0 获准聊天共用 BM25、向量与 RRF。范围及删除合同见 [ADR-190](../../../architecture/adr/190-tencent-style-local-hybrid-retrieval.md)与[回复规格](../../../architecture/current/reply-generation.md)。检索表示是可重建派生数据，不能成为事实源。
+L1 已采纳记忆和 L0 获准聊天共用 BM25、向量与 RRF。范围及删除合同见 [ADR-195](../../../architecture/adr/195-reply-retrieval-consolidated.md)与[回复规格](../../../architecture/current/reply-generation.md)。检索表示是可重建派生数据，不能成为事实源。
 
 ## Interface 与职责
 

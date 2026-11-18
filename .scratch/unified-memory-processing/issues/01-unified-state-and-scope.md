@@ -4,7 +4,7 @@ Triage: ready-for-agent
 State: resolved
 Blocked by: None (can start immediately)
 
-规格：[统一记忆处理生命周期](../spec.md)。决策依据：[ADR-107](../../../architecture/adr/107-unified-memory-processing-lifecycle.md)。
+规格：[统一记忆处理生命周期](../spec.md)。决策依据：[ADR-107](../../../architecture/adr/superseded/107-unified-memory-processing-lifecycle.md)。
 
 **What to build:** 建立统一管理的查询 Interface 及必要的范围控制元数据骨架，明确轮次身份、可信任务归属和控制代次的稳定合同，复用内部真实执行记录形成权威状态；实际记忆页经生产桥接读取同一合同，去除两套主入口并排展示。该票只交付查询与呈现，操作能力由 02 接入，不伪造尚不存在的安全动作。
 

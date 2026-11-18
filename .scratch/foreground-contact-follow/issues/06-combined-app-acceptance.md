@@ -37,7 +37,7 @@ Blocked by: 04, 05
 
 - [功能规格](../spec.md)：完整验收表、隐私边界与排除项；最终核对用户故事 1–27。
 - [04 持续跟随](04-continuous-contact-follow.md)、[05 多联系人后台任务](05-contact-generation-jobs.md)。
-- [ADR-050](../../../architecture/adr/050-continuous-single-frame-contact-follow.md)、[隐私与删除](../../../architecture/current/privacy-deletion.md)。
+- [ADR-050](../../../architecture/adr/superseded/050-continuous-single-frame-contact-follow.md)、[隐私与删除](../../../architecture/current/privacy-deletion.md)。
 - [工程工作流](../../../docs/agents/engineering.md)、[桌面测试与运行说明](../../../desktop/README.md)、[macOS 权限与启动记录](../../../docs/guides/macos-app-permissions-and-errors.md)。
 
 ## Comments

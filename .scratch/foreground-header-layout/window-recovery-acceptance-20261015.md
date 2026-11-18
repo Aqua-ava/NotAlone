@@ -8,7 +8,7 @@
 2. 原探针900ms、后端1.3秒、UI1.5秒预算会截断有效慢单帧或传输交付。修订为2.5／3.2／3.5秒；五秒采集新鲜度、单轮在途、锁200ms及CLI元数据250ms不变。真实挂起仍终止并进入人工门。
 3. 复验中发现小屏窄窗的正文气泡边缘覆盖聊天区过半，旧亮度中位数错误竞争顶部边界。改用21点下四分位，至少16点支持；45–110pt内仍要求唯一边界，名称裁剪保持12–48pt，不OCR正文，不宽免未知布局失败。
 
-决策与边界见[ADR-056](../../architecture/adr/056-foreground-busy-and-observation-budget.md)。
+决策与边界见[ADR-056](../../architecture/adr/superseded/056-foreground-busy-and-observation-budget.md)。
 
 ## 实机场次与结果
 
