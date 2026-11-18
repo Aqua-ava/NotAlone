@@ -24,6 +24,11 @@ __pycache__/
 /chat_exports/
 .dsh-computer-use/
 /model-permits/
+
+# 本机架构决策与任务规格
+/architecture/adr/
+/.scratch/
+
 # 本机语义检索模型（公开模型，按 scripts/prepare_memory_embedding.mjs 准备）
 /.models/
 

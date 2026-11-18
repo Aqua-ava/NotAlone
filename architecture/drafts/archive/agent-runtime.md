@@ -1,22 +1,22 @@
 > 状态：归档，仅供追溯。现行规则见[架构阅读入口](../../README.md)与[相关规格](../../current/core-flows.md)。本稿中的实现状态、待办和验收结论记录当时阶段；归档不代表后续功能或质量已通过验收，未决议题也不因此采纳。
 
-> 后续局部修订：[ADR-106](../../adr/106-persistent-assistant-conversations.md)已采纳候选回复助手会话的本机持久化与空闲分段，相关实现及删除链已接入正常开发入口，验证范围及限制见该 ADR；下文“DSH 会话只保存临时执行状态、不另存长期日志”不再作为该范围的新设计约束。数据库业务权威、其他后台任务及来源、预算、删除和人工发送边界保持。
+> 后续局部修订：ADR-106 已采纳候选回复助手会话的本机持久化与空闲分段，相关实现及删除链已接入正常开发入口，验证范围及限制见该 ADR；下文“DSH 会话只保存临时执行状态、不另存长期日志”不再作为该范围的新设计约束。数据库业务权威、其他后台任务及来源、预算、删除和人工发送边界保持。
 
 > 2026-10-26 历史草案：本稿LangChain／LangGraph／Deep Agents实现已由ADR-102与TypeScript／DSH替代。当前入口见backend-ts与迁移25／26记录；以下保留设计沿革，不是正常运行说明。
 
 # Agent 编排与检索运行时（草案）
 
-> 2026-10-21 设计审查：正常产品入口与方向阶段按 [ADR-079](../../adr/079-unified-expression-workspace.md)修订，受控 Skill 探索见 [ADR-043](../../adr/043-conversation-scenarios-and-direction-exploration.md)。运行计划和自动过程摘要按 [ADR-091](../../adr/091-retire-runtime-todos-and-auto-summary.md)不采用；时间、日历、网络工具按 [ADR-092](../../adr/092-defer-time-calendar-web-tools.md)改为未来可选方向，当前不接入；当时完整 Harness／DSH 未获主线采纳；该选型结论现由 ADR-102 替代，仍不启用无关的完整 Harness 能力。自动前台画面按 [ADR-052](../../adr/superseded/052-header-ocr-foreground-locator.md)只作名称定位，不能当作正文输入适配器。
+> 2026-10-21 设计审查：正常产品入口与方向阶段按 ADR-079 修订，受控 Skill 探索见 ADR-043。运行计划和自动过程摘要按 ADR-091 不采用；时间、日历、网络工具按 ADR-092 改为未来可选方向，当前不接入；当时完整 Harness／DSH 未获主线采纳；该选型结论现由 ADR-102 替代，仍不启用无关的完整 Harness 能力。自动前台画面按 ADR-052 只作名称定位，不能当作正文输入适配器。
 
-> 后续修订（2026-10-20）：主动收藏表达样本及其生成参考按 [ADR-082](../../adr/082-retire-explicit-style-samples.md)退役；本文相关历史方案不再构成实施要求。当前意图优先、长期表达偏好及其他已采纳约束分别保留。
+> 后续修订（2026-10-20）：主动收藏表达样本及其生成参考按 ADR-082 退役；本文相关历史方案不再构成实施要求。当前意图优先、长期表达偏好及其他已采纳约束分别保留。
 
-> 状态：历史运行时草案与迁移记录。精简 DSH 与 TS 后端已由 [ADR-102](../../adr/102-dsh-typescript-backend-migration.md)正式采纳，框架选择替代 ADR-006／009／010；下方旧选型、图和实现步骤保留追溯，不再作为新实现的技术选型约束。当前源码后台已切换为 TypeScript／DSH，业务存储已由 [ADR-109](../../adr/109-controlled-sqlite-storage-foundation.md)改为 SQLite；正常入口与实际验证范围见[后台说明](../../../backend-ts/README.md)。下文保留当时方案，不作为完整质量、性能或发行验收通过的证明。
+> 状态：历史运行时草案与迁移记录。精简 DSH 与 TS 后端已由 ADR-102 正式采纳，框架选择替代 ADR-006／009／010；下方旧选型、图和实现步骤保留追溯，不再作为新实现的技术选型约束。当前源码后台已切换为 TypeScript／DSH，业务存储已由 ADR-109 改为 SQLite；正常入口与实际验证范围见[后台说明](../../../backend-ts/README.md)。下文保留当时方案，不作为完整质量、性能或发行验收通过的证明。
 
-早期进度见[历史功能目录](../../../.scratch/agent-runtime/planning.md)。本次正式[实施规格](../../../.scratch/dsh-ts-migration/spec.md)已整理，[任务拆分](../../../.scratch/dsh-ts-migration/ticket-proposal.md)及验收入口已获认可，[26份任务](../../../.scratch/dsh-ts-migration/planning.md)是当时发布记录，不代表当前仍未开始实现；当前入口见上述后台说明。
+早期进度见历史功能目录（本机 `.scratch/agent-runtime/planning.md`）。本次正式实施规格（本机 `.scratch/dsh-ts-migration/spec.md`）已整理，任务拆分（本机 `.scratch/dsh-ts-migration/ticket-proposal.md`）及验收入口已获认可，26份任务（本机 `.scratch/dsh-ts-migration/planning.md`）是当时发布记录，不代表当前仍未开始实现；当前入口见上述后台说明。
 
 ## 已采纳的迁移入口（2026-10-23）
 
-本节记录 2026-10-23 的迁移决定及当时范围，以 [ADR-102](../../adr/102-dsh-typescript-backend-migration.md)为来源；其中 PostgreSQL 和仅临时会话的条款分别已有 ADR-109 与 ADR-106 后继修订。不能把这段历史实施计划当作当前运行状态。
+本节记录 2026-10-23 的迁移决定及当时范围，以 ADR-102 为来源；其中 PostgreSQL 和仅临时会话的条款分别已有 ADR-109 与 ADR-106 后继修订。不能把这段历史实施计划当作当前运行状态。
 
 - Electron 保持独立；TS 业务模块与精简 DSH 共用官方 profile 启动的后台进程，由薄的 NotAlone 插件装配。联系人、检索、事务、来源和删除保持普通业务模块，不必全部插件化，也不长期保留 Python 工具桥。
 - DSH 承担通用模型、Agent 循环、工具与 Skill 基础设施；确定性流程仍由业务代码控制。单次模型调用不自动变为开放式循环，模型不能决定权限或提交事务。
@@ -208,11 +208,11 @@ flowchart TD
 
 模型提出 Tool call 不等于获准执行。Permission policy、联系人范围、数据状态、查询预算和出站数据裁剪均由应用层确定性代码处理。
 
-当前只使用已接入的受控 Skill 读取与历史补查，历史工具名称及范围按 ADR-090，不把早期草案别名当作实际注册表。Skill 目录由 `SkillsMiddleware` 与定制提示词提供，`read_file` 只能经 `SkillPort` 读取当前目录列出的版本及允许资源；`owner_id + contact_id` 由应用层固定。按 [ADR-092](../../adr/092-defer-time-calendar-web-tools.md)，`get_current_time`、`search_calendar` 和 `web_search` 只保留为未来可选方向，不是 v1 必备工具；未来须独立定义确定性时间、日历只读授权和网络出站范围。当前调用次数、返回量、token、超时和重试预算以及联系人隔离、删除与禁止发送边界保持。
+当前只使用已接入的受控 Skill 读取与历史补查，历史工具名称及范围按 ADR-090，不把早期草案别名当作实际注册表。Skill 目录由 `SkillsMiddleware` 与定制提示词提供，`read_file` 只能经 `SkillPort` 读取当前目录列出的版本及允许资源；`owner_id + contact_id` 由应用层固定。按 ADR-092，`get_current_time`、`search_calendar` 和 `web_search` 只保留为未来可选方向，不是 v1 必备工具；未来须独立定义确定性时间、日历只读授权和网络出站范围。当前调用次数、返回量、token、超时和重试预算以及联系人隔离、删除与禁止发送边界保持。
 
 ## 6. 多模态输入与回复形态
 
-记忆处理的图文输入以 [ADR-153](../../adr/superseded/153-joint-text-image-memory-input.md)为正式入口：聊天文字与实际图片共同带入记忆模型。下图仅描述独立的回复输入与输出适配器，不限制聊天图片的记忆输入：
+记忆处理的图文输入以 ADR-153 为正式入口：聊天文字与实际图片共同带入记忆模型。下图仅描述独立的回复输入与输出适配器，不限制聊天图片的记忆输入：
 
 ```text
 文字 -------------------------------> normalized current_message
@@ -256,7 +256,7 @@ class RetrievalPort(Protocol):
 
 Tool 的模型参数只表达查询意图、允许的 limit 和时间范围；`ContactScope` 由 runtime context 注入。两个检索结果都必须包含业务引用、实际检索器版本、分数、入选原因和状态，不得混淆原始消息与提炼后的关系资料。
 
-原探索方向是 PostgreSQL 全文/结构化检索；记忆第一期召回现按 [ADR-028](../../adr/superseded/028-lexical-memory-recall-phase-1.md)采用 Python 侧确定性中文词法评分，L2/L3 分层加载目标见 [ADR-067](../../adr/067-layered-scenario-and-profile-context.md)，不能由本草案推断已实现状态。RAGFlow 若被评估，只能实现同一 port：它返回候选引用，NotAlone 再根据 PostgreSQL 权威状态做二次校验；它不能写 `confirmed_memory`、选择联系人或生成最终候选回复。
+原探索方向是 PostgreSQL 全文/结构化检索；记忆第一期召回现按 ADR-028 采用 Python 侧确定性中文词法评分，L2/L3 分层加载目标见 ADR-067，不能由本草案推断已实现状态。RAGFlow 若被评估，只能实现同一 port：它返回候选引用，NotAlone 再根据 PostgreSQL 权威状态做二次校验；它不能写 `confirmed_memory`、选择联系人或生成最终候选回复。
 
 ## 8. 后台任务与子 Agent
 

@@ -6,7 +6,7 @@
 
 `source-proof.ts` 统一读取、核对与更新每联系人唯一的来源事实；`continuity.ts` 负责来源元数据判据与受控接纳。迁移46已移除旧围栏、范围和租约三表。原生守卫与Worker易失资格只保护本轮独占读取，提交前复验，成功、失败或取消后等待真实释放；不停车保留空闲联系人守卫。消费者读取合法本机资料核对 `source_proof`，新外部正文读取另须本轮守卫，重启不恢复运行资格。
 
-按 [ADR-177](../../../../architecture/adr/177-retire-source-recertification-and-cleanup.md)退役重新认证、取消、批量修复和副本清理请求流程。迁移47将必要已验证的遗留删除等价事实保存在 `history_source_equivalence`，区分表前缀范围与逐键点范围，仅用于删除闭包与未来抑制。合法保留的旧消息、捕获来源和引用归属不改写；这些事实不构成读取授权或普通消息别名，并随联系人或账户删除。旧版本迁移SQL与校验和不改写，未完成旧副本清理阻止升级并保留现场。
+按 ADR-177 退役重新认证、取消、批量修复和副本清理请求流程。迁移47将必要已验证的遗留删除等价事实保存在 `history_source_equivalence`，区分表前缀范围与逐键点范围，仅用于删除闭包与未来抑制。合法保留的旧消息、捕获来源和引用归属不改写；这些事实不构成读取授权或普通消息别名，并随联系人或账户删除。旧版本迁移SQL与校验和不改写，未完成旧副本清理阻止升级并保留现场。
 
 `SqliteHistoryService` 的 `HistoryLease` 统一承载本轮范围、渠道、守卫与删除持有者；不保留跨轮联系人通道、停车状态或空闲守卫。成功、失败与取消都等待真实守卫释放和渠道关闭；关闭失败的读者仍留在 `active`，停读、删除及下一次共享租约先重试排空。守卫释放事务失败时先关闭存储，未确认的存储或渠道关闭继续阻止删除完成，不重复发送失败的守卫写入。
 
@@ -16,9 +16,9 @@
 
 历史首次读取与增量恢复交接共用有界历史页循环。读取器声明持久历史检查点时按片段释放；仅支持持久增量检查点的旧读取器在同一租约读到历史终页再接增量。`synchronizeIncremental` 只维护这一条能力和恢复证明决定的执行路径，不接受旧 `followHistoryHandoff` 策略开关。共享原生进程继续复用；高层不直接打开、修改或关闭微信原始 DB／WAL／SHM 句柄。
 
-`message` 的内部id与来源出现键、服务端别名、续读cursor各自独立。来源出现键包含来源代次、分片、表实例及精确十进制localId；serverId为0不建立别名。只有支持档明确 `serverAliasSemantics=verified_within_scope` 时才使用服务端别名连接不同本地身份；未知或不支持时保留观测值而不凭正文、时间或相同serverId猜测合并。message_alias使用内部id作为清理主键，完整scope+scheme+external_key仍有唯一约束，长复合出现键不会挤入删除目标键。`capture_record` 直接引用实际规范消息。按 [ADR-128](../../../../architecture/adr/128-deduplicated-wechat-message-storage.md)，重复读取命中仍有效的相同消息来源时复用来源，不再每次新增捕获；正常文字仅在消息层保存正文，来源记录保留定位与必要元数据。版本22迁移仅移除与消息正文完全一致的旧来源正文副本，不一致的历史内容保留；原执行的来源身份不因重复读取改写。非文字正文始终NULL，不下载媒体或调用模型。
+`message` 的内部id与来源出现键、服务端别名、续读cursor各自独立。来源出现键包含来源代次、分片、表实例及精确十进制localId；serverId为0不建立别名。只有支持档明确 `serverAliasSemantics=verified_within_scope` 时才使用服务端别名连接不同本地身份；未知或不支持时保留观测值而不凭正文、时间或相同serverId猜测合并。message_alias使用内部id作为清理主键，完整scope+scheme+external_key仍有唯一约束，长复合出现键不会挤入删除目标键。`capture_record` 直接引用实际规范消息。按 ADR-128，重复读取命中仍有效的相同消息来源时复用来源，不再每次新增捕获；正常文字仅在消息层保存正文，来源记录保留定位与必要元数据。版本22迁移仅移除与消息正文完全一致的旧来源正文副本，不一致的历史内容保留；原执行的来源身份不因重复读取改写。非文字正文始终NULL，不下载媒体或调用模型。
 
-服务读取提供 `HistoryRead`，含消息、实际来源record及覆盖；按 [ADR-131](../../../../architecture/adr/131-available-context-without-history-wait.md)，已确认联系人可使用当前有效资料生成，`running/not_started/incomplete` 不阻止生成，也不要求额外确认。读取合同不再返回由覆盖状态派生、没有生成消费者的 `replyEligibility`／`reply_eligibility`；受理时仍冻结实际覆盖与限制，未完成不能标为完整，后续同步不改写原请求依据。已保存请求中的旧确认字段仅供历史回看，不伪造用户确认或扩大读取授权。未知顺序只提供稳定展示，不代表真实先后。后续派生域必须以完整 `(owner_id,contact_id,record_id,message_id)` FK 引用实际来源，不能从当前来源替换过去执行输入。
+服务读取提供 `HistoryRead`，含消息、实际来源record及覆盖；按 ADR-131，已确认联系人可使用当前有效资料生成，`running/not_started/incomplete` 不阻止生成，也不要求额外确认。读取合同不再返回由覆盖状态派生、没有生成消费者的 `replyEligibility`／`reply_eligibility`；受理时仍冻结实际覆盖与限制，未完成不能标为完整，后续同步不改写原请求依据。已保存请求中的旧确认字段仅供历史回看，不伪造用户确认或扩大读取授权。未知顺序只提供稳定展示，不代表真实先后。后续派生域必须以完整 `(owner_id,contact_id,record_id,message_id)` FK 引用实际来源，不能从当前来源替换过去执行输入。
 
 聊天管理分页只开放 `GET /api/contacts/:contactId/history-messages`，复用 `readChat` 的消息时间排序与图片状态投影；没有产品调用者的旧 `GET .../messages` 路由退役。内部资料读取、覆盖查询、同步及 `.../messages/:messageId/media` 媒体操作保持各自合同，消息分页不会读取外部聊天正文。
 

@@ -1,12 +1,12 @@
 # DSH 插件开发与源码查证
 
-涉及 DSH 启动、插件装配、模型、Agent、Tool、Skill、会话生命周期或依赖升级时使用本文。现行运行与资料边界见[候选回复规格](../../architecture/current/reply-generation.md)和[隐私规格](../../architecture/current/privacy-deletion.md#dsh-迁移的数据边界)，当前接线见[后台说明](../../backend-ts/README.md)；框架选型追溯至 [ADR-102](../../architecture/adr/102-dsh-typescript-backend-migration.md)。本文只把既有要求落实为开发步骤。
+涉及 DSH 启动、插件装配、模型、Agent、Tool、Skill、会话生命周期或依赖升级时使用本文。现行运行与资料边界见[候选回复规格](../../architecture/current/reply-generation.md)和[隐私规格](../../architecture/current/privacy-deletion.md#dsh-迁移的数据边界)，当前接线见[后台说明](../../backend-ts/README.md)；框架选型追溯至 ADR-102。本文只把既有要求落实为开发步骤。
 
 ## 扩展边界
 
 NotAlone 通过 DSH 官方 profile 和薄插件装配普通 TypeScript 业务模块。通用执行机制优先复用官方插件；权限、联系人隔离、来源、事务、预算和删除由业务代码负责。普通业务模块无需全部插件化，产品回复 Skill 也不等同于 DSH 运行时插件。
 
-按任务只接入所需能力，并核对最终启用的插件树；依赖已安装不代表允许启用。版本固定要求沿用 ADR-102；候选回复助手会话按 [ADR-106](../../architecture/adr/106-persistent-assistant-conversations.md)保存受控持久运行记录，其他后台任务保持临时执行，范围与删除见[现行隐私规格](../../architecture/current/privacy-deletion.md#dsh-迁移的数据边界)。采用 DSH 不扩大数据、工具或外部发送权限。若公开扩展接口不足，先给出源码证据和最小复现，再按仓库决策流程讨论；不得静默改 DSH 核心、维护分叉或另造绕过官方启动机制的 Harness。
+按任务只接入所需能力，并核对最终启用的插件树；依赖已安装不代表允许启用。版本固定要求沿用 ADR-102；候选回复助手会话按 ADR-106 保存受控持久运行记录，其他后台任务保持临时执行，范围与删除见[现行隐私规格](../../architecture/current/privacy-deletion.md#dsh-迁移的数据边界)。采用 DSH 不扩大数据、工具或外部发送权限。若公开扩展接口不足，先给出源码证据和最小复现，再按仓库决策流程讨论；不得静默改 DSH 核心、维护分叉或另造绕过官方启动机制的 Harness。
 
 ## 每次开发的步骤
 

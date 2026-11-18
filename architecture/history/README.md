@@ -11,4 +11,4 @@
 | [Skill 旧文件历史库与阶段实现](skill-implementation-notes.md) | [Skill Library](../current/skill-library.md) |
 | [旧追踪流水线与 Python 接线](memory-trace-implementation-notes.md) | [记忆提取追踪](../current/memory-extraction-trace.md) |
 
-旧设计讨论另见[草案归档](../drafts/archive/README.md)，决定原因见 [ADR 目录](../adr/README.md)。历史原始数据、冻结证据和测试结果保持各自版本；整理文档不重跑验收、不迁移业务资料，也不把旧证明移作当前证明。
+旧设计讨论另见[草案归档](../drafts/archive/README.md)，决定原因见 ADR 目录（本机 `architecture/adr/README.md`）。历史原始数据、冻结证据和测试结果保持各自版本；整理文档不重跑验收、不迁移业务资料，也不把旧证明移作当前证明。

@@ -26,4 +26,4 @@ HTTP 由 `SqliteContactHttp.handle` 投影既有联系人/同步/账号页面合
 
 `identity` Domain 清除相应身份核验证明、grant、manual_confirmation 和展示名称，保留无名称/正文的 owner/contact/binding/channel 最小控制墓碑以维持撤销和删除排除；owner.state 防止账号删除期间重新连接或开启读取。联系人删除在 plan 事务把 contact 置为 `deleting` 后，目录、持久绑定、资格与前台快照即按 active 截断，名单服务可只读重建，但身份写入、名单预览及账户删除仍关闭到完成。contact_history 仅清除本次手动确认，不删除 grant。来源、消息、记忆、媒体和运行时副本不属于身份清理闭包；存在这些消费者时，统一删除与宿主必须先注册并清理全部关联域，外键阻止提前删除被引用的证明。集成显式加入 `identity` 至 requiredDomains，不能仅凭本域通过宣称完整删除完成。
 
-前台只读快照按已确认稳定身份投影，不依赖正文读取许可；名称匹配不再开放 `identity.confirmForeground` 或额外写入桌面证明。顶栏手选继续通过独立手动输入确认记录本次归属。既有 `binding_verification` 历史与其来源、资格和删除校验保留。见 [ADR-192](../../../../architecture/adr/superseded/192-retire-foreground-observation-compatibility.md)。
+前台只读快照按已确认稳定身份投影，不依赖正文读取许可；名称匹配不再开放 `identity.confirmForeground` 或额外写入桌面证明。顶栏手选继续通过独立手动输入确认记录本次归属。既有 `binding_verification` 历史与其来源、资格和删除校验保留。见 ADR-192。

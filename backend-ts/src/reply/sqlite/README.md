@@ -32,7 +32,7 @@
 
 ## 正常业务端口与验证边界
 
-`SqliteDiscussionService` 提供list/view/newDiscussion/continueDiscussion/begin/trace；回看与继续不触发模型。`SqliteDiscussionRuntime` 将真实官方副本、活动holder、目录创建意图和完整关闭清单串联；`SqliteDiscussionTurns` 接受一次明确的联系人与文字请求，冻结实际entry及显式选取的同联系人message，执行有界讨论，并与候选生成共用 `generation.ts` 的官方 DSH 执行、Skill 目录按需读取和物理调用预算。候选另负责冻结编号材料、依据及结构输出；两种动作不另建模型账本。新请求均拒绝显式选包，历史材料按 [ADR-193](../../../../architecture/adr/superseded/193-retire-explicit-reply-skill-preload.md)保留原只读合同。
+`SqliteDiscussionService` 提供list/view/newDiscussion/continueDiscussion/begin/trace；回看与继续不触发模型。`SqliteDiscussionRuntime` 将真实官方副本、活动holder、目录创建意图和完整关闭清单串联；`SqliteDiscussionTurns` 接受一次明确的联系人与文字请求，冻结实际entry及显式选取的同联系人message，执行有界讨论，并与候选生成共用 `generation.ts` 的官方 DSH 执行、Skill 目录按需读取和物理调用预算。候选另负责冻结编号材料、依据及结构输出；两种动作不另建模型账本。新请求均拒绝显式选包，历史材料按 ADR-193 保留原只读合同。
 
 `SqliteDiscussionSkillProtection` 的assertCurrent、recordSelection、recordInput均通过具名动作复验真实call/attempt/context/来源；实际Skill输入写事务同时requireSkillRun及requireSkillRevision。`selected`事件不产生loaded输入。实际读取经 Skill 域官方 provider，原目录不改写、不复制为新来源。
 

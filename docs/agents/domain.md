@@ -29,7 +29,7 @@
 - 已采纳且当前实现必须遵守的规格写入 `architecture/current/`。
 - 退出现行规格的旧协议与阶段实现记录写入 `architecture/history/`，被替代的工程操作与日期记录写入 `docs/history/`，均仅供明确的历史核对；现行条款在对应主题中直接说明，不以补丁堆栈表达。
 - 尚未完全确认的实现设计写入 `architecture/drafts/`。
-- 难以逆转、原因不显然且存在真实取舍的决定写入 `architecture/adr/`。
+- 难以逆转、原因不显然且存在真实取舍的决定写入本机 `architecture/adr/`。在现行规格中注明 ADR 编号，并直接说明生效的条款。
 - 功能规格和代码整改按 [任务约定](issue-tracker.md) 写入 `.scratch/<feature-slug>/`；完成的评审过程由 Git 历史保存，不作为当前架构文档保留。
 
 ## 文档权威边界

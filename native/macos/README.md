@@ -10,7 +10,7 @@
 
 当前成功协议为 `automatic-header-v4`，包含实际图像取得时点 `captured_at`、`display_name`、布局完整性和原始置信度。旧 v3／v2 的兼容范围由正式适配器判断，预览协议不能授予正式资格。识别后不截第二帧，仍复核前台、窗口与几何；结果只描述采集时点，同窗切换可能由下一轮发现。
 
-后端按 [ADR-132](../../architecture/adr/132-existing-contact-name-matching.md)核验完整标题、有界名称匹配与配置账号的既有稳定绑定。原始 0.30／0.50 不单独阻断，无关群名缺失不作全局门；真实歧义、不完整标题、失证、过期和分支质量失败仍拒绝。低于 0.30 的无回退顶部输入、文字回退和旧双名称协议仍各有质量合同，不能把预览看见文字当成身份认证。
+后端按 ADR-132 核验完整标题、有界名称匹配与配置账号的既有稳定绑定。原始 0.30／0.50 不单独阻断，无关群名缺失不作全局门；真实歧义、不完整标题、失证、过期和分支质量失败仍拒绝。低于 0.30 的无回退顶部输入、文字回退和旧双名称协议仍各有质量合同，不能把预览看见文字当成身份认证。
 
 代码入口：[单帧采集](Sources/NotAloneSyncCore/AutomaticSessionCapture.swift)、[工作进程](Sources/NotAloneSyncCore/SessionObservationWorker.swift)、[后端定位器](../../backend-ts/src/foreground/foreground-location-locator.ts)。安全合成测试见 [SessionCaptureSafetyTests.swift](Tests/NotAloneSyncProbeTests/SessionCaptureSafetyTests.swift)，不替代实际窗口、权限或微信验收。
 

@@ -12,7 +12,7 @@
 - `registration.ts` 的基础身份／Skill 注册随后组合历史、媒体、讨论、记忆、候选和文档写者，公共 registry 使用最终 `installedDeletionRegistration`。requiredDomains 与精确 authority 同步安装；讨论／媒体局部删除不扩大为整个联系人 data_generation。
 - `planDeletion(tx,lease,registration,{ownerId,requestKey,scope})`可被可信领域动作组合调用，例如媒体原子发布旧文件清理意图。同事务先推进并撤销旧写入/使用资格，再固定闭包和幂等键；事务不得等待模型、CLI、SDK或文件I/O。
 - 范围包括 `source/contact/contact_history/account/discussion/media_result_clear/media_result_replace`，有限字段形状见类型及DDL。同一实例、owner、固定删除namespace和requestKey只能指向同一范围，重复请求沿原操作推进。媒体clear和replace分别使用各自namespace。
-- 迁移47退役旧内部维护范围 `superseded_history`。已完成账本按外键顺序移除。若该范围还有未结案操作，迁移回滚并保留原现场。其他未结案操作持有已退役目标时，先复验目标归属和摘要，再提高计划修订并回到 `fenced`，由现行领域重收目标。既有删除等价事实进入来源删除闭包，并随所属联系人或账户删除。见 [ADR-177](../../../../../architecture/adr/177-retire-source-recertification-and-cleanup.md)。
+- 迁移47退役旧内部维护范围 `superseded_history`。已完成账本按外键顺序移除。若该范围还有未结案操作，迁移回滚并保留原现场。其他未结案操作持有已退役目标时，先复验目标归属和摘要，再提高计划修订并回到 `fenced`，由现行领域重收目标。既有删除等价事实进入来源删除闭包，并随所属联系人或账户删除。见 ADR-177。
 
 ## 领域写者的必需接入
 

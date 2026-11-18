@@ -4,13 +4,13 @@
 
 ## SQLite 切换与逐人授权阶段
 
-[ADR-110](../adr/110-selected-sqlite-contact-read-grants.md)第 11–19 行限定了新 SQLite 从空库重建、逐人授权的实施阶段；“不启用全部私聊”局部作用于该阶段，不取消根 AGENTS.md 与 ADR-089 明确保留的产品分支。旧身份和读取授权不得直接迁移，账号隔离、来源核验、删除排除和停读边界继续有效。实际 UI 只能展示已认证的后台能力，不能由配置枚举推断全部私聊已实现。
+ADR-110 第 11–19 行限定了新 SQLite 从空库重建、逐人授权的实施阶段；“不启用全部私聊”局部作用于该阶段，不取消根 AGENTS.md 与 ADR-089 明确保留的产品分支。旧身份和读取授权不得直接迁移，账号隔离、来源核验、删除排除和停读边界继续有效。实际 UI 只能展示已认证的后台能力，不能由配置枚举推断全部私聊已实现。
 
 归并前的顶部实施摘要为：
 
-> 联系人身份与逐人授权按 [ADR-110](../adr/110-selected-sqlite-contact-read-grants.md)：不延续旧授权、不启用全部私聊，取消立即封禁旧资格；首用搁置不取消授权核验。
+> 联系人身份与逐人授权按 ADR-110：不延续旧授权、不启用全部私聊，取消立即封禁旧资格；首用搁置不取消授权核验。
 
-> 业务资料现由受控本机 SQLite 保存；实例身份、事务及删除路径按 [ADR-109](../adr/109-controlled-sqlite-storage-foundation.md)和[切换记录](../../docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)实施。来源、范围、删除及 DSH 约束继续适用。
+> 业务资料现由受控本机 SQLite 保存；实例身份、事务及删除路径按 ADR-109 和[切换记录](../../docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)实施。来源、范围、删除及 DSH 约束继续适用。
 
 首用、工具准备、独立新装和模型设置在不同任务分别推进；某一实施票搁置首用不取消其必要授权。旧“工具必须用户自行安装／向导目标尚未实现”与“完整首用待验收”均是当时阶段状态，当前入口与实际能力须按代码和具名验证核对。
 
@@ -18,13 +18,13 @@
 
 旧 Python 源码链接固定于 Git 快照 `23a767330e4af8a024629a00c8740344be564259`，只供查看历史实现，不表示它是每条验收记录的原始版本。
 
-> 删除范围决定：[ADR-094](../adr/094-ledger-erasure-by-deletion-scope.md)要求单份资料删除保留最小无正文调用记录，整联系人／账户删除清除对应记录；底层台账清理、产品接线及端到端验收尚待完成，不将下文目标描述视为已交付功能。
+> 删除范围决定：ADR-094 要求单份资料删除保留最小无正文调用记录，整联系人／账户删除清除对应记录；底层台账清理、产品接线及端到端验收尚待完成，不将下文目标描述视为已交付功能。
 
 > 状态：已采纳的安全边界；独立桌面版按 ADR-061 使用本机后台和本机资料，已有[正式启动路径](../../desktop/src/main/startup/diagnostics.ts)及[SQLite 开发存储核验](../../desktop/src/main/startup/sqlite-development.ts)；独立机器安装与最终交付验收另行核验。2026-10-29用户已取消云端工程；业务资料保存在本机，外部模型API仍须明确用途、供应商政策和授权范围。
-> 2026-10-07 补充：按 [ADR-037](../adr/037-complete-memory-extraction-trace.md) 采纳独立含正文的记忆提取追踪要求，功能尚未实现；普通日志与最小出站台账仍不得保存正文。
+> 2026-10-07 补充：按 ADR-037 采纳独立含正文的记忆提取追踪要求，功能尚未实现；普通日志与最小出站台账仍不得保存正文。
 > 历史实现更新：2026-10-16。以下 Python 服务已退役；管理页源码仍保留，以下页面记录仅说明当时接线，不代表当前集成验收。当前后台承接入口见 [SQLite 执行与追踪](../../backend-ts/src/memory/sqlite/execution.ts)及[切换记录](../../docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。当时上条的追踪功能已在后端与 React 管理页实现（迁移 `039`–`043`，[追踪服务](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/application/trace_service.py)、[管理页](../../desktop/src/renderer/TracePanel.tsx)），契约与实现状态以[记忆提取完整追踪](../current/memory-extraction-trace.md)为准；本节隐私边界不变——追踪仍是独立的含正文敏感资料，普通日志与最小出站台账继续不得保存正文。原生 App、最终签名包与真实模型质量不因此条获得验收。
 
-> 演进状态：[ADR-048](../adr/048-memory-skill-evolution-lifecycle.md)的授权草稿、审核与范围发布，以及版本历史和反馈执行视图，已具有主线工程装配；当前签收范围见[演进索引](../../.scratch/memory-skill-evolution/planning.md)与[集成索引](../../.scratch/memory-skill-integration-preparation/planning.md)。原[11阶段验证](../../.scratch/memory-skill-integration-preparation/frontier-11-validation.md)保留历史结果，不代表当前仍停在待审阶段，也不代表真实质量或最终 App 已验收。学习产物、对照和发布完整继承来源删除，无独立留存例外；候选回复 Agent 仍无 Skill 管理或发布权限，新增模型用途不自动获得出站授权。
+> 演进状态：ADR-048 的授权草稿、审核与范围发布，以及版本历史和反馈执行视图，已具有主线工程装配；当前签收范围见演进索引（本机 `.scratch/memory-skill-evolution/planning.md`）与集成索引（本机 `.scratch/memory-skill-integration-preparation/planning.md`）。原11阶段验证（本机 `.scratch/memory-skill-integration-preparation/frontier-11-validation.md`）保留历史结果，不代表当前仍停在待审阶段，也不代表真实质量或最终 App 已验收。学习产物、对照和发布完整继承来源删除，无独立留存例外；候选回复 Agent 仍无 Skill 管理或发布权限，新增模型用途不自动获得出站授权。
 
 这些段落同时保存了“尚未实现”和后续“已接入”的时序。当前追踪正文只保留敏感资料、失败停批、完整来源和删除合同；当前实现／真实质量仍须分别查证。原联系人整体删除缺口已不能作为现状断言，桌面入口后续证据见[联系人删除验证](../../docs/verification/2026-11-01-contact-deletion.md)。
 
@@ -32,9 +32,9 @@
 
 以下保留原独立集成的执行范围和验证方式，不能据此推断真实库或历史分叉已经迁移。当前仍可能留存的纠错、比较、提取结果、裁决和恢复副本继续受来源删除约束：
 
-独立集成候选的[纠错保护](../../.scratch/memory-skill-integration-preparation/issues/02-correction-and-erasure.md)将完整纠错参与窗口及来源世代加入原删除事务。排队删除即撤下旧比较，执行删除清除纠错正文、候选证明、受影响追踪和恢复副本；仅当仍有效规范消息需要防止旧错误复活时保留无正文`erased_guard`，最后一份有效依据删除后移除决定。该合成工程结果不表示业务库迁移或S分叉库已被处理，S分叉库继续保留原样。
+独立集成候选的纠错保护（本机 `.scratch/memory-skill-integration-preparation/issues/02-correction-and-erasure.md`）将完整纠错参与窗口及来源世代加入原删除事务。排队删除即撤下旧比较，执行删除清除纠错正文、候选证明、受影响追踪和恢复副本；仅当仍有效规范消息需要防止旧错误复活时保留无正文`erased_guard`，最后一份有效依据删除后移除决定。该合成工程结果不表示业务库迁移或S分叉库已被处理，S分叉库继续保留原样。
 
-已退役的[旧资料升级](../../.scratch/memory-skill-integration-preparation/issues/10-versioned-memory-upgrade.md)所遗留的比较、
+已退役的旧资料升级（本机 `.scratch/memory-skill-integration-preparation/issues/10-versioned-memory-upgrade.md`）所遗留的比较、
 提取结果和裁决也是敏感副本。排队删除即失效旧批准；真实删除在原来源／资料／联系人
 事务内清除受影响批次的可恢复内容及完整追踪，不依赖下一次 GET 补清。工作中只保留
 隔离身份、有限状态与非秘密算法配置，算法身份不含密钥、正文、任意环境变量或带凭据端点。
@@ -78,9 +78,9 @@
 
 ## 已被明确修订的验证条款
 
-归并前的验证清单仍写“新发现包须用户明确启用”。该句已被 [ADR-135](../adr/superseded/135-default-enabled-localized-skill-library.md)的完整核验后默认启用修订；用户明确停用、来源撤销与不可恢复旧修订的约束保持。[ADR-157](../adr/superseded/157-portable-skill-directory-identity.md)进一步允许内容与最新历史修订完整一致时恢复物理定位，这不恢复来源资格或用户停用项。
+归并前的验证清单仍写“新发现包须用户明确启用”。该句已被 ADR-135 的完整核验后默认启用修订；用户明确停用、来源撤销与不可恢复旧修订的约束保持。ADR-157 进一步允许内容与最新历史修订完整一致时恢复物理定位，这不恢复来源资格或用户停用项。
 
-[ADR-128](../adr/128-deduplicated-wechat-message-storage.md)中消息去重与旧记录清理、撤回新展示和使用规则的实施范围分别记录；后者仍暂缓。保留的旧来源资格保护不得误写为已经实现了全部撤回目标。
+ADR-128 中消息去重与旧记录清理、撤回新展示和使用规则的实施范围分别记录；后者仍暂缓。保留的旧来源资格保护不得误写为已经实现了全部撤回目标。
 
 ## 受管发布目录与当前外部原包的区别
 

@@ -1,6 +1,6 @@
 # Issue tracker：Local Markdown
 
-本仓库的任务与规格以 Markdown 文件保存在 `.scratch/`。
+本仓库的任务与规格以 Markdown 文件保存在本机 `.scratch/`。新克隆的仓库按需创建该目录，既有任务从保存对应记录的工作区读取。
 
 ## 约定
 
