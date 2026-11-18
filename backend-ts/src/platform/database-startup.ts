@@ -1,4 +1,4 @@
-/** 正常桌面启动：完成切换后只准备既有实例；首次初始化才加载旧目标维护流程。 */
+/** 正常桌面启动：完成态只准备既有实例；首次创建或阻断恢复才加载完整启动编排。 */
 import path from 'node:path';
 import {controlledFiles} from '../storage/sqlite/files.ts';
 import {CUTOVER_STARTUP_CONFIG,type CutoverManifest,type CutoverResult} from './cutover/contracts.ts';
@@ -11,8 +11,8 @@ export async function prepareDatabaseStartup(options:DefaultDatabaseOptions):Pro
  try{
   assertPrivateUserData(userData);manifest=loadManifest(userData);
   if(!manifest||manifest.phase!=='completed'){
-   const {prepareLegacyDatabaseStartup}=await import('./cutover/startup.ts');
-   return await prepareLegacyDatabaseStartup(options);
+   const {runDatabaseStartup}=await import('./cutover/startup.ts');
+   return await runDatabaseStartup(options,'prepare');
   }
   if(manifest.configPath!==CUTOVER_STARTUP_CONFIG)throw new CutoverControlError('cutover_manifest_invalid');
   // 受管目录边界仍核验；退役写入器、旧备份及其清理状态不再参与完成态启动。

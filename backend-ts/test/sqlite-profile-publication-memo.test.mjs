@@ -1,16 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {StorageFailure} from '../src/storage/sqlite/contracts.ts';
-import {ActiveHolders} from '../src/storage/sqlite/deletion/holders.ts';
-import {SqliteMemoryDocuments} from '../src/memory/sqlite/documents/service.ts';
-import {profileReplayFixture} from './fixtures/memory-documents/profile-replay-support.mjs';
+import {profilePublicationFixture} from './fixtures/memory-documents/profile-publication-support.mjs';
 
+/** 走正常阶段路径：画像阶段已保存，随后发布被合成故障中断。 */
 async function savedFixture(t,count=2){
- const f=await profileReplayFixture(t,{initialSceneCount:count});
- const storage={execute:async(name,input)=>{if(name==='memoryDocuments.publish')throw new StorageFailure('synthetic_publish_interrupted');return f.storage.execute(name,input);}};
- const documents=new SqliteMemoryDocuments(storage,f.owner,undefined,new ActiveHolders());t.after(()=>documents.close());
- await assert.rejects(documents.replayVerifiedProfile(f.taskId));assert.equal((await f.documents.readTask(f.taskId)).stages.find(s=>s.kind==='profile').status,'succeeded');
+ const f=await profilePublicationFixture(t,{initialSceneCount:count});
+ const stages=(await f.documents.readTask(f.taskId)).stages;
+ assert.equal(stages.find(s=>s.kind==='profile').status,'succeeded');
  return f;
 }
 const args=(f,stage)=>({ownerId:f.owner,taskId:f.taskId,runId:f.runId,stage});

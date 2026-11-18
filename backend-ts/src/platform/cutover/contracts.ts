@@ -1,24 +1,19 @@
-/** 默认 SQLite 切换的控制面合同：跨目标删除保留进度、身份、维护态与恢复凭据。 */
+/** 默认 SQLite 启动控制面合同：首次创建的进度、目标身份、维护态与自身运行产物清理记录。 */
 import type { SqliteCapabilitiesConfiguration } from '../../sqlite-capabilities.ts';
 
 export const CUTOVER_FORMAT_VERSION = 1;
 export const CUTOVER_DIRECTORY = 'database-cutover';
 export const CUTOVER_MANIFEST = 'manifest.json';
-export const CUTOVER_AUTHORIZATION = 'authorization.json';
 /** 正常开发入口读取的启动配置；由本模块原子切换，不由界面或业务代码直接改写。 */
 export const CUTOVER_STARTUP_CONFIG = 'sqlite-development.json';
 
 export type CutoverPhase = 'identified' | 'fenced' | 'target_ready' | 'cleaned' | 'verified' | 'switched' | 'completed' | 'blocked';
-export type LegacyTargetKind =
-  | 'legacy_unrecognized_managed'
-  | 'legacy_update_backup'
-  | 'legacy_assistant_runtime'
-  | 'legacy_writer_handshake'
-  | 'legacy_launch_lock'
-  | 'legacy_import_pending'
-  | 'runtime_handshake'
-  | 'runtime_launch_lock';
-export type LegacyTargetState = 'pending' | 'cleaned' | 'retained' | 'failed';
+/**
+ * 清单 `legacyTargets` 字段沿用旧名以保持落盘格式；现在只记录两类对象：
+ * 本应用自身 SQLite 宿主遗留的运行产物（握手与启动锁），以及仅用于阻断判断的未识别受管条目。
+ */
+export type LegacyTargetKind = 'legacy_unrecognized_managed' | 'runtime_handshake' | 'runtime_launch_lock';
+export type LegacyTargetState = 'pending' | 'cleaned' | 'failed';
 export type Ownership = 'confirmed' | 'unknown';
 
 export interface LegacyTarget {
@@ -44,7 +39,7 @@ export interface CutoverTargetIdentity {
 }
 
 export interface WriterCheckRecord {
-  name: 'legacy_app_handshake' | 'legacy_launch_lock' | 'runtime_launch_lock' | 'new_host_handshake';
+  name: 'runtime_launch_lock' | 'new_host_handshake';
   locator: string;
   state: 'stopped' | 'running' | 'unknown';
   detail?: string;
@@ -69,22 +64,9 @@ export interface CutoverManifest {
   legacyTargets: LegacyTarget[];
   writerChecks: WriterCheckRecord[];
   checks: CutoverCheckRecord[];
-  authorizationDigest?: string;
   configPath: string;
   /** 目标数据库创建已开始但尚未记录身份；重试必须停止并保留现场。 */
   targetCreatePending?: boolean;
-}
-
-export interface CutoverAuthorizationEntry {
-  id: string;
-  disposition: 'clean' | 'retain';
-  retainReason?: string;
-}
-export interface CutoverAuthorization {
-  formatVersion: 1;
-  approvedAt: number;
-  scope: 'synthetic' | 'confirmed_local';
-  targets: CutoverAuthorizationEntry[];
 }
 
 export interface CutoverFailure {
@@ -105,11 +87,7 @@ export interface CutoverReady {
   manifestRevision: number;
 }
 export type CutoverCode =
-  | 'database_cutover_required'
-  | 'database_maintenance'
   | 'cutover_manifest_invalid'
-  | 'cutover_authorization_required'
-  | 'cutover_authorization_invalid'
   | 'cutover_legacy_target_unclassified'
   | 'cutover_legacy_writer_running'
   | 'cutover_cleanup_failed'

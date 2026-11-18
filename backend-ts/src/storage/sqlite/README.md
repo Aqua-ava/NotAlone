@@ -2,7 +2,7 @@
 
 产品合同以[数据与身份](../../../../architecture/current/domain-data.md)、[清理完成条件](../../../../architecture/current/privacy-deletion.md)为准；本页只保留本模块的接口、装配和故障处理。
 
-SQLite 是当前默认业务存储。正式装配使用 `sqlite-host-plugin.ts`，迁移与具名动作由 `registry.ts` 聚合；切换、重置和旧资料清理由独立控制面负责，见[切换验证记录](../../../../docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。本文说明底层存储合同，不代表所有业务能力均已开放。
+SQLite 是当前默认业务存储。正式装配使用 `sqlite-host-plugin.ts`，迁移与具名动作由 `registry.ts` 聚合；首次创建、完成态重开与自身运行产物（握手、启动锁）清理由独立控制面负责，旧资料迁移与授权清理已退役，见[切换验证记录](../../../../docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。本文说明底层存储合同，不代表所有业务能力均已开放。
 
 ## 实例与连接
 

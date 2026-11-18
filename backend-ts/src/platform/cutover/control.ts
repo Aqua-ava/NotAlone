@@ -1,19 +1,16 @@
-/** 控制面持久化：只在 userData 的 database-cutover 目录内读写，不放在待删除目标里。 */
+/** 控制面持久化：只在 userData 的 database-cutover 目录内读写，不放在待清理的运行产物里。 */
 import { constants } from 'node:fs';
 import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { sha256 } from '../../platform/sha256.ts';
 import path from 'node:path';
 import type { SqliteCapabilitiesConfiguration } from '../../sqlite-capabilities.ts';
-import { CUTOVER_AUTHORIZATION, CUTOVER_DIRECTORY, CUTOVER_FORMAT_VERSION, CUTOVER_MANIFEST, CUTOVER_STARTUP_CONFIG,
-  type CutoverAuthorization, type CutoverManifest } from './contracts.ts';
+import { CUTOVER_DIRECTORY, CUTOVER_FORMAT_VERSION, CUTOVER_MANIFEST, CUTOVER_STARTUP_CONFIG, type CutoverManifest } from './contracts.ts';
 
 const MAX_MANIFEST_BYTES = 256 * 1024;
-const MAX_AUTHORIZATION_BYTES = 64 * 1024;
 const MAX_CONFIG_BYTES = 8 * 1024;
 
 export class CutoverControlError extends Error {
-  readonly code: 'cutover_manifest_invalid' | 'cutover_authorization_invalid' | 'cutover_configuration_conflict' | 'cutover_storage_failed';
+  readonly code: 'cutover_manifest_invalid' | 'cutover_configuration_conflict' | 'cutover_storage_failed';
   constructor(code: CutoverControlError['code']) { super(code); this.code = code; this.name = 'CutoverControlError'; }
 }
 
@@ -33,12 +30,6 @@ function privateFile(location: string): Buffer {
 function parseJson(buffer: Buffer, limit: number, code: CutoverControlError['code']): unknown {
   if (buffer.length > limit) throw new CutoverControlError(code);
   try { return JSON.parse(buffer.toString('utf8')); } catch { throw new CutoverControlError(code); }
-}
-
-function assertKeys(value: Record<string, unknown>, keys: readonly string[], code: CutoverControlError['code']): void {
-  const expected = [...keys].sort();
-  const actual = Object.keys(value).sort();
-  if (actual.length !== expected.length || actual.some((key, index) => key !== expected[index])) throw new CutoverControlError(code);
 }
 
 function atomicWrite(location: string, content: string): void {
@@ -62,7 +53,6 @@ function atomicWrite(location: string, content: string): void {
 
 export function cutoverDirectory(userData: string): string { return path.join(userData, CUTOVER_DIRECTORY); }
 export function manifestPath(userData: string): string { return path.join(cutoverDirectory(userData), CUTOVER_MANIFEST); }
-export function authorizationPath(userData: string): string { return path.join(cutoverDirectory(userData), CUTOVER_AUTHORIZATION); }
 export function startupConfigPath(userData: string): string { return path.join(userData, CUTOVER_STARTUP_CONFIG); }
 export function databaseFile(userData: string): string { return path.join(userData, 'managed/sqlite/notalone.sqlite'); }
 
@@ -86,6 +76,7 @@ export function loadManifest(userData: string): CutoverManifest | undefined {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new CutoverControlError('cutover_manifest_invalid');
   const manifest = value as Record<string, unknown>;
   const required = ['formatVersion', 'revision', 'phase', 'createdAt', 'updatedAt', 'legacyTargets', 'writerChecks', 'checks', 'configPath'];
+  // authorizationDigest 是已退役授权清单留下的历史字段：只容忍读取，不再写入或解释。
   const optional = ['blockedCode', 'target', 'targetOrigin', 'authorizationDigest', 'targetCreatePending'];
   if (Object.keys(manifest).some(key => !required.includes(key) && !optional.includes(key)) || required.some(key => !(key in manifest))) throw new CutoverControlError('cutover_manifest_invalid');
   if (manifest.formatVersion !== CUTOVER_FORMAT_VERSION || !Number.isSafeInteger(manifest.revision) || (manifest.revision as number) < 0
@@ -111,38 +102,6 @@ export function saveManifest(userData: string, manifest: CutoverManifest): Cutov
   return next;
 }
 
-/** 读取并核验授权清单；目标 id 只允许固定形状，批准范围必须自证是合成或本地已确认。 */
-export function loadAuthorization(userData: string): CutoverAuthorization | undefined {
-  let value: unknown;
-  try { value = parseJson(privateFile(authorizationPath(userData)), MAX_AUTHORIZATION_BYTES, 'cutover_authorization_invalid'); }
-  catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-    throw error instanceof CutoverControlError ? error : new CutoverControlError('cutover_authorization_invalid');
-  }
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new CutoverControlError('cutover_authorization_invalid');
-  const authorization = value as Record<string, unknown>;
-  assertKeys(authorization, ['formatVersion', 'approvedAt', 'scope', 'targets'], 'cutover_authorization_invalid');
-  if (authorization.formatVersion !== 1 || !Number.isSafeInteger(authorization.approvedAt)
-    || !['synthetic', 'confirmed_local'].includes(authorization.scope as string) || !Array.isArray(authorization.targets)) throw new CutoverControlError('cutover_authorization_invalid');
-  const seen = new Set<string>();
-  for (const entry of authorization.targets as unknown[]) {
-    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) throw new CutoverControlError('cutover_authorization_invalid');
-    const record = entry as Record<string, unknown>;
-    if (Object.keys(record).some(key => !['id', 'disposition', 'retainReason'].includes(key)) || typeof record.id !== 'string' || !/^[a-f0-9]{16,64}$/.test(record.id)
-      || !['clean', 'retain'].includes(record.disposition as string) || seen.has(record.id)) throw new CutoverControlError('cutover_authorization_invalid');
-    if (record.disposition === 'retain' && (typeof record.retainReason !== 'string' || !record.retainReason || record.retainReason.length > 200)) throw new CutoverControlError('cutover_authorization_invalid');
-    seen.add(record.id);
-  }
-  return authorization as unknown as CutoverAuthorization;
-}
-
-/** 授权清单摘要用于识别批准对象变化；不包含正文、密码或可恢复凭据。 */
-export function authorizationDigest(authorization: CutoverAuthorization): string {
-  const canonical = { formatVersion: authorization.formatVersion, approvedAt: authorization.approvedAt, scope: authorization.scope,
-    targets: [...authorization.targets].sort((a, b) => a.id.localeCompare(b.id)) };
-  return sha256(JSON.stringify(canonical));
-}
-
 export interface StartupConfiguration extends SqliteCapabilitiesConfiguration { formatVersion: 1; intent: 'open'; role: 'test'; expectedDatabaseId: string }
 /** 读取现有启动配置；只接受本应用写出的固定 schema，未知字段或角色一律拒绝。 */
 export function loadStartupConfiguration(userData: string): StartupConfiguration | undefined {
@@ -166,6 +125,3 @@ export function saveStartupConfiguration(userData: string, configuration: Startu
   ensureControlDirectory(userData);
   atomicWrite(startupConfigPath(userData), `${JSON.stringify(configuration)}\n`);
 }
-
-/** 删除旧的启动配置（仅维护态下不完整切换的重试使用）不在此暴露；失败恢复保留现场。 */
-export const cutoverInternals = { atomicWrite, privateFile, privateDirectory };

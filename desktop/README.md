@@ -38,7 +38,7 @@ Skill 管理页直接连接 SQLite 库与联系人分组管理，提供自动发
 
 本机业务资料位于 App `userData/managed/sqlite/notalone.sqlite`。受控启动核验实例身份、迁移校验和、结构与完整性，沿用已确认资料目录；缺失、损坏或未知结构保留现场，不以新空库绕过。
 
-空目录由切换控制面建立独立数据库身份。发现旧数据库、旧写入者或不能确认归属的对象时保持维护态，不自动迁入、清理或恢复旧授权。模型配置、用户 Skill 原目录与外部原件分别保留。具体启动合同见[SQLite 存储](../backend-ts/src/storage/sqlite/README.md)，历史切换证据见[验证记录](../docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。
+空目录由切换控制面建立独立数据库身份。发现无法确认归属的受管存储、自身宿主仍存活或遗留运行产物无法清理时保持维护态；不迁入、不清理旧资料，也不恢复旧授权。模型配置、用户 Skill 原目录与外部原件分别保留。具体启动合同见[SQLite 存储](../backend-ts/src/storage/sqlite/README.md)，历史切换证据见[验证记录](../docs/verification/20-sqlite-cutover-and-legacy-cleanup.md)。
 
 ## 本机运行与构建
 
