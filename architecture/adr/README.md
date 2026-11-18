@@ -11,7 +11,7 @@
 ## 决策文件
 
 - [ADR-001：Mac 微信前台会话增量同步](superseded/001-macos-wechat-active-session-sync.md)（已合并入ADR-199）
-- [ADR-002：关系提取与全自动采纳](002-relationship-extraction-and-tiered-adoption.md)
+- [ADR-002：关系提取与全自动采纳](superseded/002-relationship-extraction-and-tiered-adoption.md)（已合并入ADR-200）
 - [ADR-003：Mac 同步连续性与用户补录](superseded/003-macos-sync-continuity-and-backfill.md)（已合并入ADR-199）
 - [ADR-004：用户自行导出的微信单联系人历史文件](004-user-managed-wechat-history-export.md)
 - [ADR-005：可解释检索与联系人知识视图](005-explainable-retrieval-and-contact-knowledge-view.md)
@@ -33,7 +33,7 @@
 - [ADR-021：源码分发与双层首次配置](021-source-distribution-and-first-run-setup.md)
 - [ADR-022：前台同步人工验证的独立控制面](022-foreground-sync-verification-control-surface.md)
 - [ADR-023：全局 CLI 增量同步与前台 OCR 定位分离](superseded/023-global-cli-sync-and-ocr-foreground-locator.md)（已合并入ADR-199）
-- [ADR-024：关系记忆风险门槛与版本化采纳](024-memory-adoption-risk-gate-and-versioning.md)
+- [ADR-024：关系记忆风险门槛与版本化采纳](superseded/024-memory-adoption-risk-gate-and-versioning.md)（已合并入ADR-200）
 - [ADR-025：CLI 后台同步自动补齐可检测缺口](superseded/025-cli-background-sync-gap-backfill.md)（已合并入ADR-199）
 - [ADR-026：语用解释先于关系记忆采纳](superseded/026-pragmatic-interpretation-before-memory-adoption.md)
 - [ADR-027：记忆准确率评测门槛与待确认候选的参考边界](superseded/027-memory-accuracy-evaluation-gate.md)
@@ -42,7 +42,7 @@
 - [ADR-030：已确认联系人的后台同步与首次手动选择](superseded/030-confirmed-contact-background-sync-consent.md)（已合并入ADR-199）
 - [ADR-031：来源删除保留不含正文的调用记录](031-source-deletion-retains-minimal-ledger.md)
 - [ADR-032：审计基线与实际迁移账本分开](032-audited-legacy-schema-baseline.md)
-- [ADR-033：记忆采纳前核验来源语义支持](033-source-semantic-verification-before-adoption.md)
+- [ADR-033：记忆采纳前核验来源语义支持](superseded/033-source-semantic-verification-before-adoption.md)（已合并入ADR-200）
 - [ADR-034：显式失败任务恢复按原任务领取](034-explicit-failed-task-recovery-selection.md)
 - [ADR-035：待确认候选作为强制标注的未确认参考进入回复](superseded/035-pending-candidate-unconfirmed-reply-reference.md)（已合并入ADR-195）
 - [ADR-036：按维度放行自动采纳](superseded/036-per-dimension-adoption-release.md)
@@ -78,8 +78,8 @@
 - [ADR-066：沿用现有数据库并原地补齐结构](066-in-place-schema-updates-and-database-reuse.md)
 - [ADR-067：场景文档与长期画像的分层加载](067-layered-scenario-and-profile-context.md)
 - [ADR-068：生成候选后由用户选择，不追加模型复核](068-direct-reply-candidates-with-user-selection.md)
-- [ADR-069：按场景直接生成记忆与逐项发布](069-direct-scene-memory-and-isolated-publication.md)
-- [ADR-070：默认自动维护记忆并退役旧资料升级](070-automatic-memory-maintenance.md)
+- [ADR-069：按场景直接生成记忆与逐项发布](superseded/069-direct-scene-memory-and-isolated-publication.md)（已合并入ADR-200）
+- [ADR-070：默认自动维护记忆并退役旧资料升级](superseded/070-automatic-memory-maintenance.md)（已合并入ADR-200）
 - [ADR-071：区分错误纠正与状态变化的历史生成资格](071-memory-retirement-and-generation-eligibility.md)
 - [ADR-072：个人主题与画像允许有据推断，排除行动指导](072-personal-memory-insights-without-action-guidance.md)
 - [ADR-073：前台观察与后台同步独立执行](superseded/073-foreground-observation-independent-of-background-sync.md)（已合并入ADR-198）
@@ -95,8 +95,8 @@
 - [ADR-082：退役主动收藏表达样本](082-retire-explicit-style-samples.md)
 - [ADR-083：遗漏消息自动恢复与简化同步界面](superseded/083-automatic-sync-recovery.md)（已合并入ADR-199）
 - [ADR-084：顶部联系人搜索与独立创建入口退役](084-topbar-contact-search.md)
-- [ADR-085：以来源核验统一默认自动采纳边界](085-source-verified-automatic-adoption.md)
-- [ADR-086：按来源含义采纳记忆，不设统一重复次数门槛](086-source-meaning-without-repetition-threshold.md)
+- [ADR-085：以来源核验统一默认自动采纳边界](superseded/085-source-verified-automatic-adoption.md)（已合并入ADR-200）
+- [ADR-086：按来源含义采纳记忆，不设统一重复次数门槛](superseded/086-source-meaning-without-repetition-threshold.md)（已合并入ADR-200）
 - [ADR-087：新联系人只从微信会话确认加入](087-wechat-confirmed-contact-onboarding.md)
 - [ADR-088：一秒作为正常联系人切换的优化目标](superseded/088-normal-switch-one-second-optimization-target.md)（已合并入ADR-198）
 - [ADR-089：一次授权同步全部微信私聊](089-all-private-wechat-sync-scope.md)
@@ -148,8 +148,8 @@
 - [ADR-146：AI 服务地址与密钥由用户填写](146-editable-deepseek-endpoint.md)
 - [ADR-147：OpenCode Go 的模型环境配置](147-opencode-go-model-configuration.md)
 - [ADR-148：代码策略更新后的未完成记忆任务恢复](148-memory-policy-recovery.md)
-- [ADR-149：内容级候选拒绝不构成记忆处理失败](149-content-rejection-is-not-failure.md)
-- [ADR-150：发生时间标注降级为可选信息](150-optional-event-time.md)
+- [ADR-149：内容级候选拒绝不构成记忆处理失败](superseded/149-content-rejection-is-not-failure.md)（已合并入ADR-200）
+- [ADR-150：发生时间标注降级为可选信息](superseded/150-optional-event-time.md)（已合并入ADR-200）
 - [ADR-151：单个微信读取进程串行切换联系人](151-shared-wechat-cli-process.md)
 - [ADR-152：历史与增量记忆分开自动处理](152-history-and-incremental-memory-processing.md)
 - [ADR-153：图文共同参与记忆处理](superseded/153-joint-text-image-memory-input.md)（已合并入ADR-197）
@@ -173,7 +173,7 @@
 - [ADR-171：同一张图有标准图和高清图时取一张保存，不再比较内容](superseded/171-image-pick-standard-over-high-definition.md)（已合并入ADR-197）
 - [ADR-172：JPEG 结束标记后允许少量尾随，WXGF 支持彩色加透明度双帧](172-jpeg-trailing-bytes-and-wxgf-alpha-frames.md)
 - [ADR-173：开发者批量来源重新认证](superseded/173-developer-batch-source-recertification.md)（已被ADR-177替代，原开发者入口退役）
-- [ADR-174：对齐腾讯方案——不确定性降级而非拦截候选](174-align-tencent-uncertainty-degrade-not-intercept.md)——部分被 ADR-184 替代
+- [ADR-174：对齐腾讯方案——不确定性降级而非拦截候选](superseded/174-align-tencent-uncertainty-degrade-not-intercept.md)——部分被 ADR-184 替代（已合并入ADR-200）
 - [ADR-175：修复同步通过后清理被取代绑定下无派生引用的旧副本](superseded/175-clean-superseded-binding-copies.md)（已被ADR-177替代，一次性存量清理完成后退役流程；保留引用保护与必要删除事实）
 
 - [ADR-176：核对来源后原地续读，不旋转绑定](176-in-place-source-recovery.md)——保留原地来源核对；守卫生命周期及暂留旧流程由ADR-177收敛。
@@ -189,7 +189,7 @@
 - [ADR-181：L3 逐条核验与合格条目发布](181-l3-item-verification-and-partial-publication.md)
 - [ADR-182：回复时联系人／本人记忆改用本机混合检索](superseded/182-reply-memory-hybrid-retrieval.md)（已合并入ADR-195）
 - [ADR-183：回复模型调用结果未知时自动放弃，不锁定联系人](183-auto-abandon-unknown-reply-model-calls.md)——局部修订 ADR-121 的 unknown 阻断口径。
-- [ADR-184：有来源支持的记忆变化自动更新与合并](184-source-grounded-memory-update-and-merge.md)——局部替代 ADR-174／081 的动作与变化拦截限制，保留来源和人工保护。
+- [ADR-184：有来源支持的记忆变化自动更新与合并](superseded/184-source-grounded-memory-update-and-merge.md)——局部替代 ADR-174／081 的动作与变化拦截限制，保留来源和人工保护。（已合并入ADR-200）
 
 - [ADR-185：先读近期语境，再按需检索记忆和历史](superseded/185-on-demand-reply-memory-and-history-search.md)——局部替代固定预检索，保留 DSH 官方装配、联系人范围、来源与有界读取。（已合并入ADR-195）
 
@@ -220,3 +220,5 @@
 - [ADR-198：前台观察与联系人跟随现行合并决定](198-foreground-contact-follow-consolidated.md)——合并 ADR-049／050／052／053／054／055／056／057／073／075／076／077／078／088／105／158／192：单帧顶部名称观察、名称匹配算法、新鲜有效观察独立授予资格、变化提示源、选人后继续跟随；原条目归档于 superseded/。
 
 - [ADR-199：微信同步授权、读取边界与恢复的早期决定现行合并](199-wechat-sync-consent-and-recovery-consolidated.md)——合并 ADR-001／003／016／017／023／025／030／083／095／127：授权范围、前后台分离、默认不选、自动恢复、首次连接账号确认与重启来源核验；原条目归档于 superseded/。
+
+- [ADR-200：记忆采纳、来源核验与更新合并现行合并决定](200-memory-adoption-consolidated.md)——合并 ADR-002／024／033／069／070／085／086／149／150／174／184：全自动来源核验采纳、不设重复门槛、内容拒绝不失败、时间标注可选、不确定性降级、四种动作的有据更新与合并；原条目归档于 superseded/。

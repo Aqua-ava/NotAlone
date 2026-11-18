@@ -1,8 +1,10 @@
 # ADR-184：有来源支持的记忆变化自动更新与合并
 
-状态：已采纳（2026-11-14，用户确认修改 ADR-174 并同步实现）；采纳决定、代码实现与实际验收分别核验。
+已合并入[ADR-200：记忆采纳、来源核验与更新合并现行合并决定](../200-memory-adoption-consolidated.md)（2026-11-18）：关系记忆的采纳、来源核验、内容拒绝、时间标注与更新合并约束已收拢到该 ADR。下文保留为历史决定与原因，现行条款以该 ADR 为准。
 
-部分替代 [ADR-174](174-align-tencent-uncertainty-degrade-not-intercept.md) 第 2、4 条中的动作兼容与变化拦截限制，以及 [ADR-081](081-source-grounded-memory-time-and-conditions.md) 中将事件、条件差异一律排除在自动合并之外的限制。来源语义核验、人工保护、时间与版本、联系人隔离及删除合同继续有效。
+状态：已合并（ADR-200）。原记录：已采纳（2026-11-14，用户确认修改 ADR-174 并同步实现）；采纳决定、代码实现与实际验收分别核验。
+
+部分替代 [ADR-174](174-align-tencent-uncertainty-degrade-not-intercept.md) 第 2、4 条中的动作兼容与变化拦截限制，以及 [ADR-081](../081-source-grounded-memory-time-and-conditions.md) 中将事件、条件差异一律排除在自动合并之外的限制。来源语义核验、人工保护、时间与版本、联系人隔离及删除合同继续有效。
 
 ## 背景与取舍
 

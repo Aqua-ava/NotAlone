@@ -14,7 +14,7 @@
 - 记录实际可观察内容。缺失、截断、脱敏、兼容投影、供应商未知回执和未执行阶段均明确标识，不能补造原请求、模型内部思考或旧阶段成功。
 - 来源支持不等于现实事实为真，完整记录不保证重新调用会产生相同结果，也不证明模型质量达标。
 
-依据：[ADR-037](../adr/037-complete-memory-extraction-trace.md)、[ADR-085](../adr/085-source-verified-automatic-adoption.md)、[ADR-197](../adr/197-chat-image-and-memory-image-input-consolidated.md)。
+依据：[ADR-037](../adr/037-complete-memory-extraction-trace.md)、[ADR-200](../adr/200-memory-adoption-consolidated.md)、[ADR-197](../adr/197-chat-image-and-memory-image-input-consolidated.md)。
 
 ## 2. 当前处理链
 
@@ -87,7 +87,7 @@ flowchart TD
 
 发生时间 `event` 是可选标注。按当前核验协议，不具备结构或逐字段支持时丢弃该标注，并在核验结果及执行事件记录 `time_unverified`；其余正文按自身证据判断。正文、主体、分类、语义、`valid_at`／`invalid_at` 和 `conditions` 仍须来源支持，不随发生时间降级。顶层核验结论整体不确定时也不能私自升级为通过；丢弃的结构化时间不能用于时间检索。
 
-`time_unverified` 不写入记忆事实字段。没有来源依据的时间、有效期或条件保持未知；不以读取、采纳或系统当前时间补造事件发生。依据：[ADR-081](../adr/081-source-grounded-memory-time-and-conditions.md)、[ADR-150](../adr/150-optional-event-time.md)。
+`time_unverified` 不写入记忆事实字段。没有来源依据的时间、有效期或条件保持未知；不以读取、采纳或系统当前时间补造事件发生。依据：[ADR-081](../adr/081-source-grounded-memory-time-and-conditions.md)、[ADR-200](../adr/200-memory-adoption-consolidated.md)。
 
 ### 3.5 独立来源核验
 

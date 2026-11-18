@@ -4,7 +4,7 @@
 
 合并并归档的原 ADR：[137](superseded/137-original-image-authorized-sync.md)、[138](superseded/138-chat-image-original-extraction-and-placeholder.md)、[140](superseded/140-source-verified-viewable-chat-images.md)、[153](superseded/153-joint-text-image-memory-input.md)、[154](superseded/154-source-grounded-image-versions.md)、[155](superseded/155-image-variant-display-and-thumbnail-refresh.md)、[156](superseded/156-automatic-image-reconciliation.md)、[169](superseded/169-memory-uses-confirmed-non-thumbnail-images.md)、[170](superseded/170-no-thumbnail-storage-and-no-original-classification.md)、[171](superseded/171-image-pick-standard-over-high-definition.md)、[179](superseded/179-memory-image-input-normalization.md)、[180](superseded/180-memory-image-recovery-isolation-and-run-retirement.md)。正文保留为历史依据，不再单独作为现行要求。
 
-仍作为现行决定、未并入本文的相关 ADR：[ADR-125](125-image-video-byte-decoding-and-validation.md)（单条媒体字节转换与实际解码验证）、[ADR-126](126-managed-voice-local-silk-conversion.md)（语音）、[ADR-172](172-jpeg-trailing-bytes-and-wxgf-alpha-frames.md)（JPEG 尾随字节与 WXGF 双帧透明度）、[ADR-149](149-content-rejection-is-not-failure.md)（内容拒绝不等于失败）、[ADR-162](162-local-reply-context-and-independent-model-lanes.md)（前后台独立模型车道与未知调用保护）。
+仍作为现行决定、未并入本文的相关 ADR：[ADR-125](125-image-video-byte-decoding-and-validation.md)（单条媒体字节转换与实际解码验证）、[ADR-126](126-managed-voice-local-silk-conversion.md)（语音）、[ADR-172](172-jpeg-trailing-bytes-and-wxgf-alpha-frames.md)（JPEG 尾随字节与 WXGF 双帧透明度）、[ADR-200](200-memory-adoption-consolidated.md)（内容拒绝不等于失败，已并入记忆采纳合并决定）、[ADR-162](162-local-reply-context-and-independent-model-lanes.md)（前后台独立模型车道与未知调用保护）。
 
 ## 合并范围
 

@@ -1,8 +1,10 @@
 # ADR-174：对齐腾讯方案——不确定性降级而非拦截候选
 
-> 部分替代（2026-11-14）：第 2、4 条关于动作兼容与正常变化拦截的限制由 [ADR-184：有来源支持的记忆变化自动更新与合并](184-source-grounded-memory-update-and-merge.md) 修订。以下保留原决定及其当时依据；自由文本不确定性降级、低把握丢弃、同义重复留痕与人工保护继续有效，现行自动更新／合并要求见 ADR-184 和[记忆处理](../current/memory-processing.md)。
+已合并入[ADR-200：记忆采纳、来源核验与更新合并现行合并决定](../200-memory-adoption-consolidated.md)（2026-11-18）：关系记忆的采纳、来源核验、内容拒绝、时间标注与更新合并约束已收拢到该 ADR。下文保留为历史决定与原因，现行条款以该 ADR 为准。
 
-状态：已采纳（2026-11-06，用户在实施规格确认中同意本决定与下述直接放行范围）。实现见任务 01–04 的本地提交（460fdf5d5、f0ad57a41、dee12e2f5、49b7b5f46）；真实小批验收（R1/R2）按 `.scratch/memory-auto-adoption-alignment/spec.md` 执行前不宣称质量收敛。依据的实测证据（隔离副本真实库）计数见 `.scratch/memory-auto-adoption-alignment/evidence/01-relation-coverage-replay.md`。
+> 部分替代（2026-11-14）：第 2、4 条关于动作兼容与正常变化拦截的限制由 [ADR-184：有来源支持的记忆变化自动更新与合并](184-source-grounded-memory-update-and-merge.md) 修订。以下保留原决定及其当时依据；自由文本不确定性降级、低把握丢弃、同义重复留痕与人工保护继续有效，现行自动更新／合并要求见 ADR-184 和[记忆处理](../../current/memory-processing.md)。
+
+状态：已合并（ADR-200）。原记录：已采纳（2026-11-06，用户在实施规格确认中同意本决定与下述直接放行范围）。实现见任务 01–04 的本地提交（460fdf5d5、f0ad57a41、dee12e2f5、49b7b5f46）；真实小批验收（R1/R2）按 `.scratch/memory-auto-adoption-alignment/spec.md` 执行前不宣称质量收敛。依据的实测证据（隔离副本真实库）计数见 `.scratch/memory-auto-adoption-alignment/evidence/01-relation-coverage-replay.md`。
 
 ## 决定
 
@@ -16,7 +18,7 @@
 
 ## 被替代的现行规则
 
-- [现行记忆处理规格](../current/memory-processing.md)第 1 条「置信度、语用或风险标签本身不新增人工审核门」在此之前仍被 `alternatives` 前置门槛部分绕过：自由文本 `alternatives` 曾整体拦截候选并转为待确认，现已改为降级放行留痕。
+- [现行记忆处理规格](../../current/memory-processing.md)第 1 条「置信度、语用或风险标签本身不新增人工审核门」在此之前仍被 `alternatives` 前置门槛部分绕过：自由文本 `alternatives` 曾整体拦截候选并转为待确认，现已改为降级放行留痕。
 - 独立关系的核验证据覆盖要求（曾要求引用池中每条旧记忆来源）被本决定第 1 条替代。
 - `noop` 的逐字相同判定被第 2 条替代；`add / keep` 仅接受 `independent` 的限制被第 2 条替代（`add` 仍要求独立）。
 - [ADR-085](085-source-verified-automatic-adoption.md) 的来源核验、主体归属与删除路径不变；未自动采纳路径（手动采纳、拒绝）不受影响。结构与现行规格一致性见该规格第 1、4、5、7 条修订。

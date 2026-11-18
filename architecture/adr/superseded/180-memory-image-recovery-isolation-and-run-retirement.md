@@ -4,7 +4,7 @@
 
 状态：已合并（ADR-197）。原记录：已采纳（2026-11-11）。来自图片可靠性整改中用户确认的六项决策。实现、合成验证与真实验收分别记录，不以此决定宣称真实模型或桌面已通过。
 
-本决定补充[ADR-179](179-memory-image-input-normalization.md)，局部修订[ADR-149](../149-content-rejection-is-not-failure.md)中技术故障停止整批的图片输入情形；内容拒绝与技术故障仍分别记录。[ADR-162](../162-local-reply-context-and-independent-model-lanes.md)的真实未知／孤儿保护、联系人隔离、来源与人工决定门槛继续有效。
+本决定补充[ADR-179](179-memory-image-input-normalization.md)，局部修订[ADR-149](149-content-rejection-is-not-failure.md)中技术故障停止整批的图片输入情形；内容拒绝与技术故障仍分别记录。[ADR-162](../162-local-reply-context-and-independent-model-lanes.md)的真实未知／孤儿保护、联系人隔离、来源与人工决定门槛继续有效。
 
 ## 决定
 

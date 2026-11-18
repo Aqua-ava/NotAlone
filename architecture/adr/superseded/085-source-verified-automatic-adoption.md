@@ -1,8 +1,10 @@
 # ADR-085：以来源核验统一默认自动采纳边界
 
+已合并入[ADR-200：记忆采纳、来源核验与更新合并现行合并决定](../200-memory-adoption-consolidated.md)（2026-11-18）：关系记忆的采纳、来源核验、内容拒绝、时间标注与更新合并约束已收拢到该 ADR。下文保留为历史决定与原因，现行条款以该 ADR 为准。
+
 > 后续确认：本文留待单独讨论的 Q02 已由 [ADR-086](086-source-meaning-without-repetition-threshold.md)闭合：沿用现行设计，不设统一重复次数门槛，保留一次性要求与长期偏好的区别。
 
-> 状态：已采纳（2026-10-21）。用户在逐项复审设计审查 Q01 时明确选择沿用当前处理方式，并要求统一相关文档。
+> 状态：已合并（ADR-200）。原记录：已采纳（2026-10-21）。用户在逐项复审设计审查 Q01 时明确选择沿用当前处理方式，并要求统一相关文档。
 
 ADR-069 的用户修订取消了额外语用、置信度和风险人工门，ADR-070 却仍保留相反表述。此次明确选择当前默认 automatic 流程：通过结构与独立来源核验后进入自动裁决，不仅因上述标签或分数转为人工确认，避免把日常记忆维护变成持续的用户审核工作。
 
@@ -22,4 +24,4 @@ ADR-069 的用户修订取消了额外语用、置信度和风险人工门，ADR
 
 ## 依据与验证边界
 
-代码依据为 [默认装配](../../backend/src/notalone/memory_extraction/command.py)、[自动采纳](../../backend/src/notalone/memory_extraction/adoption.py)和[默认来源策略](../../backend/src/notalone/memory_extraction/dimensions.py)。这是用户确认后的设计收敛，仅修改文档，不改变运行配置、业务数据或程序行为；不能据此宣称真实提取质量或桌面验收通过。
+代码依据为 [默认装配](../../../backend/src/notalone/memory_extraction/command.py)、[自动采纳](../../../backend/src/notalone/memory_extraction/adoption.py)和[默认来源策略](../../../backend/src/notalone/memory_extraction/dimensions.py)。这是用户确认后的设计收敛，仅修改文档，不改变运行配置、业务数据或程序行为；不能据此宣称真实提取质量或桌面验收通过。

@@ -189,7 +189,7 @@ schema 修订；旧修订沿原生成终态核对后要求用户重新准备，�
 
 > 首用交互与生命周期补充：[ADR-101](../adr/101-local-app-first-use-lifecycle.md)默认仅所选会话，保留明确选择全部私聊的分支；下文 ADR-095 全部范围原子提交仅用于该选择。列表访问先取得必要同意并丢弃夹带摘要，工具准备不授权正文读取。重装沿用留存资料，彻底删除需明确范围与二次确认；异常诊断脱敏且不自动上传。完整首用及独立交付仍待[新规格](../../.scratch/local-app-first-use/spec.md)验收。
 
-> 2026-10-21 决定收敛：按 [ADR-091](../adr/091-retire-runtime-todos-and-auto-summary.md)不增加运行计划和自动过程摘要；时间、日历、网络工具按 [ADR-092](../adr/092-defer-time-calendar-web-tools.md)保留为未来可选方向，不是当前必备能力。默认自动记忆按 [ADR-085](../adr/085-source-verified-automatic-adoption.md) 取消额外语用、置信度和风险人工门；来源、人工纠错、删除和人工发送边界不变。
+> 2026-10-21 决定收敛：按 [ADR-091](../adr/091-retire-runtime-todos-and-auto-summary.md)不增加运行计划和自动过程摘要；时间、日历、网络工具按 [ADR-092](../adr/092-defer-time-calendar-web-tools.md)保留为未来可选方向，不是当前必备能力。默认自动记忆按 [ADR-085](../adr/superseded/085-source-verified-automatic-adoption.md) 取消额外语用、置信度和风险人工门；来源、人工纠错、删除和人工发送边界不变。
 
 > 状态：已采纳的流程边界；已有 Electron UI 与 HTTP 接线，分项实现及验收范围须分别核验，下文尚未接入的设计目标另作标注。
 

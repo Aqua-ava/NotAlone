@@ -173,5 +173,5 @@ State: open
 - [现有消息与来源引用](../../backend-ts/database/migrations/021_message_source_ref.sql)、[不透明游标](../../backend-ts/database/migrations/088_cli_opaque_cursor_order.sql)。
 - [记忆候选及已采纳资料](../../backend-ts/database/migrations/009_memory_store.sql)、[完整提取追踪](../../backend-ts/database/migrations/039_memory_extraction_trace.sql)、[模型调用回执](../../backend-ts/database/migrations/110_model_call_receipt.sql)。
 - [现有处理范围和轮次](../../backend-ts/database/migrations/124_memory_processing_lifecycle.sql)、[固定目标](../../backend-ts/database/migrations/126_memory_processing_round_targets.sql)。
-- [已退役旧资料升级](../../architecture/adr/070-automatic-memory-maintenance.md)、[退役表达样本](../../backend-ts/database/migrations/096_retire_style_samples.sql)、[长期表达偏好](../../backend-ts/database/migrations/065_expression_preferences.sql)。
+- [已退役旧资料升级](../../architecture/adr/superseded/070-automatic-memory-maintenance.md)、[退役表达样本](../../backend-ts/database/migrations/096_retire_style_samples.sql)、[长期表达偏好](../../backend-ts/database/migrations/065_expression_preferences.sql)。
 - [跨领域删除仍引用旧结构](../../backend-ts/src/deletion/cross-domain-deletion.ts)、[模型记账](../../backend-ts/src/host/host-model-accounting.ts)、[文档存储](../../backend-ts/src/memory/records/documents/store.ts)。
