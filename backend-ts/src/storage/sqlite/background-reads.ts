@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto';
 import type {SqliteStorage} from './client.ts';
 import {StorageFailure,type StorageAction,type StorageReader} from './contracts.ts';
 import type {ActiveHolders} from './deletion/holders.ts';
+import {readOnSlot,retireSlot,type ReadSlot} from './read-slot.ts';
 
 // 仅由宿主装配的后台目录与列表读取使用；页面、Tool 和任意调用方不能传入 SQL、动作名、连接或 reader。
 export const backgroundReadActions=[
@@ -20,7 +21,7 @@ export const backgroundReadBoundaryAction:StorageAction={name:'background.readBo
 const allowed=new Set<string>(backgroundReadActions);
 const terminal=new Set(['readonly_closed','stale_lease','storage_identity_changed','unsafe_storage_path','storage_missing','schema_drift','migration_drift','worker_failed']);
 type Options={storage:Pick<SqliteStorage,'openReader'>;ownerId:string;holders:ActiveHolders};
-interface ReaderSlot {reader:StorageReader;controller:AbortController;closing?:Promise<void>}
+type ReaderSlot=ReadSlot;
 const cancelled=()=>new StorageFailure('background_read_cancelled');
 
 /** 独立 Worker 的后台只读通道；沿用主存储运行租约，不排队等待主写者。 */
@@ -48,24 +49,11 @@ class BackgroundReadChannel implements StorageReader {
   this.opening=opening;return opening;
  }
  private assertCurrent(slot:ReaderSlot):void{if(this.closed||slot!==this.slot)throw cancelled();}
- private read<T>(slot:ReaderSlot,name:string,input:unknown):Promise<T>{
-  const signal=slot.controller.signal;if(signal.aborted)return Promise.reject(cancelled());
-  return new Promise((resolve,reject)=>{
-   const abort=()=>{signal.removeEventListener('abort',abort);reject(cancelled());};
-   signal.addEventListener('abort',abort,{once:true});
-   try{slot.reader.execute<T>(name,input).then(value=>{signal.removeEventListener('abort',abort);resolve(value);},error=>{signal.removeEventListener('abort',abort);reject(error);});}
-   catch(error){signal.removeEventListener('abort',abort);reject(error);}
-  });
- }
+ private read<T>(slot:ReaderSlot,name:string,input:unknown):Promise<T>{return readOnSlot<T>(slot,name,input,cancelled);}
  private retire(slot:ReaderSlot):Promise<void>{
   if(this.slot===slot){this.slot=undefined;this.version++;}
-  slot.controller.abort();
-  if(!slot.closing){
-   // 退休后仍保留关闭责任；明确失败允许宿主退出重试，确认关闭才移除。
-   this.retiring.add(slot);
-   slot.closing=Promise.resolve().then(()=>slot.reader.close()).then(()=>{this.retiring.delete(slot);},error=>{slot.closing=undefined;throw error;});
-  }
-  return slot.closing;
+  // 退休后仍保留关闭责任；明确失败允许宿主退出重试，确认关闭才移除。
+  return retireSlot(slot,this.retiring);
  }
  execute<T=unknown>(name:string,input:unknown):Promise<T>{
   if(this.closed)return Promise.reject(new StorageFailure('readonly_closed'));

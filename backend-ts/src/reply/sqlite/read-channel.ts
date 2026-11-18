@@ -1,6 +1,7 @@
 import type {SqliteStorage} from '../../storage/sqlite/client.ts';
 import {StorageFailure,type StorageReader} from '../../storage/sqlite/contracts.ts';
 import type {ActiveHolders} from '../../storage/sqlite/deletion/holders.ts';
+import {readOnSlot,retireSlot,type ReadSlot} from '../../storage/sqlite/read-slot.ts';
 import {randomUUID} from 'node:crypto';
 
 // 仅供助手回看；生成受理、编辑、选择、来源冻结和最终资格仍交给唯一写者。
@@ -14,7 +15,7 @@ const candidateActions=new Set<string>(['reply.view','reply.version','reply.skil
 const terminal=new Set(['readonly_closed','stale_lease','storage_identity_changed','unsafe_storage_path','storage_missing','schema_drift','migration_drift','worker_failed','assistant_read_invalidated','assistant_read_scope_unavailable','discussion_deletion_pending','deletion_holder_fenced']);
 type Options={storage:Pick<SqliteStorage,'openReader'>;ownerId:string;holders:ActiveHolders};
 type Lane='discussion'|'candidate';
-interface ReaderSlot {lane:Lane;reader:StorageReader;controller:AbortController;closing?:Promise<void>}
+interface ReaderSlot extends ReadSlot {lane:Lane}
 interface ReaderLane {slot?:ReaderSlot;opening?:Promise<ReaderSlot>;version:number}
 interface ReadBoundary {generation:bigint;revision:string}
 const invalidated=()=>new StorageFailure('assistant_read_invalidated');
@@ -47,24 +48,11 @@ class AssistantReadChannel implements StorageReader {
   state.opening=opening;return opening;
  }
  private assertCurrent(slot:ReaderSlot):void{if(this.closed||slot!==this.lanes[slot.lane].slot)throw invalidated();}
- private read<T>(slot:ReaderSlot,name:string,input:unknown):Promise<T>{
-  const signal=slot.controller.signal;if(signal.aborted)return Promise.reject(invalidated());
-  return new Promise((resolve,reject)=>{
-   const abort=()=>{signal.removeEventListener('abort',abort);reject(invalidated());};
-   signal.addEventListener('abort',abort,{once:true});
-   try{slot.reader.execute<T>(name,input).then(value=>{signal.removeEventListener('abort',abort);resolve(value);},error=>{signal.removeEventListener('abort',abort);reject(error);});}
-   catch(error){signal.removeEventListener('abort',abort);reject(error);}
-  });
- }
+ private read<T>(slot:ReaderSlot,name:string,input:unknown):Promise<T>{return readOnSlot<T>(slot,name,input,invalidated);}
  private retire(slot:ReaderSlot):Promise<void>{
   const state=this.lanes[slot.lane];if(state.slot===slot){state.slot=undefined;state.version++;}
-  slot.controller.abort();
-  if(!slot.closing){
-   // 退休后仍保留关闭责任；明确失败允许删除或宿主退出重试，确认关闭才移除。
-   this.retiring.add(slot);
-   slot.closing=Promise.resolve().then(()=>slot.reader.close()).then(()=>{this.retiring.delete(slot);},error=>{slot.closing=undefined;throw error;});
-  }
-  return slot.closing;
+  // 退休后仍保留关闭责任；明确失败允许删除或宿主退出重试，确认关闭才移除。
+  return retireSlot(slot,this.retiring);
  }
  private retireAll():Promise<void>{
   if(this.invalidating)return this.invalidating;
