@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {build} from 'esbuild';
-import {chromium,expect} from '@playwright/test';
+import { expect } from '@playwright/test';
+import { launchChromium } from './helpers/browser.mjs';
 
 const ids={contact:'11111111-1111-4111-8111-111111111111',history:'22222222-2222-4222-8222-222222222222',current:'33333333-3333-4333-8333-333333333333',request:'44444444-4444-4444-8444-444444444444',candidate:'55555555-5555-4555-8555-555555555555'};
 const original={candidateId:ids.candidate,versionNo:1,origin:'model',parentVersionNo:null,parts:['合成历史候选原版'],basis:[]};
@@ -31,7 +32,7 @@ test('历史讨论正常读取候选版本和实际输入，保留写操作门�
  `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
  const server=createServer((_req,res)=>{res.setHeader('content-type','text/html');res.end('<div id="root"></div>');});
  server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>server.close(resolve)));
- const browser=await chromium.launch({headless:true,executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage();page.setDefaultTimeout(5000);
  await page.exposeFunction('__sessionAction',(name,args)=>{sessionActions.push({name,args});});
  await page.exposeFunction('__execute',command=>{

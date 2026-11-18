@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { chromium } from '@playwright/test';
+import { launchChromium } from './helpers/browser.mjs';
 
 function deferred() {
   let resolve, reject;
@@ -83,7 +83,7 @@ async function withEntry(t, command, inspect, controller = false, withBrowser = 
     },
     bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false, logLevel: 'silent',
   });
-  const browser = await chromium.launch({ channel: 'chrome', headless: true, timeout: 10000 });
+  const browser = await launchChromium({ timeout: 10000 });
   t.after(() => browser.close());
   const page = await browser.newPage();
   page.setDefaultTimeout(4000);

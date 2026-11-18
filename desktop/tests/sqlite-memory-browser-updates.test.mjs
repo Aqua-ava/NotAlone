@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
-import {chromium} from '@playwright/test';
+import { launchChromium } from './helpers/browser.mjs';
 
 const contact='11111111-1111-4111-8111-111111111111',id='22222222-2222-4222-8222-222222222222';
 const source={contactId:contact,messageId:id,recordId:id,acceptedRevision:'1',quote:'合成来源原话'};
@@ -25,7 +25,7 @@ test.before(async()=>{
 });
 
 async function panel(t,command,inspect){
- const browser=await chromium.launch({channel:'chrome',headless:true,timeout:10000});
+ const browser=await launchChromium({ timeout: 10000 });
  t.after(()=>browser.close());
  const page=await browser.newPage();page.setDefaultTimeout(4000);
  // 本组只核验显式处理通知；周期刷新另由现有页面回归覆盖，避免计时噪声影响请求次数。

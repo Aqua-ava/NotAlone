@@ -2,12 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {watch} from 'node:fs';
 import {readFile,writeFile,access} from 'node:fs/promises';
-import {join,dirname,resolve} from 'node:path';
+import {join,resolve} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {Readable} from 'node:stream';
 import {launchDsh} from '../src/launch.ts';
+import {waitForHostReady} from './host-readiness-support.mjs';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {fixture,owner,record} from './fixtures/memory-sqlite/support.mjs';
 import {documentProfileSupplier} from './fixtures/memory-documents/profile-supplier.mjs';
@@ -72,7 +73,7 @@ test('正式宿主同库增量优先与历史自动处理各一次，来源隔�
   host=await launchDsh({nodeExecutable:wrapper,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath,infoPath,businessHome:root,
    environment:{NOTALONE_SYNTHETIC_PROVIDER_URL:supplierOrigin,NOTALONE_SYNTHETIC_NETWORK_AUDIT:auditPath},
    sqlite:{userData:root,expectedDatabaseId:databaseId,role:'test',capabilities:['contacts','history','memory']}},()=>true);
-  info=await changed(dirname(infoPath),async()=>Object.fromEntries((await readFile(infoPath,'utf8')).trim().split('\n').map(line=>{const n=line.indexOf('=');return [line.slice(0,n),line.slice(n+1)];})),value=>Boolean(value.address&&value.token),{timeoutMs:10000});
+  info=await waitForHostReady(host,infoPath,{timeoutMs:10000});
   assert.equal((await api('/api/runtime/status')).data.runtime,'dsh');assert.equal((await api('/api/sync/status')).data.sync_enabled,false);
  };
  await boot();

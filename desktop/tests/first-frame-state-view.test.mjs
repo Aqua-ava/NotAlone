@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
-import {chromium} from '@playwright/test';
+import { launchChromium } from './helpers/browser.mjs';
 
 const names=['backend','startup','foreground','bindings','session'];
 async function withStates(t,inspect){
@@ -38,7 +38,7 @@ async function withStates(t,inspect){
   }
   createRoot(document.getElementById('root')).render(<App/>);
  `},bundle:true,platform:'browser',format:'iife',write:false,jsx:'automatic',loader:{'.css':'empty'}});
- const browser=await chromium.launch({channel:'chrome',headless:true,timeout:10000});t.after(()=>browser.close());
+ const browser=await launchChromium({ timeout: 10000 });t.after(()=>browser.close());
  const page=await browser.newPage();page.setDefaultTimeout(4000);const errors=[];page.on('pageerror',error=>errors.push(error.message));
  await page.route('http://127.0.0.1/initial-state-test',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));
  await page.goto('http://127.0.0.1/initial-state-test');await page.addScriptTag({content:compiled.outputFiles[0].text});

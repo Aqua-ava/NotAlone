@@ -5,7 +5,8 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {build} from 'esbuild';
-import {chromium,expect} from '@playwright/test';
+import { expect } from '@playwright/test';
+import { launchChromium, mountBundle } from '../helpers/browser.mjs';
 
 test('Skill页自动核验更新并管理启停，不提供手动核验或添加目录入口',{timeout:20000},async t=>{
  const dir=await mkdtemp(path.join(tmpdir(),'notalone-skill-ui-14-'));t.after(()=>rm(dir,{recursive:true,force:true}));
@@ -22,7 +23,7 @@ test('Skill页自动核验更新并管理启停，不提供手动核验或添加
    if(input.path.endsWith('/enable'))item.enabled_state='enabled';else if(input.path.endsWith('/disable'))item.enabled_state='disabled';else{item.verification_state='verified';item.current_revision_no='1';item.revisions[0].availability='current';}}
   return {generation:1,data:{skill:structuredClone(item)}};
  }};
- const controller=new SkillLibraryController(backend),browser=await chromium.launch({headless:true,channel:'chrome'});t.after(()=>browser.close());
+ const controller=new SkillLibraryController(backend),browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage({viewport:{width:1100,height:850}});await page.exposeFunction('libraryCommand',(method,...args)=>controller[method](...args));
  const compiled=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{SkillLearningPage}from'./src/renderer/SkillLearningPage';
  const methods={readLibrary:'read',changeLibraryEnabled:'changeEnabled'};
@@ -81,7 +82,7 @@ test('Skill页自动核验更新并管理启停，不提供手动核验或添加
 });
 
 test('Skill页连接与停读阶段不误报读取失败，重复通知与旧代次结果不触发重读', {timeout:20000}, async t => {
- const browser=await chromium.launch({headless:true,channel:'chrome'});t.after(()=>browser.close());const page=await browser.newPage();
+ const browser=await launchChromium();t.after(()=>browser.close());const page=await browser.newPage();
  const compiled=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
   import React from 'react';import{createRoot}from'react-dom/client';import{SkillLearningPage}from'./src/renderer/SkillLearningPage';
   let state={phase:'connecting',revision:0};const listeners=new Set();window.stateReads=0;window.libraryReads=[];window.settled=0;
@@ -93,7 +94,7 @@ test('Skill页连接与停读阶段不误报读取失败，重复通知与旧代
     verificationReason:null,headRevision:'1',currentRevisionNo:'1',revisions:[]}]});
   createRoot(document.getElementById('root')).render(<SkillLearningPage session={{state:{selectedContactId:null,scopeRevision:0}}}/>);
  `},bundle:true,platform:'browser',format:'iife',jsx:'automatic',loader:{'.css':'empty'},write:false});
- await page.setContent('<div id="root"></div>');await page.addScriptTag({content:compiled.outputFiles[0].text});
+ await mountBundle(page, compiled);
  await expect(page.getByRole('status')).toContainText('正在连接本机服务');
  for(const[phase,text]of [['stopping','正在停止本次后台读取'],['stopped','本次后台读取已停止'],['shutdown-failed','后台停读尚未获确认'],['disconnected','本机服务尚未连接'],['connecting','正在连接本机服务']]){
   await page.evaluate(phase=>window.emit(phase),phase);await expect(page.getByRole(phase==='shutdown-failed'?'alert':'status')).toContainText(text);
@@ -115,7 +116,7 @@ test('Skill页连接与停读阶段不误报读取失败，重复通知与旧代
 });
 
 test('Skill页首读失败后有效连接事件恢复，迟到首读失败不覆盖状态', {timeout:20000}, async t => {
- const browser=await chromium.launch({headless:true,channel:'chrome'});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const compiled=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
   import React from 'react';import{createRoot}from'react-dom/client';import{SkillLearningPage}from'./src/renderer/SkillLearningPage';
   const listeners=new Set();window.libraryReads=0;window.stateSettled=false;
@@ -125,7 +126,7 @@ test('Skill页首读失败后有效连接事件恢复，迟到首读失败不覆
   createRoot(document.getElementById('root')).render(<SkillLearningPage session={{state:{selectedContactId:null,scopeRevision:0}}}/>);
  `},bundle:true,platform:'browser',format:'iife',jsx:'automatic',loader:{'.css':'empty'},write:false});
  for(const late of [false,true]){
-  const page=await browser.newPage();await page.setContent('<div id="root"></div>');await page.addScriptTag({content:compiled.outputFiles[0].text});
+  const page=await browser.newPage();await mountBundle(page, compiled);
   await page.waitForFunction(()=>typeof window.rejectInitial==='function');
   if(late)await page.evaluate(()=>window.emit('connecting'));
   await page.evaluate(()=>window.rejectInitial(new Error('合成连接状态读取失败')));await page.waitForFunction(()=>window.stateSettled);
@@ -137,7 +138,7 @@ test('Skill页首读失败后有效连接事件恢复，迟到首读失败不覆
 });
 
 test('Skill页断线或停读后迟到的刷新失败不能覆盖连接状态', {timeout:20000}, async t => {
- const browser=await chromium.launch({headless:true,channel:'chrome'});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const compiled=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
   import React from 'react';import{createRoot}from'react-dom/client';import{SkillLearningPage}from'./src/renderer/SkillLearningPage';
   const listeners=new Set();let revision=1,reads=0;
@@ -148,7 +149,7 @@ test('Skill页断线或停读后迟到的刷新失败不能覆盖连接状态', 
   createRoot(document.getElementById('root')).render(<SkillLearningPage session={{state:{contacts:[]}}}/>);
  `},bundle:true,platform:'browser',format:'iife',jsx:'automatic',loader:{'.css':'empty'},write:false});
  for(const[phase,text]of [['disconnected','本机服务尚未连接'],['stopping','正在停止本次后台读取'],['stopped','本次后台读取已停止'],['shutdown-failed','后台停读尚未获确认']]){
-  const page=await browser.newPage();await page.setContent('<div id="root"></div>');await page.addScriptTag({content:compiled.outputFiles[0].text});
+  const page=await browser.newPage();await mountBundle(page, compiled);
   await page.getByRole('button',{name:'刷新状态',exact:true}).click();
   await page.waitForFunction(()=>typeof window.failRefresh==='function');
   await page.evaluate(phase=>window.disconnectAndFail(phase),phase);
@@ -160,7 +161,7 @@ test('Skill页断线或停读后迟到的刷新失败不能覆盖连接状态', 
 });
 
 test('Skill页快速重连后旧刷新失败不能作废新连接快照', {timeout:20000}, async t => {
- const browser=await chromium.launch({headless:true,channel:'chrome'});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage();
  const compiled=await build({stdin:{resolveDir:process.cwd(),loader:'tsx',contents:`
   import React from 'react';import{createRoot}from'react-dom/client';import{SkillLearningPage}from'./src/renderer/SkillLearningPage';
@@ -171,7 +172,7 @@ test('Skill页快速重连后旧刷新失败不能作废新连接快照', {timeo
   window.reconnectAndFail=()=>{for(const phase of ['disconnected','connected'])listeners.forEach(listener=>listener({phase,revision:++revision}));window.failRefresh(new Error('合成旧连接刷新失败'));};
   createRoot(document.getElementById('root')).render(<SkillLearningPage session={{state:{contacts:[]}}}/>);
  `},bundle:true,platform:'browser',format:'iife',jsx:'automatic',loader:{'.css':'empty'},write:false});
- await page.setContent('<div id="root"></div>');await page.addScriptTag({content:compiled.outputFiles[0].text});
+ await mountBundle(page, compiled);
  await page.getByRole('button',{name:'刷新状态',exact:true}).click();
  await page.waitForFunction(()=>typeof window.failRefresh==='function');
  await page.evaluate(()=>window.reconnectAndFail());
@@ -182,7 +183,7 @@ test('Skill页快速重连后旧刷新失败不能作废新连接快照', {timeo
 });
 
 test('Skill页预加载后反复进入保留快照和筛选，不重复核对或闪加载', {timeout:20000}, async t => {
- const browser=await chromium.launch({headless:true,channel:'chrome'});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage();
  const compiled=await build({stdin:{contents:`import React,{useState} from 'react';import{createRoot}from'react-dom/client';import{SkillLearningPage}from'./src/renderer/SkillLearningPage';
  window.skillReads=0;window.loadingFlashes=0;window.skillVisible=false;window.skillDelay=200;
@@ -191,7 +192,7 @@ test('Skill页预加载后反复进入保留快照和筛选，不重复核对或
  window.connectionChanged=state=>listeners.forEach(listener=>listener(state));
  new MutationObserver(()=>{if(window.skillVisible&&Array.from(document.querySelectorAll('[role="status"]')).some(node=>node.textContent.includes('正在核对 Skill')&&node.getClientRects().length))window.loadingFlashes++;}).observe(document.body,{childList:true,subtree:true});
  function Harness(){const[visible,setVisible]=useState(false);return <><button onClick={()=>{window.skillVisible=!visible;setVisible(!visible);}}>切换页面</button><SkillLearningPage visible={visible} session={{state:{selectedContactId:null,scopeRevision:0}}}/></>;}createRoot(document.getElementById('root')).render(<Harness/>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',loader:{'.css':'empty'},write:false});
- await page.setContent('<div id="root"></div>');await page.addScriptTag({content:compiled.outputFiles[0].text});
+ await mountBundle(page, compiled);
  const card=page.getByRole('article',{name:'回复场景：合成预加载场景'});
  const times=[];
  for(let index=0;index<4;index++){

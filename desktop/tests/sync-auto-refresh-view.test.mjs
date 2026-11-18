@@ -1,18 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { chromium, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { launchChromium, mountBundle } from './helpers/browser.mjs';
 
 async function mount(t, contents) {
   const bundle = await build({ stdin: { contents, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true,
     platform: 'browser', format: 'iife', write: false, loader: { '.css': 'empty' }, logLevel: 'silent' });
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await launchChromium();
   t.after(() => browser.close());
   const page = await browser.newPage();
   page.setDefaultTimeout(4000);
   await page.clock.install();
-  await page.setContent('<div id="root"></div>');
-  await page.addScriptTag({ content: bundle.outputFiles[0].text });
+  await mountBundle(page, bundle);
   return page;
 }
 const entry = "import React from 'react';import {createRoot} from 'react-dom/client';";

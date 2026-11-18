@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {build} from 'esbuild';
-import {chromium,expect} from '@playwright/test';
+import { expect } from '@playwright/test';
+import { launchChromium, mountBundle } from './helpers/browser.mjs';
 
 async function fixture(t) {
  const built=await build({stdin:{contents:`
@@ -14,9 +15,9 @@ async function fixture(t) {
  function Harness(){const[visible,setVisible]=useState(true);return <><button onClick={()=>setVisible(!visible)}>切换设置页</button>{visible&&<SetupPanel/>}</>;}
  createRoot(document.getElementById('root')).render(<Harness/>);
  `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',write:false,loader:{'.css':'empty'}});
- const browser=await chromium.launch({channel:'chrome',headless:true});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage();page.setDefaultTimeout(4000);
- await page.setContent('<div id="root"></div>');await page.addScriptTag({content:built.outputFiles[0].text});return page;
+ await mountBundle(page, built);return page;
 }
 const revisit=async page=>{await page.getByRole('button',{name:'切换设置页'}).click();await page.getByRole('button',{name:'切换设置页'}).click();};
 

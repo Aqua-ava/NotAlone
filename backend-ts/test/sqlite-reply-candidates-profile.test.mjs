@@ -2,11 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {watch} from 'node:fs';
 import {access,readFile,writeFile,readdir} from 'node:fs/promises';
-import {dirname,join,resolve} from 'node:path';
+import {join,resolve} from 'node:path';
 import {randomUUID,createHash} from 'node:crypto';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {launchDsh} from '../src/launch.ts';
+import {waitForHostReady} from './host-readiness-support.mjs';
 import {readDiagnosticRecords} from '../src/diagnostics/unified-log.mjs';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {SqliteDiscussionService} from '../src/reply/sqlite/service.ts';
@@ -14,24 +15,6 @@ import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts
 import {resolveHostReplyConfiguration} from '../src/host/host-reply-config.ts';
 import {fixture,owner,record} from './fixtures/memory-sqlite/support.mjs';
 
-/** 仅等候本轮握手的文件事件，超时给出确定失败，不以sleep轮询。 */
-function handshake(infoPath){
- return new Promise((resolveValue,reject)=>{
-  let ended=false,running=false,dirty=false;
-  const finish=(error,value)=>{if(ended)return;ended=true;clearTimeout(timer);watcher.close();error?reject(error):resolveValue(value);};
-  const load=async()=>{
-   if(ended)return;if(running){dirty=true;return;}running=true;
-   try{
-    const info=Object.fromEntries((await readFile(infoPath,'utf8')).trim().split('\n').map(line=>{const n=line.indexOf('=');return [line.slice(0,n),line.slice(n+1)];}));
-    if(info.address&&info.token)finish(null,info);
-   }catch(error){if(error.code!=='ENOENT')finish(error);}
-   finally{running=false;if(dirty&&!ended){dirty=false;void load();}}
-  };
-  const watcher=watch(dirname(infoPath),()=>{void load();});
-  const timer=setTimeout(()=>finish(new Error('正式候选profile握手超时')),8000);
-  void load();
- });
-}
 /** 异步日志独立于业务响应；等候实际文件事件，不把返回200误当成已刷盘。 */
 function diagnosticRecordsWhen(root,accept){
  return new Promise((resolveValue,reject)=>{
@@ -107,7 +90,7 @@ test('正式SQLite profile经共享模型和认证HTTP生成编辑选稿，双�
   host=await launchDsh({nodeExecutable:wrapper,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath,infoPath,businessHome:root,
    environment:{NOTALONE_DIAGNOSTIC_ROOT:root,NOTALONE_DIAGNOSTIC_LEVEL:'debug',NOTALONE_SYNTHETIC_PROVIDER_URL:`http://127.0.0.1:${supplier.address().port}`,NOTALONE_SYNTHETIC_NETWORK_AUDIT:auditPath},
    sqlite:{userData:root,expectedDatabaseId:databaseId,role:'test',capabilities:['contacts','history','discussions']}},()=>true);
-  try{info=await handshake(infoPath);}catch(error){throw new Error(`${error.message}; ${(await readFile(stderrPath,'utf8')).slice(-1600)}`);}
+  try{info=await waitForHostReady(host,infoPath);}catch(error){throw new Error(`${error.message}; ${(await readFile(stderrPath,'utf8')).slice(-1600)}`);}
   const launch=JSON.parse(await readFile(infoPath+'.dsh-lock','utf8'));
   const official=await readFile(new URL('../profile/sqlite.patch.yml',import.meta.url),'utf8');
   assert.equal(await readFile(join(launch.home,'profiles/notalone/cordis.patch.yml'),'utf8'),official.replace('PLUGIN_PATH',JSON.stringify(resolve('src/sqlite-host-plugin.ts'))));

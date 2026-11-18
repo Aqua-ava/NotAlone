@@ -5,7 +5,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {build} from 'esbuild';
-import {chromium} from '@playwright/test';
+import { launchChromium } from './helpers/browser.mjs';
 const contact='11111111-1111-4111-8111-111111111111',docId='22222222-2222-4222-8222-222222222222',pubId='33333333-3333-4333-8333-333333333333',memoryId='44444444-4444-4444-8444-444444444444';
 const request={scope:{scopeKind:'contact',contactId:contact},displayContactId:contact,scopeRevision:1};
 let root,Controller,browserCode;
@@ -36,7 +36,7 @@ function response(count=15,profileSelection){
 }
 function controller(handle){return new Controller({getConnectionGeneration:()=>1,requestJson:async r=>({generation:1,data:await handle(r)})},()=>{},{getState:()=>({selectedContactId:contact,scopeRevision:1})});}
 async function panel(t,value,inspect){
- const instance=controller(async()=>value),browser=await chromium.launch({channel:'chrome',headless:true,timeout:10000});t.after(()=>browser.close());
+ const instance=controller(async()=>value),browser=await launchChromium({ timeout: 10000 });t.after(()=>browser.close());
  const page=await browser.newPage();page.setDefaultTimeout(4000);await page.exposeFunction('readSelection',input=>instance.readDocuments(input));
  await page.route('http://127.0.0.1/profile-selection-test',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('http://127.0.0.1/profile-selection-test');await page.addScriptTag({content:browserCode});await inspect(page);
 }

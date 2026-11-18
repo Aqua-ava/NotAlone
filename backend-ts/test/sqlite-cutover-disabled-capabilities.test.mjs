@@ -1,21 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 import { SqliteStorage } from '../src/storage/sqlite/client.ts';
 import { launchDsh } from '../src/launch.ts';
+import { waitForHostReady } from './host-readiness-support.mjs';
 
-async function handshake(host, infoPath) {
-  const until = Date.now() + 15000;
-  while (Date.now() < until && host.isRunning()) {
-    try { return Object.fromEntries((await readFile(infoPath, 'utf8')).trim().split('\n').map(line => { const split = line.indexOf('='); return [line.slice(0, split), line.slice(split + 1)]; })); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; }
-    await delay(50);
-  }
-  assert.fail('SQLite 宿主未在有界时间内就绪');
-}
 async function startHost(t, capabilities) {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), 'notalone-disabled-capabilities-')));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -26,7 +17,7 @@ async function startHost(t, capabilities) {
     envFilePath: path.join(root, 'unused.env'), infoPath, businessHome: root, environment: {},
     sqlite: { userData: root, expectedDatabaseId: databaseId, role: 'test', capabilities } }, () => true);
   t.after(() => host.terminate());
-  const info = await handshake(host, infoPath);
+  const info = await waitForHostReady(host, infoPath);
   const request = (route, options = {}) => fetch(`http://${info.address}${route}`, { ...options, headers: { Authorization: `Bearer ${info.token}`, ...options.headers } });
   return { host, request };
 }

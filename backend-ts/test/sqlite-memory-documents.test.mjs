@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {waitForHostReady} from './host-readiness-support.mjs';
 import {fixture, modelPort, owner} from './fixtures/memory-sqlite/support.mjs';
 import {SqliteMemoryExtraction} from '../src/memory/sqlite/service.ts';
 import {SqliteMemoryAdjudication} from '../src/memory/sqlite/management/adjudication-service.ts';
@@ -129,7 +130,7 @@ test('场景执行中普通暂停后不领取画像小批，继续后从画像�
 
 test('正式SQLite profile中L1记忆按需进入回复，主题窗口未到期不调用文档模型',{timeout:30000},async t=>{
  const {watch}=await import('node:fs');const {readFile,writeFile,access}=await import('node:fs/promises');
- const {join,dirname,resolve}=await import('node:path');const {createServer}=await import('node:http');const {once}=await import('node:events');const {randomUUID}=await import('node:crypto');
+ const {join,resolve}=await import('node:path');const {createServer}=await import('node:http');const {once}=await import('node:events');const {randomUUID}=await import('node:crypto');
  const {launchDsh}=await import('../src/launch.ts');const {documentProfileSupplier}=await import('./fixtures/memory-documents/profile-supplier.mjs');
  const {Readable}=await import('node:stream');
  const cleanups=[];let host,provider,info;
@@ -175,7 +176,7 @@ test('正式SQLite profile中L1记忆按需进入回复，主题窗口未到期�
   const load=async()=>{if(ended)return;if(running){dirty=true;return;}running=true;try{const value=await probe();if(accept(value))finish(null,value);}catch(error){if(error.code!=='ENOENT')finish(error);}finally{running=false;if(dirty&&!ended){dirty=false;void load();}}};
   const watcher=watch(directory,()=>void load()),timer=setTimeout(()=>finish(new Error('合成正式宿主未在有界时间内就绪')),12000);void load();
  });
- info=await changed(dirname(infoPath),async()=>Object.fromEntries((await readFile(infoPath,'utf8')).trim().split('\n').map(line=>{const n=line.indexOf('=');return [line.slice(0,n),line.slice(n+1)];})),value=>Boolean(value.address&&value.token));
+ info=await waitForHostReady(host,infoPath);
  const api=async(route,body,auth=true)=>{const response=await fetch(`http://${info.address}${route}`,{method:body===undefined?'GET':'POST',headers:auth?{Authorization:`Bearer ${info.token}`}:{},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(8000)});return {status:response.status,data:await response.json()};};
  assert.equal((await api('/api/memory-documents?scope_kind=self',undefined,false)).status,401);
  const started=await api('/api/memory-processing/runs',{request_key:randomUUID()});assert.equal(started.status,200,JSON.stringify(started.data));

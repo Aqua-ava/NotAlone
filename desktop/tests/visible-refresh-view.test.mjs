@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { chromium } from '@playwright/test';
+import { launchChromium, mountBundle } from './helpers/browser.mjs';
 
 test('只读自动更新在可见时串行执行，隐藏、停用与卸载后不再请求', { timeout: 20000 }, async t => {
   const bundle = await build({ stdin: { contents: `
@@ -22,11 +22,10 @@ test('只读自动更新在可见时串行执行，隐藏、停用与卸载后�
     }
     const root = createRoot(document.getElementById('root')); window.unmount = () => root.unmount(); root.render(<App/>);
   `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', write: false, logLevel: 'silent' });
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await launchChromium();
   t.after(() => browser.close());
   const page = await browser.newPage();
-  await page.setContent('<div id="root"></div>');
-  await page.addScriptTag({ content: bundle.outputFiles[0].text });
+  await mountBundle(page, bundle);
   await page.waitForFunction(() => window.callbacks.size === 1);
   assert.equal(await page.evaluate(() => window.calls), 0);
   await page.evaluate(() => {window.tick(); window.tick();});

@@ -4,6 +4,7 @@ import {build} from 'esbuild';
 import {mkdtemp,mkdir,writeFile,rm,realpath,readFile} from 'node:fs/promises';
 import {tmpdir,homedir} from 'node:os';
 import path from 'node:path';
+import {syntheticDshProject} from './helpers/synthetic-dsh-project.mjs';
 const directory=await mkdtemp(path.join(tmpdir(),'notalone-pure-ts-startup-'));
 const built=await build({stdin:{contents:"export * from './src/main/backend/config.ts'; export {OwnedBackendProcess} from './src/main/backend/process.ts';",resolveDir:path.resolve('.')},bundle:true,platform:'node',format:'esm',write:false});
 await writeFile(path.join(directory,'config.mjs'),built.outputFiles[0].text);
@@ -22,10 +23,7 @@ test('微信配置路径在隔离宿主启动前确定，并保留用户显式�
 });
 test('默认开发配置只走SQLite启动路径，旧字段被忽略且子进程不继承PG配置',async()=>{
  const projectDirectory=path.join(directory,'project');
- await mkdir(path.join(projectDirectory,'backend-ts/src'),{recursive:true});
- await mkdir(path.join(projectDirectory,'backend-ts/profile'),{recursive:true});
- await writeFile(path.join(projectDirectory,'backend-ts/src/launch.ts'),'// 合成入口\n');
- await writeFile(path.join(projectDirectory,'backend-ts/profile/sqlite.patch.yml'),'[]\n');
+ const executable=await syntheticDshProject(projectDirectory);
  const inherited = { NOTALONE_HOST_RUNTIME: 'synthetic-retired-host', NOTALONE_DATABASE_URL: 'synthetic-database', PGPASSWORD: 'synthetic-secret', WECHAT_CLI_WCDB_LIB: '/synthetic/wcdb' };
  const previous = Object.fromEntries(Object.keys(inherited).map(key => [key, process.env[key]]));
  Object.assign(process.env, inherited);
@@ -46,8 +44,7 @@ test('默认开发配置只走SQLite启动路径，旧字段被忽略且子进�
   await saveBackendConfiguration(userData,{...configurationPaths(config),pythonExecutable:'/synthetic/missing-python'},()=>true);
   assert.equal('pythonExecutable' in JSON.parse(await readFile(file,'utf8')),false);
   config.syncProbePath=path.join(userData,'configured-probe');
-  const executable=path.join(projectDirectory,'backend-ts/node_modules/@deepseek-ai/dsh/lib/bin.js'),observed=path.join(userData,'child-environment.json');
-  await mkdir(path.dirname(executable),{recursive:true});
+  const observed=path.join(userData,'child-environment.json');
   await writeFile(executable,`require('node:fs').writeFileSync(${JSON.stringify(observed)},JSON.stringify({host:process.env.NOTALONE_HOST_RUNTIME??null,databaseUrl:process.env.NOTALONE_DATABASE_URL??null,pgpassword:process.env.PGPASSWORD??null,wcdb:process.env.WECHAT_CLI_WCDB_LIB??null,probe:process.env.NOTALONE_SYNC_PROBE??null,wechatConfig:process.env.NOTALONE_WECHAT_CONFIG??null,homeIsolated:process.env.HOME!==${JSON.stringify(homedir())}}));\n`);
   const child=await OwnedBackendProcess.launch({...config, sqlite:{userData,expectedDatabaseId:'synthetic-instance-id',role:'test'}},()=>true);
   assert.equal(await child.waitForExit(5000),true);

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {build} from 'esbuild';
-import {chromium,expect} from '@playwright/test';
+import { expect } from '@playwright/test';
+import { launchChromium } from './helpers/browser.mjs';
 
 const bundle=await build({stdin:{contents:`
  import React,{useState} from 'react';
@@ -48,7 +49,7 @@ const bundle=await build({stdin:{contents:`
 async function fixture(t){
  const server=createServer((_req,res)=>{res.setHeader('content-type','text/html');res.end('<div id="root"></div>');});
  server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>server.close(resolve)));
- const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage();page.setDefaultTimeout(5000);await page.goto(`http://127.0.0.1:${server.address().port}`);await page.addScriptTag({content:bundle.outputFiles[0].text});
  const draft=page.getByRole('textbox',{name:'有什么想说的',exact:true});await expect(draft).toBeEnabled();
  return {page,draft,authority:()=>page.evaluate(()=>window.fixture.authorityDraft)};

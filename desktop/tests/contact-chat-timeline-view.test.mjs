@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { build } from 'esbuild';
-import { chromium, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { launchChromium } from './helpers/browser.mjs';
 
 async function mount(t, topSpace = 24) {
   const bundle = await build({ entryPoints: ['tests/fixtures/contact-chat-timeline.tsx'], bundle: true, platform: 'browser',
     format: 'iife', jsx: 'automatic', write: false, outdir: 'timeline-view', logLevel: 'silent' });
-  const browser = await chromium.launch({ headless: true, channel: 'chrome' });
+  const browser = await launchChromium();
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 850, height: 900 }, timezoneId: 'Asia/Taipei' });
   await page.setContent(`<style>*{box-sizing:border-box}body{margin:0;padding:${topSpace}px 24px 24px;font-family:sans-serif}:root{--panel-border:#c4d3d6;--panel-radius:12px;--panel-background:#fffdf5;--panel-heading:#354d59}</style><div id="root"></div>`);

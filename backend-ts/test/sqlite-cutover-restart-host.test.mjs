@@ -1,21 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 import { runDefaultDatabaseStartup } from '../src/platform/cutover/startup.ts';
 import { launchDsh } from '../src/launch.ts';
-
-async function handshake(host, infoPath) {
-  const until = Date.now() + 15000;
-  while (Date.now() < until && host.isRunning()) {
-    try { return Object.fromEntries((await readFile(infoPath, 'utf8')).trim().split('\n').map(line => { const index = line.indexOf('='); return [line.slice(0, index), line.slice(index + 1)]; })); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; }
-    await delay(50);
-  }
-  assert.fail('重启后的 SQLite 宿主未在有界时间内就绪');
-}
+import { waitForHostReady } from './host-readiness-support.mjs';
 
 test('默认 SQLite 跨重启：同 database_id/owner 重开并恢复联系人、绑定与同步状态读取', async t => {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), 'notalone-cutover-restart-')));
@@ -35,7 +25,7 @@ test('默认 SQLite 跨重启：同 database_id/owner 重开并恢复联系人�
     envFilePath: path.join(root, 'unused.env'), infoPath, businessHome: root, environment: {},
     sqlite: { userData: root, expectedDatabaseId: second.databaseId, role: 'test', ...second.configuration } }, () => true);
   t.after(() => host.terminate());
-  const info = await handshake(host, infoPath);
+  const info = await waitForHostReady(host, infoPath);
   const request = async (route, options = {}) => {
     const response = await fetch(`http://${info.address}${route}`, { ...options, headers: { Authorization: `Bearer ${info.token}`, ...options.headers } });
     return { status: response.status, body: await response.json().catch(() => null) };

@@ -1,23 +1,14 @@
 import {prepareDatabaseStartup} from '../src/platform/database-startup.ts';
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { loadManifest } from '../src/platform/cutover/control.ts';
 import { runDefaultDatabaseStartup } from '../src/platform/cutover/startup.ts';
 import { launchDsh } from '../src/launch.ts';
-
-async function handshake(host, infoPath) {
-  const until = Date.now() + 20000;
-  while (Date.now() < until && host.isRunning()) {
-    try { return Object.fromEntries((await readFile(infoPath, 'utf8')).trim().split('\n').map(line => { const index = line.indexOf('='); return [line.slice(0, index), line.slice(index + 1)]; })); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; }
-    await delay(50);
-  }
-  assert.fail('SQLite 宿主未在有界时间内就绪');
-}
+import { waitForHostReady } from './host-readiness-support.mjs';
 
 test('真实SQLite宿主存活时：重连预检不改写清单，也不放行第二个宿主，退出后可重新启动', async t => {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), 'notalone-live-host-')));
@@ -30,7 +21,7 @@ test('真实SQLite宿主存活时：重连预检不改写清单，也不放行�
     sqlite: { userData: root, expectedDatabaseId: first.databaseId, expectedOwnerId: first.ownerId, role: 'test', ...first.configuration } }, () => true);
   const host = await launch();
   t.after(() => host.terminate());
-  const info = await handshake(host, infoPath);
+  const info = await waitForHostReady(host, infoPath);
   const status = async () => (await fetch(`http://${info.address}/api/runtime/status`, { headers: { Authorization: `Bearer ${info.token}` } })).json();
   assert.equal((await status()).storageIdentity.available, true);
   // 停读诊断字段：未失败时为空数组，失败时只列固定资源键。
@@ -55,7 +46,7 @@ test('真实SQLite宿主存活时：重连预检不改写清单，也不放行�
   assert.equal(await host.terminate(), true);
   const second = await launch();
   t.after(() => second.terminate());
-  const next = await handshake(second, infoPath);
+  const next = await waitForHostReady(second, infoPath);
   assert.notEqual(next.pid, info.pid);
   assert.equal((await fetch(`http://${next.address}/api/runtime/status`, { headers: { Authorization: `Bearer ${next.token}` } })).status, 200);
 });
@@ -70,7 +61,7 @@ test('真实SQLite宿主异步停读在有界时间内确认stopped，且无任�
     envFilePath: path.join(root, 'unused.env'), infoPath, businessHome: root, environment: {},
     sqlite: { userData: root, expectedDatabaseId: first.databaseId, expectedOwnerId: first.ownerId, role: 'test', ...first.configuration } }, () => true);
   t.after(() => host.terminate());
-  const info = await handshake(host, infoPath);
+  const info = await waitForHostReady(host, infoPath);
   const request = async (method, endpoint) => (await fetch(`http://${info.address}${endpoint}`, { method, headers: { Authorization: `Bearer ${info.token}` } }));
   const begun = Date.now();
   assert.ok([200, 202].includes((await request('POST', '/api/runtime/shutdown/begin')).status));

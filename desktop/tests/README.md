@@ -8,10 +8,8 @@
 | --- | --- | --- |
 | `safe-node` | Node 内存、SSR、合成文件、回环 HTTP 或合成子进程；部分 macOS 用例编译和签名仓库探针或空程序，不执行探针、不启动 App、不构建产品包。 | `pnpm test` 先类型与登记检查，再运行该明确列表。 |
 | `headless` | 无头 Chromium 与 React，使用各用例的合成夹具；不等同于真实 Electron、权限或渠道验收。 | 按登记指定文件，先核对浏览器及夹具；刷新相关窄组可用 `pnpm run test:polling`。 |
-| `isolated-http` | 生产 HTTP 边界或文件显式要求的外部证据。 | 核对实际文件和合成数据准备后执行，不对目录无差别 glob。 |
 | `native` | 原生进程、真实微信工具或权限现场，按用例实际能力区分。 | `pnpm run test:native` 运行 Swift 合成套件及 CLI 入口回归；真实观察另按[桌面验收](../README.md#桌面验收与自动化测试)。 |
 | `app` | Electron 或历史打包前置；登记不证明用例兼容当前开发路径。 | 实际 App 仅使用 `pnpm run dev` 并先 `dev:status`；逐项核对夹具，发布类仍受门禁阻止。 |
-| `historical` | 固定旧实现或兼容历史入口。 | 当前为空；旧实现测试已移出，从 Git 历史固定旧树复现，不从当前树恢复 Python／PG 后台。 |
 
 [默认 runner](../scripts/test-safe.mjs)只传递核准的 `safe-node` 文件；需要编译的 TypeScript 测试使用本轮临时目录并清理。`test:polling` 是窄回归，不代表全部页面覆盖。
 

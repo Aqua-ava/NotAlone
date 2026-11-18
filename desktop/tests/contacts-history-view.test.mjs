@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { build } from 'esbuild';
-import { chromium, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { launchChromium } from './helpers/browser.mjs';
 
 test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄屏', async t => {
   const bundle = await build({ stdin: { contents: `
@@ -58,7 +59,7 @@ test('联系人页窄栏与聊天浏览：分页、失败、切换隔离和窄�
     render();
   `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife',
     jsx: 'automatic', outfile: 'contacts-test.js', write: false, logLevel: 'silent' });
-  const browser = await chromium.launch({ headless: true, channel: 'chrome' });
+  const browser = await launchChromium();
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
   await page.setContent(`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline';"><style>
@@ -201,7 +202,7 @@ test('已保存的可查看聊天图片打开受管预览，不显示占位也�
     const root=createRoot(document.getElementById('root'));
     root.render(<HistoryImageBubble media={media} imageMedia={{state:'available',fileId,mimeType:'image/png'}} selection={selection}/>);
   `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false, logLevel: 'silent' });
-  const browser = await chromium.launch({ headless: true, channel: 'chrome' });
+  const browser = await launchChromium();
   t.after(() => browser.close());
   const page = await browser.newPage();
   await page.setContent(`<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src blob:; script-src 'unsafe-inline';"><div id="root"></div>`);

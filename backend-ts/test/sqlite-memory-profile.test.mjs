@@ -2,11 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {watch} from 'node:fs';
 import {readFile,writeFile,readdir,access} from 'node:fs/promises';
-import {join,dirname,resolve} from 'node:path';
+import {join,resolve} from 'node:path';
 import {randomUUID,createHash} from 'node:crypto';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {launchDsh} from '../src/launch.ts';
+import {waitForHostReady} from './host-readiness-support.mjs';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {resolveHostReplyConfiguration} from '../src/host/host-reply-config.ts';
 import {fixture,owner,record} from './fixtures/memory-sqlite/support.mjs';
@@ -98,7 +99,7 @@ test('正式SQLite profile共用唯一模型宿主完成L1并持久等待主题�
  host=await launchDsh({nodeExecutable:wrapper,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath,infoPath,businessHome:root,
   environment:{NOTALONE_SYNTHETIC_PROVIDER_URL:supplierOrigin,NOTALONE_SYNTHETIC_NETWORK_AUDIT:auditPath},
   sqlite:{userData:root,expectedDatabaseId:databaseId,role:'test',capabilities:['contacts','history','memory']}},()=>true);
- try{info=await changed(dirname(infoPath),async()=>Object.fromEntries((await readFile(infoPath,'utf8')).trim().split('\n').map(line=>{const n=line.indexOf('=');return [line.slice(0,n),line.slice(n+1)];})),value=>Boolean(value.address&&value.token),{timeoutMs:8000,label:'正式profile握手'});}
+ try{info=await waitForHostReady(host,infoPath,{timeoutMs:8000});}
  catch(error){throw new Error(`${error.message}; ${await readFile(stderrPath,'utf8').then(text=>text.slice(-1600))}`);}
  const api=async(route,{body,method=body===undefined?'GET':'POST',auth=true,extra={}}={})=>{
   const response=await fetch(`http://${info.address}${route}`,{method,
@@ -245,7 +246,7 @@ test('正式SQLite profile的unknown保持可读和幂等，暂停后关闭排�
  host=await launchDsh({nodeExecutable:wrapper,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath,infoPath,businessHome:root,
   environment:{NOTALONE_SYNTHETIC_PROVIDER_URL:`http://127.0.0.1:${provider.address().port}`,NOTALONE_SYNTHETIC_NETWORK_AUDIT:auditPath},
   sqlite:{userData:root,expectedDatabaseId:databaseId,role:'test',capabilities:['contacts','history','memory']}},()=>true);
- info=await changed(dirname(infoPath),async()=>Object.fromEntries((await readFile(infoPath,'utf8')).trim().split('\n').map(line=>{const n=line.indexOf('=');return [line.slice(0,n),line.slice(n+1)];})),value=>Boolean(value.address&&value.token),{timeoutMs:8000,label:'unknown正式profile握手'});
+ info=await waitForHostReady(host,infoPath,{timeoutMs:8000});
  launchRecord=JSON.parse(await readFile(infoPath+'.dsh-lock','utf8'));
  const profile=await readFile(join(launchRecord.home,'profiles/notalone/cordis.patch.yml'),'utf8'),official=await readFile(new URL('../profile/sqlite.patch.yml',import.meta.url),'utf8');
  assert.equal(profile,official.replace('PLUGIN_PATH',JSON.stringify(resolve('src/sqlite-host-plugin.ts'))));

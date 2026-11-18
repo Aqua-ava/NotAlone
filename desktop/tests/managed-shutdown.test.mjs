@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createServer } from 'node:http';
 import { spawnSync } from 'node:child_process';
+import { syntheticDshProject } from './helpers/synthetic-dsh-project.mjs';
 const directory = await mkdtemp(path.join(tmpdir(), 'notalone-runtime-shutdown-'));
 const built = await build({ stdin: { contents: `export { RuntimeClient } from './src/main/backend/runtime-client'; export { OwnedBackendProcess } from './src/main/backend/process'; export { BackendHost } from './src/main/backend/host'; export { BackendConnectionNote } from './src/renderer/backend-status'; export { renderToStaticMarkup } from 'react-dom/server'; export { createElement } from 'react'; export {configureDiagnosticLog} from '../backend-ts/src/diagnostics/unified'; export {readDiagnosticRecords} from '../backend-ts/src/diagnostics/unified-log.mjs';`, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'cjs', jsx: 'automatic', write: false });
 await writeFile(path.join(directory, 'subject.cjs'), built.outputFiles[0].text);
@@ -32,14 +33,9 @@ for (const throws of [false, true]) test(`后台尚未形成时资料服务停�
 
 test('当前外置启动显式携带SQLite资格并调用DSH入口', async () => {
   const project = path.join(directory, 'default-ts-project');
-  const executable = path.join(project, 'backend-ts/node_modules/@deepseek-ai/dsh/lib/bin.js');
+  const executable = await syntheticDshProject(project);
   const marker = path.join(directory, 'default-ts-started');
-  await mkdir(path.dirname(executable), { recursive: true });
   const userData = path.join(directory, 'default-ts-user'); await mkdir(userData, { recursive: true });
-  await mkdir(path.join(project, 'backend-ts/src'), { recursive: true });
-  await mkdir(path.join(project, 'backend-ts/profile'), { recursive: true });
-  await writeFile(path.join(project, 'backend-ts/src/launch.ts'), '// 合成入口\n');
-  await writeFile(path.join(project, 'backend-ts/profile/sqlite.patch.yml'), '[]\n');
   await writeFile(executable, `require('node:fs').writeFileSync(${JSON.stringify(marker)},'started');setInterval(()=>{},1000);`);
   const child = await OwnedBackendProcess.launch({ source: 'external', projectDirectory: project, sqlite: sqliteConfiguration(userData),
     infoPath: path.join(directory,'default-ts.info') }, () => true);
@@ -107,14 +103,9 @@ test('退出准备失败后迟到连接失败不能重新放开连接入口', as
 
 test('启动缺少SQLite资格时失败关闭，不启动DSH进程', async () => {
   const project = path.join(directory, 'sqlite-unconfigured-project'), userData = path.join(directory, 'sqlite-unconfigured-user');
-  const executable = path.join(project, 'backend-ts/node_modules/@deepseek-ai/dsh/lib/bin.js');
+  const executable = await syntheticDshProject(project);
   const marker = path.join(directory, 'must-not-start');
-  await mkdir(path.dirname(executable), { recursive: true });
-  await mkdir(path.join(project, 'backend-ts/src'), { recursive: true });
-  await mkdir(path.join(project, 'backend-ts/profile'), { recursive: true });
   await mkdir(userData, { recursive: true });
-  await writeFile(path.join(project, 'backend-ts/src/launch.ts'), '// 合成入口\n');
-  await writeFile(path.join(project, 'backend-ts/profile/sqlite.patch.yml'), '[]\n');
   await writeFile(executable, `require('node:fs').writeFileSync(${JSON.stringify(marker)},'started');setInterval(()=>{},1000);`, { mode: 0o700 });
   await assert.rejects(OwnedBackendProcess.launch({ runtime: 'dsh', source: 'external', projectDirectory: project,
     infoPath: path.join(directory, 'sqlite-unconfigured.info') }, () => true), /backend_launch_requires_sqlite/);
@@ -158,13 +149,8 @@ test('已认证旧DSH只保留停读入口，拒绝业务复用并在退出时�
 
 test('已退出后台的遗留握手交由受控启动器复核，不永久阻断重新连接', async () => {
   const project = path.join(directory, 'stale-project'), userData = path.join(directory, 'stale-user');
-  const executable = path.join(project, 'backend-ts/node_modules/@deepseek-ai/dsh/lib/bin.js');
-  await mkdir(path.dirname(executable), { recursive: true });
-  await mkdir(path.join(project, 'backend-ts/src'), { recursive: true });
-  await mkdir(path.join(project, 'backend-ts/profile'), { recursive: true });
+  const executable = await syntheticDshProject(project);
   await mkdir(userData);
-  await writeFile(path.join(project, 'backend-ts/src/launch.ts'), '// 合成入口\n');
-  await writeFile(path.join(project, 'backend-ts/profile/sqlite.patch.yml'), '[]\n');
   await writeFile(executable, `const fs=require('node:fs'),http=require('node:http'),info=process.env.NOTALONE_BACKEND_INFO;
 const server=http.createServer((req,res)=>{
  if(req.headers.authorization!=='Bearer synthetic_token'){res.writeHead(401);res.end('{}');return;}

@@ -5,7 +5,8 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {build} from 'esbuild';
-import {chromium,expect} from '@playwright/test';
+import { expect } from '@playwright/test';
+import { launchChromium } from '../helpers/browser.mjs';
 
 const packageA='aaaaaaaa-1111-4111-8111-000000000001',packageB='bbbbbbbb-1111-4111-8111-000000000002';
 const contactA='cccccccc-1111-4111-8111-000000000001',contactB='dddddddd-1111-4111-8111-000000000002';
@@ -86,7 +87,7 @@ test('控制器拒绝一位联系人同时出现在多个分组的异常回执',
 
 test('联系人分组页：新建、选择回复场景、分配联系人与删除，未分组如实说明',{timeout:30000},async t=>{
  const fake=fakeBackend(),controller=await controllerFor(t,fake.backend);
- const browser=await chromium.launch({headless:true,channel:'chrome'});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage({viewport:{width:1100,height:900}});
  await page.exposeFunction('libraryCommand',(method,...args)=>controller[method](...args));
  const compiled=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{SkillLearningPage}from'./src/renderer/SkillLearningPage';

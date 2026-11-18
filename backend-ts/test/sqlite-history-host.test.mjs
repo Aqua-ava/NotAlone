@@ -10,8 +10,7 @@ test('SQLite能力按contacts、可选skills、可选history读取，拒绝重�
  assert.equal(readSqliteCapabilities(['contacts','history'],root+'/skill-packages',root),undefined);
 });
 
-import {mkdtemp,realpath,rm,readFile} from 'node:fs/promises';
-import {watch} from 'node:fs';
+import {mkdtemp,realpath,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 
@@ -29,6 +28,7 @@ import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {SqliteContactService} from '../src/contacts/sqlite/service.ts';
 import {SqliteHistoryService} from '../src/history/sqlite/service.ts';
 import {launchDsh} from '../src/launch.ts';
+import {waitForHostReady} from './host-readiness-support.mjs';
 const owner='00000000-0000-4000-8000-000000000063';
 const evidence={externalKey:'synthetic-account',identityScheme:'wechat.account.v1',sourceGeneration:'source-1',assurance:'verified',supportProfile:'synthetic-metadata-v1'};
 const createMetadata=()=>({account:async()=>evidence,sessions:async()=>['a','b','c'].map(name=>({externalKey:`friend-${name}`,displayName:`合成${name}`,kind:'private',identityAssurance:'verified'}))});
@@ -53,18 +53,10 @@ async function seed(t,options={}){
  const source=(await history.read(bindings[0].contact_id)).messages.find(message=>message.kind==='text').sourceRecordIds[0];
   await history.close();history=undefined;await contacts.close();contacts=undefined;await storage.close();storage=undefined;return {root,databaseId,bindings,source};
 }
-async function handshake(infoPath){
- return new Promise((resolve,reject)=>{
-  let settled=false;const finish=(error,value)=>{if(settled)return;settled=true;clearTimeout(timer);watcher.close();error?reject(error):resolve(value);};
-  const load=async()=>{try{const text=await readFile(infoPath,'utf8');finish(null,Object.fromEntries(text.trim().split('\n').map(line=>{const index=line.indexOf('=');return [line.slice(0,index),line.slice(index+1)];})));}catch(error){if(error.code!=='ENOENT')finish(error);}};
-  const watcher=watch(path.dirname(infoPath),(_event,file)=>{if(String(file)===path.basename(infoPath))void load();});
-  const timer=setTimeout(()=>finish(new Error('正式history宿主未就绪')),15000);void load();
- });
-}
 async function startHost(t,f,environment={}){
  const infoPath=path.join(f.root,'managed/sqlite-backend.info');
  const host=await launchDsh({nodeExecutable:process.execPath,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath:path.join(f.root,'unused.env'),infoPath,businessHome:f.root,environment,sqlite:{userData:f.root,expectedDatabaseId:f.databaseId,role:'test',capabilities:['contacts','history']}},()=>true);t.after(()=>host.terminate());
- const info=await handshake(infoPath);
+ const info=await waitForHostReady(host,infoPath);
  const request=async(route,method='GET',body,headers={})=>{const response=await fetch(`http://${info.address}`+route,{method,headers:{authorization:`Bearer ${info.token}`,'content-type':'application/json',...headers},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:response.status,body:await response.json()};};
  return {host,request};
 }

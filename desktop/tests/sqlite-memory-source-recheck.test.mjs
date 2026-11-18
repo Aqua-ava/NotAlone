@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
-import {chromium} from '@playwright/test';
+import { launchChromium } from './helpers/browser.mjs';
 
 const contact='11111111-1111-4111-8111-111111111111',id='22222222-2222-4222-8222-222222222222';
 const source={contactId:contact,messageId:id,recordId:id,acceptedRevision:'1',quote:'合成原话证据',sentAt:String(Date.parse('2026-10-28T12:00:00Z')),timePrecision:'second'};
@@ -11,7 +11,7 @@ const view=current=>({connectionGeneration:1,scope:{scopeKind:'contact',contactI
 
 async function panel(t,command,inspect){
  const compiled=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {SqliteMemoryManagementPanel} from './src/renderer/SqliteMemoryManagementPanel';const listeners=new Set();window.invalidate=()=>{for(const fn of listeners)fn();};const bridge={read:(...args)=>window.command('read',...args),decide:(...args)=>window.command('decide',...args),release:async()=>{},onInvalidated:fn=>{listeners.add(fn);return()=>listeners.delete(fn);}};createRoot(document.getElementById('root')).render(<SqliteMemoryManagementPanel bridge={bridge} contactId="${contact}" scopeRevision={1} visible={true}/>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
- const browser=await chromium.launch({channel:'chrome',headless:true,timeout:10000});t.after(()=>browser.close());
+ const browser=await launchChromium({ timeout: 10000 });t.after(()=>browser.close());
  const page=await browser.newPage();page.setDefaultTimeout(4000);
  const errors=[];page.on('pageerror',error=>errors.push(error.message));
  await page.exposeFunction('command',command);

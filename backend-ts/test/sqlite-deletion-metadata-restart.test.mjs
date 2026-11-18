@@ -1,8 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { mkdtemp, realpath, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { setTimeout as delay } from 'node:timers/promises';
 import path from 'node:path';
 import { fixture, owner } from './fixtures/memory-sqlite/support.mjs';
 import { SqliteStorage } from '../src/storage/sqlite/client.ts';
@@ -11,6 +10,7 @@ import { DeletionService } from '../src/storage/sqlite/deletion/service.ts';
 import { ActiveHolders } from '../src/storage/sqlite/deletion/holders.ts';
 import { ManagedFiles } from '../src/storage/sqlite/deletion/managed-files.ts';
 import { launchDsh } from '../src/launch.ts';
+import { waitForHostReady } from './host-readiness-support.mjs';
 import { DatabaseSync } from 'node:sqlite';
 
 test('宿主级负例：手写未完成 contact 删除后重启仍返回 409 identity_closed', async t => {
@@ -29,7 +29,7 @@ test('宿主级负例：手写未完成 contact 删除后重启仍返回 409 ide
     envFilePath: path.join(root, 'unused.env'), infoPath, businessHome: root, environment: {},
     sqlite: { userData: root, expectedDatabaseId: databaseId(root), role: 'test', capabilities: ['contacts'] } }, () => true);
   t.after(() => host.terminate());
-  const info = await handshake(host, infoPath);
+  const info = await waitForHostReady(host, infoPath);
   const get = async route => {
     const response = await fetch(`http://${info.address}${route}`, { headers: { Authorization: `Bearer ${info.token}` } });
     return { status: response.status, body: await response.json().catch(() => null) };
@@ -41,16 +41,6 @@ test('宿主级负例：手写未完成 contact 删除后重启仍返回 409 ide
   assert.equal(bindings.status, 409);
   assert.equal(bindings.body.error, 'identity_closed');
 });
-
-async function handshake(host, infoPath) {
-  const until = Date.now() + 15000;
-  while (Date.now() < until && host.isRunning()) {
-    try { return Object.fromEntries((await readFile(infoPath, 'utf8')).trim().split('\n').map(line => { const i = line.indexOf('='); return [line.slice(0, i), line.slice(i + 1)]; })); }
-    catch (error) { if (error.code !== 'ENOENT') throw error; }
-    await delay(50);
-  }
-  assert.fail('清空未完成后重启的 SQLite 宿主未就绪');
-}
 
 test('清空聊天 blocked 操作跨重启不再关闭联系人/绑定读取，删除进度仍可见', async t => {
   const f = await fixture(t);
@@ -75,7 +65,7 @@ test('清空聊天 blocked 操作跨重启不再关闭联系人/绑定读取，�
     envFilePath, infoPath, businessHome: f.root, environment: {}, sqlite: { userData: f.root, expectedDatabaseId: databaseId(f.root), role: 'test',
       capabilities: ['contacts', 'history', 'memory'] } }, () => true);
   t.after(() => host.terminate());
-  const info = await handshake(host, infoPath);
+  const info = await waitForHostReady(host, infoPath);
   const request = async route => {
     const response = await fetch(`http://${info.address}${route}`, { headers: { Authorization: `Bearer ${info.token}` } });
     return { status: response.status, body: await response.json().catch(() => null) };
@@ -132,7 +122,7 @@ test('宿主级正例：联系人已封禁的未完成删除跨重启后名单�
     envFilePath: path.join(f.root, 'unused.env'), infoPath, businessHome: f.root, environment: {},
     sqlite: { userData: f.root, expectedDatabaseId: databaseId(f.root), role: 'test', capabilities: ['contacts'] } }, () => true);
   t.after(() => host.terminate());
-  const info = await handshake(host, infoPath);
+  const info = await waitForHostReady(host, infoPath);
   const request = async (route, method = 'GET', body) => {
     const response = await fetch(`http://${info.address}${route}`, { method, headers: { Authorization: `Bearer ${info.token}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     return { status: response.status, body: await response.json().catch(() => null) };
@@ -165,7 +155,7 @@ test('宿主级负例：未完成账户删除跨重启仍关闭名单读取', as
     envFilePath: path.join(root, 'unused.env'), infoPath, businessHome: root, environment: {},
     sqlite: { userData: root, expectedDatabaseId: databaseId(root), role: 'test', capabilities: ['contacts'] } }, () => true);
   t.after(() => host.terminate());
-  const info = await handshake(host, infoPath);
+  const info = await waitForHostReady(host, infoPath);
   const response = await fetch(`http://${info.address}/api/contacts`, { headers: { Authorization: `Bearer ${info.token}` } });
   assert.equal(response.status, 409);
   assert.equal((await response.json()).error, 'identity_closed');

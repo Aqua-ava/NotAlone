@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {build} from 'esbuild';
-import {chromium,expect} from '@playwright/test';
+import { expect } from '@playwright/test';
+import { launchChromium } from './helpers/browser.mjs';
 const contactA='11111111-1111-4111-8111-111111111111',contactB='22222222-2222-4222-8222-222222222222',sessionA='33333333-3333-4333-8333-333333333333',sessionB='44444444-4444-4444-8444-444444444444';
 test('实际React讨论表单保留失败请求key，范围或来源失效撤下草稿并丢弃迟到结果',{timeout:30000},async t=>{
  const compiled=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{SqliteDiscussionComposer}from'./src/renderer/SqliteDiscussionComposer';
@@ -12,7 +13,7 @@ test('实际React讨论表单保留失败请求key，范围或来源失效撤下
   const render=()=>root.render(React.createElement(SqliteDiscussionComposer,props));window.__invalidate=()=>received?.({revision:2,contactId:props.contactId,scopeRevision:props.scopeRevision});
   window.__switch=()=>{props={...props,contactId:${JSON.stringify(contactB)},scopeRevision:2,sessionId:${JSON.stringify(sessionB)}};render();};render();`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',write:false,logLevel:'silent'});
  const server=createServer((_req,res)=>{res.setHeader('content-type','text/html');res.end('<div id="root"></div>');});server.listen(0,'127.0.0.1');await once(server,'listening');t.after(()=>new Promise(resolve=>server.close(resolve)));
- const browser=await chromium.launch({headless:true,executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'});t.after(()=>browser.close());const page=await browser.newPage(),submissions=[],completed=[],gate=Promise.withResolvers();
+ const browser=await launchChromium();t.after(()=>browser.close());const page=await browser.newPage(),submissions=[],completed=[],gate=Promise.withResolvers();
  await page.exposeFunction('__submit',async request=>{submissions.push(request);if(submissions.length===1||submissions.length===4)throw new Error('合成网络失败');if(submissions.length===2)return gate.promise;return {sessionId:request.sessionId,requestKey:request.requestKey,segmented:false,replayed:submissions.length===5};});
  await page.exposeFunction('__submitted',receipt=>completed.push(receipt));await page.goto(`http://127.0.0.1:${server.address().port}`);await page.addScriptTag({content:compiled.outputFiles[0].text});
  const input=page.getByRole('textbox',{name:'讨论内容'});await input.fill('合成讨论要求');await page.getByRole('button',{name:'与此联系人讨论',exact:true}).click();

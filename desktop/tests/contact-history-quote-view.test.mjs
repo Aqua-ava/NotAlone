@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { build } from 'esbuild';
-import { chromium, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { launchChromium } from './helpers/browser.mjs';
 
 test('联系人聊天把引用作者与回复正文分开显示，并在切换联系人时清除旧内容', async t => {
   const bundle = await build({ stdin: { contents: `
@@ -56,7 +57,7 @@ test('联系人聊天把引用作者与回复正文分开显示，并在切换�
     }
     initialize();
   `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', outfile: 'contact-history-quote-view-test.js', jsx: 'automatic', write: false, logLevel: 'silent' });
-  const browser = await chromium.launch({ headless: true, channel: 'chrome' });
+  const browser = await launchChromium();
   t.after(() => browser.close());
   const page = await browser.newPage();
   await page.setContent('<style>:root{--panel-border:#c4d3d6;--panel-radius:12px;--panel-background:#fffdf5;--panel-heading:#354d59}</style><div id="root"></div>');

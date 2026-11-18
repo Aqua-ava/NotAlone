@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
-import {chromium} from '@playwright/test';
+import { launchChromium } from './helpers/browser.mjs';
 
 /** 开关组件与面板提示在真实 Chromium 中的行为；桥为合成桩，不连接后端。 */
 async function withSwitch(t,command,inspect){
@@ -16,7 +16,7 @@ async function withSwitch(t,command,inspect){
   new MutationObserver(()=>document.querySelectorAll('details.memory-processing-disclosure').forEach(node=>{node.open=true;})).observe(document.getElementById('root'),{childList:true,subtree:true});
   createRoot(document.getElementById('root')).render(<MemoryProcessingEntry bridge={bridge} backend={{onStateChanged:()=>()=>{}}} contactId="33333333-3333-4333-8333-333333333333" releaseOnUnmount={false}>{null}</MemoryProcessingEntry>);`,
   resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
- const browser=await chromium.launch({channel:'chrome',headless:true,timeout:10000});t.after(()=>browser.close());
+ const browser=await launchChromium({ timeout: 10000 });t.after(()=>browser.close());
  const page=await browser.newPage();page.setDefaultTimeout(4000);
  const errors=[];page.on('pageerror',error=>errors.push(error.message));
  await page.exposeFunction('command',command);

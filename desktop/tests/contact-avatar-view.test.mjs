@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { chromium, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { launchChromium } from './helpers/browser.mjs';
 
 async function mount(t, { count = 1, offscreen = false, hold = false, outcome = 'image', controlledVisibility = false } = {}) {
   const bundle = await build({ stdin: { contents: `
@@ -39,7 +40,7 @@ async function mount(t, { count = 1, offscreen = false, hold = false, outcome = 
       </>;
     };root.render(<App/>);
   `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', write: false, outdir: 'avatar-view' });
-  const browser = await chromium.launch({ channel: 'chrome', headless: true }); t.after(() => browser.close());
+  const browser = await launchChromium(); t.after(() => browser.close());
   const page = await browser.newPage({ viewport: { width: 400, height: 500 } });
   await page.setContent('<div id="root"></div>');
   await page.addStyleTag({ content: bundle.outputFiles.find(file => file.path.endsWith('.css')).text });

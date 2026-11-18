@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test, after } from 'node:test';
 import { build } from 'esbuild';
-import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { syntheticDshProject } from './helpers/synthetic-dsh-project.mjs';
 const directory = await mkdtemp(path.join(tmpdir(), 'notalone-start-budget-'));
 const built = await build({ entryPoints: ['src/main/backend/host.ts'], bundle: true, platform: 'node', format: 'esm', write: false });
 await writeFile(path.join(directory, 'host.mjs'), built.outputFiles[0].text);
@@ -13,14 +14,10 @@ const alive = pid => { try { process.kill(pid, 0); return true; } catch { return
 async function subject(name, delay, failureStage) {
   const userData = path.join(directory, name), resources = path.join(userData, 'resources');
   const root = path.join(resources, 'notalone-runtime'), marker = path.join(userData, 'owned-pid');
-  await mkdir(path.join(root, 'project/backend-ts/src'), { recursive: true });
-  await mkdir(path.join(root, 'project/backend-ts/profile'), { recursive: true });
-  await writeFile(path.join(root, 'project/backend-ts/src/launch.ts'), '// 合成入口\n');
-  await writeFile(path.join(root, 'project/backend-ts/profile/sqlite.patch.yml'), '[]\n');
+  const executable = await syntheticDshProject(path.join(root, 'project'));
   await writeFile(path.join(userData, 'backend-launch.json'), JSON.stringify({
     projectDirectory: path.join(root, 'project'), backendInfoPath: path.join(userData, 'backend.info') }));
-  await mkdir(path.join(root, 'project/backend-ts/node_modules/@deepseek-ai/dsh/lib'), { recursive: true });
-  await writeFile(path.join(root, 'project/backend-ts/node_modules/@deepseek-ai/dsh/lib/bin.js'), `#!${process.execPath}\n
+  await writeFile(executable, `#!${process.execPath}\n
 const fs=require('node:fs'),http=require('node:http');
 const info=process.env.NOTALONE_BACKEND_INFO;
 fs.writeFileSync(${JSON.stringify(marker)},String(process.pid));

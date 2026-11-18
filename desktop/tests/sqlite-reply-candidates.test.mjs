@@ -4,7 +4,8 @@ import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {readFile} from 'node:fs/promises';
 import {build} from 'esbuild';
-import {chromium,expect} from '@playwright/test';
+import { expect } from '@playwright/test';
+import { launchChromium } from './helpers/browser.mjs';
 
 const ids={contact:'11111111-1111-4111-8111-111111111111',other:'22222222-2222-4222-8222-222222222222',session:'33333333-3333-4333-8333-333333333333',otherSession:'44444444-4444-4444-8444-444444444444',candidate:'55555555-5555-4555-8555-555555555555',request:'66666666-6666-4666-8666-666666666666',selection:'77777777-7777-4777-8777-777777777777',skill:'88888888-8888-4888-8888-888888888888',otherSkill:'99999999-9999-4999-8999-999999999999'};
 const original=()=>({candidateId:ids.candidate,versionNo:1,origin:'model',parentVersionNo:null,parts:['合成候选第一条','合成候选第二条'],basis:[{itemNo:1,kind:'message',text:'同联系人实际输入依据',verification:'actual_input'}]});
@@ -433,7 +434,7 @@ async function panel(t,execute,initialDraft='',assistant=false,styled=false,prof
   const render=()=>{const view=${assistant}?React.createElement(AssistantSessionPanel,{replies:{...replies,state}}):React.createElement(SqliteReplyCandidatesPanel,props);root.render(${profiled}?React.createElement(React.Profiler,{id:'candidate-workspace',onRender:profile},view):view);};window.__invalidate=()=>{for(const listener of listeners)listener({revision:2,contactId:props.contactId,scopeRevision:props.scopeRevision});};
   window.__setDisabled=disabled=>{props={...props,disabled};render();};window.__switch=()=>{props={...props,contactId:${JSON.stringify(ids.other)},scopeRevision:2,sessionId:${JSON.stringify(ids.otherSession)}};render();};render();`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
  const server=createServer((_req,res)=>{res.setHeader('content-type','text/html');res.end(styled?'<meta name="viewport" content="width=device-width, initial-scale=1"><div class="ime-pane"><main class="ime-workspace"><div id="root"></div></main></div>':'<div id="root"></div>');});server.listen(0,'127.0.0.1');await once(server,'listening');
- const browser=await chromium.launch({headless:true,executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'});t.after(async()=>{await browser.close();await new Promise(resolve=>server.close(resolve));});
+ const browser=await launchChromium();t.after(async()=>{await browser.close();await new Promise(resolve=>server.close(resolve));});
  const page=await browser.newPage();page.setDefaultTimeout(5000);const commands=[],submitted=[];
  await page.exposeFunction('__execute',async request=>{commands.push(request);return execute(request,commands);});await page.exposeFunction('__submitted',value=>submitted.push(value));
  await page.goto(`http://127.0.0.1:${server.address().port}`);

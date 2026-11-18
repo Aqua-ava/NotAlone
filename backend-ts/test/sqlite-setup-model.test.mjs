@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import {mkdtemp,realpath,rm,readFile,writeFile,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {setTimeout as delay} from 'node:timers/promises';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {launchDsh} from '../src/launch.ts';
+import {waitForHostReady} from './host-readiness-support.mjs';
 
 test('SQLite 正式宿主提供模型设置，保存后重开生效且不泄露密钥',async t=>{
  const root=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-setup-model-')));t.after(()=>rm(root,{recursive:true,force:true}));
@@ -14,9 +14,7 @@ test('SQLite 正式宿主提供模型设置，保存后重开生效且不泄露�
  await writeFile(envFilePath,'UNRELATED=keep\n',{mode:0o600});
  const config={nodeExecutable:process.execPath,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath,infoPath,businessHome:root,environment:{},sqlite:{userData:root,expectedDatabaseId:databaseId,role:'test',capabilities:['contacts','discussions','memory']}};
  async function start(){
-  const host=await launchDsh(config,()=>true);t.after(()=>host.terminate());let info;
-  for(let i=0;i<200&&host.isRunning();i++){try{info=Object.fromEntries((await readFile(infoPath,'utf8')).trim().split('\n').map(line=>{const k=line.indexOf('=');return [line.slice(0,k),line.slice(k+1)];}));break;}catch(e){if(e.code!=='ENOENT')throw e;await delay(50);}}
-  assert.ok(info,'宿主没有就绪');const request=async(route,body,headers={})=>{const res=await fetch(`http://${info.address}`+route,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${info.token}`,...(body?{'content-type':'application/json'}:{}),...headers},body:body?JSON.stringify(body):undefined});return {status:res.status,data:await res.json()};};
+  const host=await launchDsh(config,()=>true);t.after(()=>host.terminate());const info=await waitForHostReady(host,infoPath);const request=async(route,body,headers={})=>{const res=await fetch(`http://${info.address}`+route,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${info.token}`,...(body?{'content-type':'application/json'}:{}),...headers},body:body?JSON.stringify(body):undefined});return {status:res.status,data:await res.json()};};
   return {host,request};
  }
  let running=await start();let result=await running.request('/api/setup/status');

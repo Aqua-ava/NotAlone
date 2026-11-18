@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { build } from 'esbuild';
+import { launchChromium, mountBundle } from './helpers/browser.mjs';
 
 test('准备期联系人资格核实保留独立草稿，换联系人不继承旧草稿或资格', async t => {
-  const { chromium, expect } = await import('@playwright/test');
-  const browser = await chromium.launch({ headless: true, executablePath: process.env.NOTALONE_TEST_CHROMIUM_PATH });
+  const { expect } = await import('@playwright/test');
+  const browser = await launchChromium();
   t.after(() => browser.close());
   const page = await browser.newPage();
   const bundle = await build({ stdin: { contents: `
@@ -31,8 +32,7 @@ test('准备期联系人资格核实保留独立草稿，换联系人不继承�
     }
     createRoot(document.getElementById('root')).render(<View/>);
   `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', write: false });
-  await page.setContent('<div id="root"></div>');
-  await page.addScriptTag({ content: bundle.outputFiles[0].text });
+  await mountBundle(page, bundle);
   const draft = page.getByRole('textbox', { name: '有什么想说的', exact: true });
   await draft.fill('甲的独立本地想法');
   await expect(page.getByRole('button', { name: '帮我表达', exact: true })).toHaveCount(0);
@@ -52,8 +52,8 @@ test('准备期联系人资格核实保留独立草稿，换联系人不继承�
 });
 
 test('旧讨论加载失败后可重试或开始新讨论，期间写下的独立想法始终留在输入区', async t => {
-  const { chromium, expect } = await import('@playwright/test');
-  const browser = await chromium.launch({ headless: true, executablePath: process.env.NOTALONE_TEST_CHROMIUM_PATH });
+  const { expect } = await import('@playwright/test');
+  const browser = await launchChromium();
   t.after(() => browser.close());
   const page = await browser.newPage();
   const bundle = await build({ stdin: { contents: `
@@ -76,8 +76,7 @@ test('旧讨论加载失败后可重试或开始新讨论，期间写下的独�
     }
     createRoot(document.getElementById('root')).render(<View/>);
   `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', write: false });
-  await page.setContent('<div id="root"></div>');
-  await page.addScriptTag({ content: bundle.outputFiles[0].text });
+  await mountBundle(page, bundle);
   const draft = page.getByRole('textbox', { name: '有什么想说的', exact: true });
   const express = page.getByRole('button', { name: '帮我表达', exact: true });
   const suggest = page.getByRole('button', { name: '帮我想想', exact: true });
@@ -99,8 +98,8 @@ test('旧讨论加载失败后可重试或开始新讨论，期间写下的独�
 });
 
 test('讨论恢复先于草稿回显时保留新按键，明确删除和切换范围仍清除输入', async t => {
-  const { chromium, expect } = await import('@playwright/test');
-  const browser = await chromium.launch({ headless: true, executablePath: process.env.NOTALONE_TEST_CHROMIUM_PATH });
+  const { expect } = await import('@playwright/test');
+  const browser = await launchChromium();
   t.after(() => browser.close());
   const page = await browser.newPage();
   const bundle = await build({ stdin: { contents: `
@@ -128,8 +127,7 @@ test('讨论恢复先于草稿回显时保留新按键，明确删除和切换�
     }
     createRoot(document.getElementById('root')).render(<View/>);
   `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', write: false });
-  await page.setContent('<div id="root"></div>');
-  await page.addScriptTag({ content: bundle.outputFiles[0].text });
+  await mountBundle(page, bundle);
   const draft = page.getByRole('textbox', { name: '有什么想说的', exact: true });
   await draft.fill('等待回显的新想法');
   await page.getByRole('button', { name: '完成讨论读取', exact: true }).click();

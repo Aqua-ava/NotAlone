@@ -6,6 +6,7 @@ import path from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { SqliteStorage } from '../src/storage/sqlite/client.ts';
 import { launchDsh } from '../src/launch.ts';
+import { waitForHostReady } from './host-readiness-support.mjs';
 import { SqliteContactService } from '../src/contacts/sqlite/service.ts';
 
 test('官方profile启动失败保留脱敏阶段诊断，清理临时home且成功重试清除旧诊断', {timeout:30000}, async t => {
@@ -35,22 +36,12 @@ test('官方profile启动失败保留脱敏阶段诊断，清理临时home且成
     await assert.rejects(access(infoPath+'.dsh-lock'),{code:'ENOENT'});
   }
   const host=await launchDsh(config,()=>true);t.after(()=>host.terminate());
-  const info=await handshake(host,infoPath);
+  const info=await waitForHostReady(host,infoPath);
   await assert.rejects(access(infoPath+'.startup-diagnostic.json'),{code:'ENOENT'});
   await fetch(`http://${info.address}/api/runtime/shutdown`,{method:'POST',headers:{Authorization:`Bearer ${info.token}`}});
   assert.equal(await host.waitForExit(10000),true);
   await assert.rejects(access(infoPath+'.startup-diagnostic.json'),{code:'ENOENT'});
 });
-
-async function handshake(host, infoPath) {
-  const until = Date.now() + 15000;
-  while (Date.now() < until && host.isRunning()) {
-    try { return Object.fromEntries((await readFile(infoPath,'utf8')).trim().split('\n').map(line=>{const split=line.indexOf('=');return [line.slice(0,split),line.slice(split+1)];})); }
-    catch(error) { if(error.code!=='ENOENT')throw error; }
-    await delay(50);
-  }
-  assert.fail('官方 SQLite 联系人宿主未在有界时间内就绪');
-}
 
 test('认证停读先接纳，等待在途请求排空后由原状态接口确认退出', {timeout:20000},async t=>{
  const {request:httpRequest}=await import('node:http');
@@ -62,7 +53,7 @@ test('认证停读先接纳，等待在途请求排空后由原状态接口确�
  host=await launchDsh({nodeExecutable:process.execPath,projectDirectory:new URL('../../',import.meta.url).pathname,
   envFilePath:path.join(root,'unused.env'),infoPath,businessHome:root,environment:{},
   sqlite:{userData:root,expectedDatabaseId:databaseId,role:'test',capabilities:['contacts']}},()=>true);
- const info=await handshake(host,infoPath),base=`http://${info.address}`,headers={Authorization:`Bearer ${info.token}`};
+ const info=await waitForHostReady(host,infoPath),base=`http://${info.address}`,headers={Authorization:`Bearer ${info.token}`};
  const request=(route,method='GET')=>fetch(base+route,{method,headers,signal:AbortSignal.timeout(1500)});
  const ready=await (await request('/api/runtime/status')).json();assert.equal(ready.shutdownProtocol,'poll-v1');
  assert.equal((await fetch(base+'/api/runtime/shutdown/begin',{method:'POST'})).status,401);
@@ -100,7 +91,7 @@ test('正式宿主复验预检本人身份，不匹配时保留原库并拒绝�
  const diagnostic=JSON.parse(await readFile(infoPath+'.startup-diagnostic.json','utf8'));
  assert.equal(diagnostic.stage,'storage');assert.equal(diagnostic.cause,'storage_mismatch');
  host=await launchDsh({...config,sqlite:{...config.sqlite,expectedOwnerId:ownerId}},()=>true);
- const info=await handshake(host,infoPath),headers={Authorization:`Bearer ${info.token}`};
+ const info=await waitForHostReady(host,infoPath),headers={Authorization:`Bearer ${info.token}`};
  const setup=await(await fetch(`http://${info.address}/api/setup/status`,{headers})).json();assert.equal(setup.owner_id,ownerId);
  const status=await(await fetch(`http://${info.address}/api/runtime/status`,{headers})).json();
  assert.deepEqual(status.storageIdentity,{databaseId,ownerId,available:true});
@@ -140,7 +131,7 @@ test('显式SQLite联系人使用官方DSH最小profile，认证、关闭和重�
   let firstOwner;
   for(let attempt=0;attempt<2;attempt++) {
     const host=await launchDsh(config,()=>true);t.after(()=>host.terminate());
-    const info=await handshake(host,infoPath);
+    const info=await waitForHostReady(host,infoPath);
     const url=`http://${info.address}`;
     const request=(route,options={})=>fetch(url+route,{...options,headers:{Authorization:`Bearer ${info.token}`,...options.headers}});
     assert.equal((await fetch(url+'/api/runtime/status')).status,401);
@@ -192,12 +183,11 @@ test('SQLite官方profile随父宿主EOF退出并清理握手和临时home', asy
   const pid=await new Promise((resolve,reject)=>{parent.once('message',message=>resolve(message.pid));parent.once('exit',()=>reject(new Error('合成父宿主提前退出')));});
   const running=()=>{try{process.kill(pid,0);return true;}catch{return false;}};
   t.after(()=>{if(running())process.kill(pid,'SIGTERM');});
-  await handshake({isRunning:running},config.infoPath);
+  const host={pid,isRunning:running,waitForExit:async timeoutMs=>{const until=Date.now()+timeoutMs;while(running()&&Date.now()<until)await delay(50);return !running();}};
+  await waitForHostReady(host,config.infoPath);
   const record=JSON.parse(await readFile(config.infoPath+'.dsh-lock','utf8'));
   const exited=new Promise(resolve=>parent.once('exit',resolve));parent.kill('SIGKILL');await exited;
-  const until=Date.now()+15000;
-  while(running()&&Date.now()<until)await delay(50);
-  assert.equal(running(),false);
+  assert.equal(await host.waitForExit(15000),true);
   await assert.rejects(access(config.infoPath),{code:'ENOENT'});
   await assert.rejects(access(record.home),{code:'ENOENT'});
 });
@@ -214,7 +204,7 @@ test('SQLite正式宿主默认核验启用外置Skill，CAS停用再启用可重
   sqlite:{userData:root,expectedDatabaseId:databaseId,role:'test',capabilities:['contacts','skills'],skillPackageRoot}};
  let packageId;
  for(let attempt=0;attempt<2;attempt++){
-  const host=await launchDsh(config,()=>true);t.after(()=>host.terminate());const info=await handshake(host,infoPath);
+  const host=await launchDsh(config,()=>true);t.after(()=>host.terminate());const info=await waitForHostReady(host,infoPath);
   const request=async(route,body)=>{const res=await fetch(`http://${info.address}`+route,{method:body?'POST':'GET',headers:{Authorization:`Bearer ${info.token}`,'content-type':'application/json'},body:body?JSON.stringify(body):undefined});return {status:res.status,body:await res.json()};};
   const status=(await request('/api/runtime/status')).body;assert.deepEqual(status.capabilities,['contacts','skills']);assert.equal(status.ownership.skills,'typescript');assert.equal(status.ownership.skillLearning,'unavailable');
   let view=(await request('/api/skills')).body;assert.equal(view.mode,'minimal');
@@ -263,7 +253,7 @@ test('正常DSH运行中账号DELETE真实compact并公开复核，Skill元数�
   host=await launchDsh({nodeExecutable:process.execPath,projectDirectory:new URL('../../',import.meta.url).pathname,
    envFilePath:path.join(root,'unused.env'),infoPath,businessHome:root,environment:{},
    sqlite:{userData:root,expectedDatabaseId:databaseId,role:'test',capabilities:withSkill?['contacts','skills']:['contacts'],...(withSkill?{skillPackageRoot}:{})}},()=>true);
-  const info=await handshake(host,infoPath);
+  const info=await waitForHostReady(host,infoPath);
   const request=(route,method='GET',body,extra={})=>fetch(`http://${info.address}`+route,{method,headers:{Authorization:`Bearer ${info.token}`,'content-type':'application/json',...extra},...(body===undefined?{}:{body:JSON.stringify(body)})});
   const ownerId=(await (await request('/api/setup/status')).json()).owner_id;
   assert.equal((await request('/api/deletions')).status,200);
@@ -326,7 +316,7 @@ test('SQLite宿主开放前台观察入口，关闭同步时不运行探针且�
  const probe=path.join(root,'probe');await writeFile(probe,'#!/bin/sh\nexit 99\n');await chmod(probe,0o700);
  const storage=await SqliteStorage.open({userData:root,intent:'create',role:'test'}),databaseId=storage.status.databaseId;await storage.close();
  const infoPath=path.join(root,'managed/sqlite-backend.info'),config={nodeExecutable:process.execPath,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath:path.join(root,'unused.env'),infoPath,businessHome:root,environment:{NOTALONE_SYNC_PROBE:probe},sqlite:{userData:root,expectedDatabaseId:databaseId,role:'test',capabilities:['contacts','history']}};
- const host=await launchDsh(config,()=>true);t.after(()=>host.terminate());const info=await handshake(host,infoPath),headers={Authorization:`Bearer ${info.token}`,'content-type':'application/json'};
+ const host=await launchDsh(config,()=>true);t.after(()=>host.terminate());const info=await waitForHostReady(host,infoPath),headers={Authorization:`Bearer ${info.token}`,'content-type':'application/json'};
  const recovery=`http://${info.address}/api/sync/foreground/permission-restored`;
  assert.equal((await fetch(recovery,{method:'POST',headers:{'content-type':'application/json'},body:'{}'})).status,401);
  assert.equal((await fetch(recovery,{headers})).status,405);

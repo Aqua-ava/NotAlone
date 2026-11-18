@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { build } from 'esbuild';
-import { chromium, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { launchChromium } from './helpers/browser.mjs';
 
 const contactId = '11111111-1111-4111-8111-111111111111';
 const sessionId = '33333333-3333-4333-8333-333333333333';
@@ -42,7 +43,7 @@ test('已选联系人会话待核对时直接只读恢复，保留草稿且不�
     finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
-  browser = await chromium.launch({ headless: true, executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
+  browser = await launchChromium();
   const page = await browser.newPage(); page.setDefaultTimeout(5000);
   await page.goto(`http://127.0.0.1:${server.address().port}`); await page.addScriptTag({ content: compiled.outputFiles[0].text });
   const history=page.locator('details.session-browser'),workspace=page.getByRole('region',{name:'表达工作区'});
@@ -110,7 +111,7 @@ test('正式讨论面板从历史回看显式继续，分段回执重新读取�
     finally { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); }
   });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
-  browser = await chromium.launch({ headless: true, executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
+  browser = await launchChromium();
   const page = await browser.newPage(); const submissions = [];
   await page.exposeFunction('__submit', async request => { submissions.push(request); return { sessionId: submissions.length === 1 ? nextSessionId : sessionId, segmented: submissions.length === 1, replayed: submissions.length > 1, requestKey: request.requestKey }; });
   await page.goto(`http://127.0.0.1:${server.address().port}`); await page.addScriptTag({ content: compiled.outputFiles[0].text });

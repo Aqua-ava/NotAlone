@@ -3,7 +3,8 @@ import { createServer } from 'node:http';
 import { once } from 'node:events';
 import test from 'node:test';
 import { build } from 'esbuild';
-import { chromium, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { launchChromium } from './helpers/browser.mjs';
 
 test('SQLite会话先显示表达工作区，讨论输入与空状态收在折叠的助手讨论中', { timeout: 30000 }, async t => {
   const compiled = await build({ stdin: { contents: `
@@ -35,7 +36,7 @@ test('SQLite会话先显示表达工作区，讨论输入与空状态收在折�
   });
   server.listen(0, '127.0.0.1'); await once(server, 'listening');
   t.after(() => new Promise(resolve => server.close(resolve)));
-  const browser = await chromium.launch({ headless: true, executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' });
+  const browser = await launchChromium();
   t.after(() => browser.close());
   const page = await browser.newPage(); page.setDefaultTimeout(5000);
   await page.exposeFunction('__candidateExecute', async request => {

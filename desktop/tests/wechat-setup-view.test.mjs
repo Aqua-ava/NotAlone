@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { build } from 'esbuild';
-import { chromium, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { launchChromium, mountBundle } from './helpers/browser.mjs';
 async function pageFixture(t, phase='needs_detection', selectionOnly=false, failureCode=null) {
- const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage();
  const bundle=await build({stdin:{contents:`
  import React from 'react';import {createRoot} from 'react-dom/client';import {WechatSetupPanel} from './src/renderer/WechatSetupPanel';
@@ -14,7 +15,7 @@ async function pageFixture(t, phase='needs_detection', selectionOnly=false, fail
  confirm:async value=>{window.calls.push(value);window.update({phase:'connected'});},retryRestart:async()=>window.calls.push('retry')};
  createRoot(document.getElementById('root')).render(<WechatSetupPanel bridge={bridge} selectionOnly={${selectionOnly}} onSelectContacts={()=>window.calls.push('selectContacts')}><button>同步总开关</button></WechatSetupPanel>);
  `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',write:false,loader:{'.css':'empty'}});
- await page.setContent('<div id="root"></div>');await page.addScriptTag({content:bundle.outputFiles[0].text});return page;
+ await mountBundle(page, bundle);return page;
 }
 
 test('同账号来源连续性失效明确说明来源变化，不误报为微信账号不一致',async t=>{
@@ -40,7 +41,7 @@ test('来源换代显示明确重确认且默认不勾选，连接本身不恢�
 });
 
 test('名单失败不显示空列表，明确全选只覆盖当前未添加私聊', async t => {
- const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage();
  const bundle=await build({stdin:{contents:`
  import React,{useState} from 'react';import {createRoot} from 'react-dom/client';import {BindingConsentPage} from './src/renderer/BindingConsentPage';
@@ -49,7 +50,7 @@ test('名单失败不显示空列表，明确全选只覆盖当前未添加私�
  return <BindingConsentPage contacts={{state:{contacts:[]}}} consent={{state,selection,setSelection,refresh:async()=>{},confirm:async()=>window.calls.push(selection)}} navigate={()=>{}} onClose={()=>{}}/>;}
  createRoot(document.getElementById('root')).render(<App/>);
  `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',write:false,loader:{'.css':'empty'}});
- await page.setContent('<div id="root"></div>');await page.addScriptTag({content:bundle.outputFiles[0].text});
+ await mountBundle(page, bundle);
  await expect(page.getByText('当前没有可添加的微信会话。',{exact:true})).toHaveCount(0);
  await expect(page.getByText(/会话名单读取失败/)).toBeVisible();
  await page.evaluate(()=>window.publish({sessionIssue:null,sessions:['a','b'].map(locator=>({locator,displayName:'合成'+locator,boundContactId:null}))}));
@@ -90,7 +91,7 @@ test('普通已连接状态不会触发首次联系人选择',async t=>{
 });
 
 test('首次连接成功直接进入联系人选择并读取会话名单，选择确认前不开始正文同步',async t=>{
- const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage();
  const bundle=await build({stdin:{contents:`
  import React,{useState} from 'react';import {createRoot} from 'react-dom/client';
@@ -118,7 +119,7 @@ test('首次连接成功直接进入联系人选择并读取会话名单，选�
      : <ContactsPage session={session} navigate={()=>{}} initialSelection onSelectionClosed={()=>setPage('contacts')}/>;}
  createRoot(document.getElementById('root')).render(<App/>);
  `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',write:false,loader:{'.css':'empty'}});
- await page.setContent('<div id="root"></div>');await page.addScriptTag({content:bundle.outputFiles[0].text});
+ await mountBundle(page, bundle);
  await page.getByRole('button',{name:'检测微信账号',exact:true}).click();
  await page.getByRole('button',{name:'确认账号并选择联系人',exact:true}).click();
  await expect(page.getByRole('heading',{name:'选择要同步的联系人',exact:true})).toBeVisible();
@@ -201,7 +202,7 @@ test('账号候选变化不会自动连接；普通已连接状态不自动跳�
 });
 
 test('进入添加联系人不读取名单，明确刷新才读取列表，返回不授权正文',async t=>{
- const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage();
  const bundle=await build({stdin:{contents:`
  import React from 'react';import {createRoot} from 'react-dom/client';import {ContactsPage} from './src/renderer/ContactsPage';
@@ -212,7 +213,7 @@ test('进入添加联系人不读取名单，明确刷新才读取列表，返�
  syncControl:{getState:async()=>syncState,onStateChanged:()=>()=>{},refresh:async()=>window.calls.push('sync')}};
  createRoot(document.getElementById('root')).render(<ContactsPage session={{state:{contacts:[],directoryPhase:'ready'}}} navigate={()=>{}}/>);
  `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',write:false,loader:{'.css':'empty'}});
- await page.setContent('<div id="root"></div>');await page.addScriptTag({content:bundle.outputFiles[0].text});
+ await mountBundle(page, bundle);
  await expect(page.getByText('逐人确认微信私聊后加入联系人；未选中的会话和以后新增的私聊不会获得读取授权。',{exact:true})).toBeVisible();
  await expect(page.getByText(/从文件导入|全部私聊/)).toHaveCount(0);
  await page.getByRole('button',{name:'添加微信联系人',exact:true}).click();
@@ -229,7 +230,7 @@ test('进入添加联系人不读取名单，明确刷新才读取列表，返�
 for (const selectionOnly of [undefined, true]) test(selectionOnly
  ? '逐人选择包含本机历史，列表不预选且新会话不自动授权'
  : '实际所选历史默认关闭，选择和刷新后重置，仅确认时传出本次选择',async t=>{
- const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage();
  const bundle=await build({stdin:{contents:`
  import React from 'react';import {createRoot} from 'react-dom/client';import {ContactsPage} from './src/renderer/ContactsPage';
@@ -242,7 +243,7 @@ for (const selectionOnly of [undefined, true]) test(selectionOnly
  syncControl:{getState:async()=>syncState,onStateChanged:()=>()=>{},refresh:async()=>{}}};
  createRoot(document.getElementById('root')).render(<ContactsPage session={{state:{contacts:[],directoryPhase:'ready'}}} navigate={()=>{}}/>);
  `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',write:false,loader:{'.css':'empty'}});
- await page.setContent('<div id="root"></div>');await page.addScriptTag({content:bundle.outputFiles[0].text});
+ await mountBundle(page, bundle);
  await page.getByRole('button',{name:'添加微信联系人',exact:true}).click();
  const history=page.getByRole('checkbox',{name:'同时读取本次所选会话在本机可用的历史消息',exact:true});
  if(selectionOnly) {
@@ -274,7 +275,7 @@ for (const selectionOnly of [undefined, true]) test(selectionOnly
 });
 
 for (const selectionOnly of [undefined, true]) test(selectionOnly ? '停止同步明确撤销即时资格，确认前不请求并保留既有联系人' : 'PG停止同步保留等待收尾语义，确认前不请求',async t=>{
- const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage();
  const bundle=await build({stdin:{contents:`
  import React from 'react';import {createRoot} from 'react-dom/client';
@@ -289,7 +290,7 @@ for (const selectionOnly of [undefined, true]) test(selectionOnly ? '停止同�
  return <><ContactSyncDetails contactId="synthetic-contact" consent={consent} onConnect={()=>{}}/><BindingFeedback consent={consent}/></>;}
  createRoot(document.getElementById('root')).render(<View/>);
  `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',write:false,loader:{'.css':'empty'}});
- await page.setContent('<div id="root"></div>');await page.addScriptTag({content:bundle.outputFiles[0].text});
+ await mountBundle(page, bundle);
  await expect(page.getByText('微信关联与同步',{exact:true})).toHaveCount(0);
  await expect(page.getByText('已关联微信：合成联系人',{exact:true})).toHaveCount(0);
  await expect(page.getByText('核对会话标识',{exact:true})).toHaveCount(0);

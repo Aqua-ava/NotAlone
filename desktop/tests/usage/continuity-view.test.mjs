@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {build} from 'esbuild';
-import {chromium,expect} from '@playwright/test';
+import { expect } from '@playwright/test';
+import { launchChromium, mountBundle } from '../helpers/browser.mjs';
 
 async function mount(t, initiallyActive = true) {
   const compiled=await build({stdin:{contents:`import React,{useState} from 'react';import{createRoot}from'react-dom/client';
@@ -12,8 +13,8 @@ async function mount(t, initiallyActive = true) {
     const bridge={getState:async()=>{window.usageStateReads++;return controller.getState();},onStateChanged:fn=>controller.onStateChanged(fn),refresh:()=>controller.refresh()};
     window.disconnectUsage=()=>{generation=undefined;for(const listener of connectionListeners)listener();};
     function Harness(){const[visible,setVisible]=useState(${initiallyActive});window.setUsageActive=setVisible;return <><button onClick={()=>setVisible(!visible)}>切换设置页</button><div hidden={!visible}><UsagePanel bridge={bridge} active={visible}/></div></>;}createRoot(document.getElementById('root')).render(<Harness/>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
-  const browser=await chromium.launch({channel:'chrome',headless:true});t.after(()=>browser.close());const page=await browser.newPage();
-  await page.setContent('<div id="root"></div>');await page.addScriptTag({content:compiled.outputFiles[0].text});
+  const browser=await launchChromium();t.after(()=>browser.close());const page=await browser.newPage();
+  await mountBundle(page, compiled);
   return page;
 }
 

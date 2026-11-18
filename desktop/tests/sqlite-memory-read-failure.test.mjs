@@ -6,7 +6,7 @@ import path from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {createServer} from 'node:http';
 import {build} from 'esbuild';
-import {chromium} from '@playwright/test';
+import { launchChromium } from './helpers/browser.mjs';
 
 const contact='11111111-1111-4111-8111-111111111111',id='22222222-2222-4222-8222-222222222222';
 const scope={scopeKind:'contact',contactId:contact},read={scope,displayContactId:contact,scopeRevision:1};
@@ -55,7 +55,7 @@ for(const change of ['scope','connection','invalidation'])test(`在途超时同�
 
 test('真实控制器与页面：超时保留已核验正文、依据和编辑，显示可重试提示，首次超时也可恢复',{timeout:20000},async t=>{
  const f=await fixture(t),compiled=await build({stdin:{contents:`import React from 'react';import {createRoot} from 'react-dom/client';import {createSqliteMemoryManagementBridge} from './src/preload/sqlite-memory-management';import {SqliteMemoryManagementPanel} from './src/renderer/SqliteMemoryManagementPanel';const preload=createSqliteMemoryManagementBridge({invoke:(channel,...args)=>window.command(channel,...args),on:()=>{},removeListener:()=>{}});const bridge={...preload,read:async(...args)=>JSON.parse(JSON.stringify(await preload.read(...args))),readHistory:async(...args)=>JSON.parse(JSON.stringify(await preload.readHistory(...args))),readDocuments:async(...args)=>JSON.parse(JSON.stringify(await preload.readDocuments(...args)))};createRoot(document.getElementById('root')).render(<SqliteMemoryManagementPanel bridge={bridge} contactId='${contact}' scopeRevision={1}/>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',write:false,logLevel:'silent'});
- const browser=await chromium.launch({channel:'chrome',headless:true});t.after(()=>browser.close());const page=await browser.newPage();page.setDefaultTimeout(3000);
+ const browser=await launchChromium();t.after(()=>browser.close());const page=await browser.newPage();page.setDefaultTimeout(3000);
  await page.exposeFunction('command',f.invoke);await page.route('http://127.0.0.1/memory-read-failure',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));
  const open=async()=>{await page.goto('http://127.0.0.1/memory-read-failure');await page.addScriptTag({content:compiled.outputFiles[0].text});};
  await open();await page.getByText(current.body,{exact:true}).waitFor();await page.getByRole('button',{name:'修改',exact:true}).click();await page.getByLabel('修正后的正文').fill('合成未提交编辑');

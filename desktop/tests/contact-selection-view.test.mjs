@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
-import { chromium, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { launchChromium, mountBundle } from './helpers/browser.mjs';
 
 async function mountSelection(t, sessionCount = 61, stateOverrides = {}) {
-  const browser = await chromium.launch({ headless: true, executablePath: process.env.NOTALONE_TEST_CHROMIUM_PATH });
+  const browser = await launchChromium();
   t.after(() => browser.close());
   const page = await browser.newPage();
   const sessions = Array.from({ length: sessionCount }, (_, index) => ({
@@ -26,8 +27,7 @@ async function mountSelection(t, sessionCount = 61, stateOverrides = {}) {
         navigate={page=>window.routes.push(page)} onClose={()=>{}} startSync/>;}
     createRoot(document.getElementById('root')).render(<App/>);
   `, resolveDir: process.cwd(), loader: 'tsx' }, bundle: true, platform: 'browser', format: 'iife', write: false, loader: { '.css': 'empty' } });
-  await page.setContent('<div id="root"></div>');
-  await page.addScriptTag({ content: bundle.outputFiles[0].text });
+  await mountBundle(page, bundle);
   if (process.env.NOTALONE_CONTACT_SELECTION_SCREENSHOT) {
     for (const file of ['style.css', 'bindings.css']) {
       await page.addStyleTag({ content: await readFile(new URL(`../src/renderer/${file}`, import.meta.url), 'utf8') });

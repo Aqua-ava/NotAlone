@@ -142,7 +142,6 @@
   "tests/model-parameters-view.test.mjs",
   "tests/sqlite-candidate-history-read.test.mjs"
  ],
- "isolated-http": [],
  "native": [
   "tests/header-change-native-acceptance.spec.ts",
   "tests/native-automatic-foreground.spec.ts",
@@ -162,6 +161,5 @@
   "tests/packaging/command.test.mjs",
   "tests/scheduling/launch-rejection.spec.ts",
   "tests/windows.spec.ts"
- ],
- "historical": []
+ ]
 }

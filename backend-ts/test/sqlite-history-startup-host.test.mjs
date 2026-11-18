@@ -9,6 +9,7 @@ import { SqliteStorage } from '../src/storage/sqlite/client.ts';
 import { SqliteContactService } from '../src/contacts/sqlite/service.ts';
 import { createWechatContactMetadata } from '../src/contacts/sqlite/wechat-metadata.ts';
 import { launchDsh } from '../src/launch.ts';
+import { waitForHostReady } from './host-readiness-support.mjs';
 import {png} from './visual-media-support.mjs';
 import {DatabaseSync} from 'node:sqlite';
 
@@ -72,7 +73,7 @@ async function start(f,options={}){
  let nodeExecutable=process.execPath;
  if(options.manual){const quote=value=>"'"+value.replaceAll("'","'\\''")+"'";nodeExecutable=join(f.root,'synthetic-node');await writeFile(nodeExecutable,`#!/bin/sh\nexec ${quote(process.execPath)} \"$@\" 2>> ${quote(join(f.root,'manual.stderr'))}\n`,{mode:0o700});}
  const host=await launchDsh({nodeExecutable,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath:join(f.root,'unused.env'),infoPath,businessHome:f.root,environment:options.imageProcessing?{NOTALONE_IMAGE_PROCESSING:options.imageProcessing}:{},sqlite:{userData:f.userData,expectedDatabaseId:f.databaseId,role:'test',capabilities:options.memory?['contacts','history','memory']:['contacts','history'],wechatCliPath:f.executable}},()=>true);f.hosts.push(host);
- const info=await ready(async()=>{try{return Object.fromEntries((await readFile(infoPath,'utf8')).trim().split('\n').map(line=>{const index=line.indexOf('=');return [line.slice(0,index),line.slice(index+1)];}));}catch(error){if(error.code==='ENOENT')return null;throw error;}},value=>value?.address&&value?.token,'synthetic_host_appReady_timeout').catch(async error=>{if(options.manual)throw new Error(error.message+'; '+await readFile(join(f.root,'manual.stderr'),'utf8'));throw error;});
+ const info=await waitForHostReady(host,infoPath).catch(async error=>{if(options.manual)throw new Error(error.message+'; '+await readFile(join(f.root,'manual.stderr'),'utf8'));throw error;});
  const request=async(route,method='GET',body,headers={})=>{
   f.routes.push(route);const response=await fetch(`http://${info.address}`+route,{method,signal:AbortSignal.timeout(5000),headers:{authorization:`Bearer ${info.token}`,'content-type':'application/json',...headers},...(body===undefined?{}:{body:JSON.stringify(body)})});return {status:response.status,body:await response.json()};
  };

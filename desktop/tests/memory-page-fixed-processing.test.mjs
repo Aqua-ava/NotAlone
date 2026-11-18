@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { chromium } from '@playwright/test';
+import { launchChromium } from './helpers/browser.mjs';
 
 test('真实记忆页面仅展示处理进度并自动刷新资料，资格失效撤下快照', { timeout: 20000 }, async t => {
   const ids = {
@@ -59,7 +59,7 @@ test('真实记忆页面仅展示处理进度并自动刷新资料，资格失�
       resolveDir: process.cwd(), loader: 'tsx' },
     bundle: true, platform: 'browser', format: 'iife', jsx: 'automatic', loader: { '.css': 'empty' }, write: false, logLevel: 'silent',
   });
-  const browser = await chromium.launch({ channel: 'chrome', headless: true, timeout: 10000 });
+  const browser = await launchChromium({ timeout: 10000 });
   t.after(() => browser.close());
   const page = await browser.newPage();
   page.setDefaultTimeout(4000);
@@ -123,7 +123,7 @@ test('快速重连重新加载新代次，旧子树异步释放不能撤下新�
  readDocuments:async request=>({connectionGeneration:window.generation,scope:request.scope,view:{status:'idle',publication:null,documents:[]}}),release:async()=>{window.memoryReleases++;queueMicrotask(()=>publish(memoryInvalidations));},onInvalidated:fn=>{memoryInvalidations.add(fn);return()=>memoryInvalidations.delete(fn);}}};
  window.fastReconnect=()=>{window.generation=2;publish(memoryInvalidations);publish(fixedInvalidations);for(const fn of connections)fn({phase:'connecting',revision:1});for(const fn of connections)fn({phase:'connected',revision:2});};
  const root=createRoot(document.getElementById('root'));window.unmount=()=>root.unmount();root.render(<MemoryPage session={{state:{selectedContactId:'contact',scopeRevision:1}}}/>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',loader:{'.css':'empty'},write:false,logLevel:'silent'});
- const browser=await chromium.launch({channel:'chrome',headless:true,timeout:10000});t.after(()=>browser.close());const page=await browser.newPage();page.setDefaultTimeout(3000);
+ const browser=await launchChromium({ timeout: 10000 });t.after(()=>browser.close());const page=await browser.newPage();page.setDefaultTimeout(3000);
  await page.route('http://127.0.0.1/memory-page-reconnect-test',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('http://127.0.0.1/memory-page-reconnect-test');await page.addScriptTag({content:compiled.outputFiles[0].text});
  const ready=page.getByText('本页没有可展示的正式记忆。',{exact:true});await ready.waitFor();
  await page.evaluate(async()=>{window.fastReconnect();await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));});

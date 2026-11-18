@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { build } from 'esbuild';
-import { chromium, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { launchChromium, mountBundle } from './helpers/browser.mjs';
 
 async function mount(page, contents) {
  const bundle=await build({stdin:{contents,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',write:false,loader:{'.css':'empty'}});
- await page.setContent('<div id="root"></div>');await page.addScriptTag({content:bundle.outputFiles[0].text});
+ await mountBundle(page, bundle);
 }
 
 test('范围授权文案覆盖现有及新增私聊，只在点击后授权并允许退回已关联范围',async t=>{
- const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage();
  await mount(page,`
  import React from 'react';import {createRoot} from 'react-dom/client';import {SyncControlPanel} from './src/renderer/SyncControlPanel';
@@ -32,7 +33,7 @@ test('范围授权文案覆盖现有及新增私聊，只在点击后授权并�
 });
 
 for (const selectionOnly of [undefined, true]) test(selectionOnly ? '联系人页面坚持逐人授权，旧全部范围提示不扩大当前选择' : '全部私聊联系人页面说明自动纳入，仍提供单个会话排除后的恢复入口',async t=>{
- const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage();
  await mount(page,`
  import React from 'react';import {createRoot} from 'react-dom/client';
@@ -50,7 +51,7 @@ for (const selectionOnly of [undefined, true]) test(selectionOnly ? '联系人�
 });
 
 test('老授权在设置页明确说明历史读取范围扩大，接受后才切换状态',async t=>{
- const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage();
  await mount(page,`
  import React from 'react';import {createRoot} from 'react-dom/client';import {SyncControlPanel} from './src/renderer/SyncControlPanel';
@@ -73,7 +74,7 @@ test('老授权在设置页明确说明历史读取范围扩大，接受后才�
 });
 
 test('拒绝历史读取保留增量说明，之后仍可明确允许',async t=>{
- const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage();
  await mount(page,`
  import React from 'react';import {createRoot} from 'react-dom/client';import {SyncControlPanel} from './src/renderer/SyncControlPanel';
@@ -95,7 +96,7 @@ test('拒绝历史读取保留增量说明，之后仍可明确允许',async t=>
 });
 
 test('同步总览保留进度和异常入口，默认不展开联系人或技术统计', async t => {
- const browser = await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const browser = await launchChromium();t.after(()=>browser.close());
  const page = await browser.newPage();
  await mount(page, `
  import React from 'react';import {createRoot} from 'react-dom/client';import {SyncControlPanel} from './src/renderer/SyncControlPanel';
@@ -123,7 +124,7 @@ test('同步总览保留进度和异常入口，默认不展开联系人或技�
 });
 
 test('会话类型冲突与范围未核验明确显示已停读，不暗示仍在读取正文', async t => {
- const browser = await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const browser = await launchChromium();t.after(()=>browser.close());
  const page = await browser.newPage();
  await mount(page, `
  import React from 'react';import {createRoot} from 'react-dom/client';import {HistoryCoverageStatus} from './src/renderer/HistoryCoverageStatus';
@@ -142,7 +143,7 @@ test('会话类型冲突与范围未核验明确显示已停读，不暗示仍�
 });
 
 test('旧增量授权没有历史行时，后台及当前联系人仍明确显示范围停读原因', async t => {
- const browser = await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const browser = await launchChromium();t.after(()=>browser.close());
  const page = await browser.newPage();
  await mount(page, `
  import React from 'react';import {createRoot} from 'react-dom/client';import {SyncControlPanel} from './src/renderer/SyncControlPanel';
@@ -155,7 +156,7 @@ test('旧增量授权没有历史行时，后台及当前联系人仍明确显�
 });
 
 test('联系人列表不展开诊断，详情可显示短状态且启停仍需原授权流程', async t => {
- const browser = await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const browser = await launchChromium();t.after(()=>browser.close());
  const page = await browser.newPage();
  await mount(page, `
  import React from 'react';import {createRoot} from 'react-dom/client';import {ContactsPage} from './src/renderer/ContactsPage';
@@ -228,7 +229,7 @@ test('联系人列表不展开诊断，详情可显示短状态且启停仍需�
 
 
 test('SQLite总开关先核验读取能力，关闭或未就绪时不误报功能尚未开放',async t=>{
- const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage();
  await mount(page,`
  import React from 'react';import {createRoot} from 'react-dom/client';import {SyncControlPanel} from './src/renderer/SyncControlPanel';
@@ -249,7 +250,7 @@ test('SQLite总开关先核验读取能力，关闭或未就绪时不误报功�
 });
 
 test('大量同步异常按原因去重，搜索分页有界且查看联系人不重放授权', async t => {
- const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage();
  await mount(page, `
  import React from 'react';import {createRoot} from 'react-dom/client';
@@ -301,7 +302,7 @@ test('大量同步异常按原因去重，搜索分页有界且查看联系人�
 });
 
 test('同步诊断分页按需挂载单人统计，删除或换范围后撤下旧详情', async t => {
- const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage();
  await mount(page, `
  import React from 'react';import {createRoot} from 'react-dom/client';
@@ -349,7 +350,7 @@ test('同步诊断分页按需挂载单人统计，删除或换范围后撤下�
 });
 
 test('已关闭同步的临时失败仅展示保存状态，不承诺正在自动重试', async t => {
- const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage();
  await mount(page, `
  import React from 'react';import {createRoot} from 'react-dom/client';
@@ -366,7 +367,7 @@ test('已关闭同步的临时失败仅展示保存状态，不承诺正在自�
 });
 
 test('来源无法确认时才显示停读检查入口，健康、临时失败及暂停不提示修复', async t => {
- const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());
+ const browser=await launchChromium();t.after(()=>browser.close());
  const page=await browser.newPage();
  await mount(page,`
  import React from 'react';import {createRoot} from 'react-dom/client';import {ContactsPage} from './src/renderer/ContactsPage';
@@ -432,7 +433,7 @@ test('来源无法确认时才显示停读检查入口，健康、临时失败�
 });
 
 test('来源待确认仅提供停读说明和设置导航，不展示认证或自动恢复授权',async t=>{
- const browser=await chromium.launch({headless:true,executablePath:process.env.NOTALONE_TEST_CHROMIUM_PATH});t.after(()=>browser.close());const page=await browser.newPage();
+ const browser=await launchChromium();t.after(()=>browser.close());const page=await browser.newPage();
  await mount(page,`
  import React from 'react';import {createRoot} from 'react-dom/client';import {ContactSyncSettings} from './src/renderer/ContactSyncSettings';
  window.calls=[];const noop=async()=>{};const binding={contactId:'a',bindingId:'binding-a',locator:'friend-a',displayName:'合成联系人',status:'active'};

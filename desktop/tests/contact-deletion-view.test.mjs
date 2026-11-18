@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { build } from 'esbuild';
-import { chromium, expect } from '@playwright/test';
+import { expect } from '@playwright/test';
+import { launchChromium } from './helpers/browser.mjs';
 
 async function mount(t, options = {}) {
-  const browser = await chromium.launch({ headless: true, channel: 'chrome' });
+  const browser = await launchChromium();
   t.after(() => browser.close());
   const page = await browser.newPage({ viewport: options.viewport ?? { width: 1100, height: 800 } });
   const bundle = await build({ stdin: { contents: `

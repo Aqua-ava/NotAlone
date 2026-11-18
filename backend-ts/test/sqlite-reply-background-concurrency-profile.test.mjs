@@ -3,11 +3,12 @@ import sharp from 'sharp';
 import assert from 'node:assert/strict';
 import {watch} from 'node:fs';
 import {access,readFile,writeFile,readdir} from 'node:fs/promises';
-import {join,dirname,resolve} from 'node:path';
+import {join,resolve} from 'node:path';
 import {createHash,randomUUID} from 'node:crypto';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {launchDsh} from '../src/launch.ts';
+import {waitForHostReady} from './host-readiness-support.mjs';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {SqliteMediaService} from '../src/media/sqlite/service.ts';
 import {SqliteDiscussionService} from '../src/reply/sqlite/service.ts';
@@ -96,7 +97,7 @@ test('正式SQLite profile的图文后台在途时前台已到共享供应商，
  })().catch(error=>{supplierErrors.push(error.message);res.destroy();});});
  supplier.listen(0,'127.0.0.1');await once(supplier,'listening',{signal:AbortSignal.timeout(2000)});
  host=await launchDsh({nodeExecutable:wrapper,projectDirectory:new URL('../../',import.meta.url).pathname,envFilePath,infoPath,businessHome:root,environment:{NOTALONE_SYNTHETIC_PROVIDER_URL:`http://127.0.0.1:${supplier.address().port}`,NOTALONE_SYNTHETIC_NETWORK_AUDIT:auditPath},sqlite:{userData:root,expectedDatabaseId:databaseId,role:'test',capabilities:['contacts','history','discussions','memory']}},()=>true);
- try{info=await changed(dirname(infoPath),async()=>Object.fromEntries((await readFile(infoPath,'utf8')).trim().split('\n').map(line=>{const n=line.indexOf('=');return [line.slice(0,n),line.slice(n+1)];})),value=>Boolean(value.address&&value.token),'正式profile握手');}
+ try{info=await waitForHostReady(host,infoPath);}
  catch(error){throw new Error(`${error.message}; ${(await readFile(stderrPath,'utf8')).slice(-1800)}`);}
  const launch=JSON.parse(await readFile(infoPath+'.dsh-lock','utf8'));
  assert.equal(await readFile(join(launch.home,'profiles/notalone/cordis.patch.yml'),'utf8'),(await readFile(new URL('../profile/sqlite.patch.yml',import.meta.url),'utf8')).replace('PLUGIN_PATH',JSON.stringify(resolve('src/sqlite-host-plugin.ts'))));
