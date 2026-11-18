@@ -81,7 +81,7 @@ async function fixture(t,mode='normal',extraOptions={}) {
   if(r.op==='support'){
    supportCount++;data={protocol:'private-history-v1',profileId:'synthetic-profile-v1',adapterVersion:'1',status:'supported',reason:null,accountKey:'${account}',conversationKey:currentConversation,sourceGeneration:'${generation}',programVersion:'4.0.6',build:'29387',artifactSha256:crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex'),schemaFingerprint:'b'.repeat(64),declaredPrimaryKey:['local_id'],serverAliasSemantics:'unverified',identity:'source-table-local-v1',statusSemantics:'synthetic-status-v1',continuity:'synthetic-current-source-v1'};
    if(mode==='unverified-support'||mode==='unsupported-support')data={...data,status:mode==='unverified-support'?'unverified':'unsupported',reason:'synthetic_unverified'};
-   if(mode==='partial-capabilities'||mode.startsWith('quarantine-kind-'))data={...data,status:'unverified',reason:'history_message_state_unverified',capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory'].map(key=>[key,['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn'].includes(key)?'supported':key==='serverIdUniqueConstraint'?'unsupported':'unverified']))};
+   if(mode==='partial-capabilities')data={...data,status:'unverified',reason:'history_message_state_unverified',capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory'].map(key=>[key,['programVersion','exactSchema','declaredLocalKey','automaticAllocation','statusColumn'].includes(key)?'supported':key==='serverIdUniqueConstraint'?'unsupported':'unverified']))};
 
    if(mode.startsWith('empty-target'))data={...data,profileId:'wechat-4.0.6-29387-absent-private-target-v1',declaredPrimaryKey:[],statusSemantics:'no-message-table-v1',continuity:'same-source-instances-normal-use-v1',capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory','incrementalTail','private-history-boundary-v1'].map(key=>[key,['declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','incrementalTail'].includes(key)?'unsupported':key==='private-history-boundary-v1'?'unverified':'supported']))};
    if(mode==='empty-target-ordinary-profile')data={...data,profileId:'synthetic-profile-v1',declaredPrimaryKey:['local_id']};
@@ -107,7 +107,7 @@ async function fixture(t,mode='normal',extraOptions={}) {
    if(mode==='wrong-support-artifact')data={...data,artifactSha256:'f'.repeat(64)};
    if(mode==='schema-change-support'&&supportCount>1)data={...data,schemaFingerprint:'f'.repeat(64)};
   }
-  if(r.op==='target'||r.op==='quarantine-target'){
+  if(r.op==='target'){
    data={...target,descriptor:target.descriptor+':'+currentConversation};
    if(mode==='growth-legacy-no-whitelist')delete data.checkedPartitions;
    if(mode==='empty-target-missing-partition')data={...data,partitions:data.partitions.slice(0,7)};
@@ -181,13 +181,12 @@ async function fixture(t,mode='normal',extraOptions={}) {
    if(r.kind==='next'&&mode==='received-test-promoted')data={...data,records:[{...contactRecord,normalHistory:true}]};
    if(r.kind==='next'&&mode==='received-test-promoted-status')data={...data,status:'supported'};
   }
-  if(r.op==='page'||r.op==='quarantine-page'){
+  if(r.op==='page'){
    const row={partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:'0',sender:'contact',kind:'text',text:'合成分页文字',originalType:'1',sentAt:'1000',timePrecision:'second',orderScheme:null,orderKey:null,status:'0',stateAssurance:'verified'};
    data={target:r.target,cursorIn:r.cursor||null,cursorOut:null,records:[row],completedPartitions:['d'.repeat(64)],exhausted:true};
    if(mode.startsWith('durable-history'))data={...data,cursorOut:'session-only-page',completedPartitions:[],exhausted:false,...(r.checkpoint||mode==='durable-history-unsolicited'?{checkpointCursor:'durable-history-proof'}:{})};
    if(mode==='durable-history-missing')delete data.checkpointCursor;
    if(mode==='durable-history-final')data={...data,cursorOut:null,completedPartitions:['d'.repeat(64)],exhausted:true};
-   if(mode.startsWith('quarantine-kind-')){const originalType=mode.slice('quarantine-kind-'.length);data.records=[{...row,originalType,kind:originalType==='25769803825'?'file':'other',text:null,stateAssurance:'unverified'}];}
    if(mode==='empty-target')data={...data,records:[],completedPartitions:target.partitions};
    if(mode==='page-cancel')return;
    if(mode==='page-too-large'){process.stdout.write('x'.repeat(8*1024*1024+1));return;}
@@ -316,7 +315,7 @@ test('固定快照核验覆盖全部分片且不授予后续正文读取',async 
  await assert.rejects(f.client.targetSelected(),{code:'history_support_unverified'});
  const requests=(await readFile(f.logFile,'utf8')).trim().split('\n').map(JSON.parse);
  assert.deepEqual(requests.at(-1),{op:'verify-snapshot-metadata',account,conversation,consent:'selected-snapshot-metadata-v1'});
- assert.equal(requests.some(row=>['target','page','quarantine-target','quarantine-page'].includes(row.op)),false);
+ assert.equal(requests.some(row=>['target','page'].includes(row.op)),false);
 });
 
 test('固定快照核验拒绝遗漏分片、变化窗口、越界身份及正文夹带',async t=>{
@@ -333,15 +332,6 @@ test('原生分页保留无正文元数据观察且拒绝借此放行文字或�
   if(['metadata-only','metadata-only-system'].includes(mode)){
    const page=await f.client.pageSelected(target,null);const row=page.records[0];assert.equal(row.metadataOnly,true);assert.equal(row.stateAssurance,'unverified');assert.equal(row.text,null);assert.equal(row.messageState,undefined);
   }else await assert.rejects(f.client.pageSelected(target,null),{code:'history_protocol_invalid'});
- });
-});
-
-test('独立隔离页保留引用与链接的其他类型占位，仅文件子类型为文件',async t=>{
- for(const raw of ['49','244813135921','21474836529','25769803825'])await t.test(raw,async t=>{
-  const f=await fixture(t,'quarantine-kind-'+raw);await f.client.resolveSelected('合成目标');await f.client.inspectSelected();await f.client.supportSelected();
-  const target=await f.client.quarantineTargetSelected();const result=await f.client.quarantinePageSelected(target,null);
-  assert.equal(result.kind,'quarantine');assert.equal(result.page.records[0].originalType,raw);assert.equal(result.page.records[0].kind,raw==='25769803825'?'file':'other');assert.equal(result.page.records[0].text,null);assert.equal(result.page.records[0].stateAssurance,'unverified');
-  await assert.rejects(f.client.targetSelected(),{code:'history_support_unverified'});
  });
 });
 

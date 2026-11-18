@@ -1,3 +1,4 @@
+import { isRecord } from './record';
 export type ModelThinkingEffort = 'off' | 'low' | 'high' | 'max';
 export interface ModelSamplingParameters { thinkingEffort: ModelThinkingEffort; temperature: number }
 export interface ModelParameters { reply: ModelSamplingParameters; memory: ModelSamplingParameters }
@@ -7,15 +8,14 @@ export const DEFAULT_MODEL_PARAMETERS: ModelParameters = {
   memory: { thinkingEffort: 'off', temperature: 0 },
 };
 
-const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 const effort = (value: unknown): value is ModelThinkingEffort => ['off', 'low', 'high', 'max'].includes(value as string);
 const temperature = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 2;
-const group = (value: unknown): value is ModelSamplingParameters => record(value) && Object.keys(value).length === 2
+const group = (value: unknown): value is ModelSamplingParameters => isRecord(value) && Object.keys(value).length === 2
   && effort(value.thinkingEffort) && temperature(value.temperature);
 
 /** 设置、预加载和主进程共用同一有界合同，不接受额外配置字段。 */
 export function isModelParameters(value: unknown): value is ModelParameters {
-  return record(value) && Object.keys(value).length === 2 && group(value.reply) && group(value.memory);
+  return isRecord(value) && Object.keys(value).length === 2 && group(value.reply) && group(value.memory);
 }
 
 /** 只比较参数值，合法对象的字段排列不影响生效核对或编辑状态。 */
@@ -26,8 +26,8 @@ export function equalModelParameters(left: ModelParameters | undefined, right: M
 }
 
 export function modelParametersFromApi(value: unknown): ModelParameters | undefined {
-  if (!record(value) || Object.keys(value).length !== 2) return;
-  const parse = (input: unknown): ModelSamplingParameters | undefined => record(input) && Object.keys(input).length === 2
+  if (!isRecord(value) || Object.keys(value).length !== 2) return;
+  const parse = (input: unknown): ModelSamplingParameters | undefined => isRecord(input) && Object.keys(input).length === 2
     && effort(input.thinking_effort) && temperature(input.temperature)
     ? { thinkingEffort: input.thinking_effort, temperature: input.temperature } : undefined;
   const reply = parse(value.reply), memory = parse(value.memory);

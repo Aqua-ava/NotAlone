@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { readInitialState } from './initial-read';
+import { useState } from 'react';
+import { useBridgeState } from './use-bridge-state';
 import type { BackendState } from '../shared/backend-bridge';
 import { Icon } from './icons';
 import type { StartupState } from '../shared/startup-bridge';
@@ -7,25 +7,7 @@ import type { StartupState } from '../shared/startup-bridge';
 const initial: BackendState = { phase: 'disconnected', reused: false, revision: -1, canRetryConnection: false, canRetryShutdown: false,
   canSaveStartupPaths: false };
 export function useBackendState(): { state: BackendState; error: string; retry: () => void } {
-  const [state, setState] = useState(initial);
-  const [error, setError] = useState('');
-  const [readAttempt, setReadAttempt] = useState(0);
-  const reading = useRef(false);
-  const latestRevision = useRef(initial.revision);
-  const stateVersion = useRef(0);
-  useEffect(() => {
-    let active = true;
-    const receive = (next: BackendState) => {
-      if (!active || next.revision < latestRevision.current) return;
-      latestRevision.current = next.revision; stateVersion.current++;
-      setError(''); setState(next);
-    };
-    const unsubscribe = window.notalone.backend.onStateChanged(receive);
-    void readInitialState({ read: () => window.notalone.backend.getState(), receive, reportError: setError,
-      isActive: () => active, busy: reading, getStateVersion: () => stateVersion.current });
-    return () => { active = false; unsubscribe(); };
-  }, [readAttempt]);
-  return { state, error, retry: () => setReadAttempt((value) => value + 1) };
+  return useBridgeState(window.notalone.backend, initial);
 }
 
 export function BackendBadge({ state, compact = false }: { state: BackendState; compact?: boolean }) {

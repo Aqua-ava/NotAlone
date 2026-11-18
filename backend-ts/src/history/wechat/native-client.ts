@@ -538,8 +538,7 @@ const inlineQuoteErrorCodes:readonly HistoryQuoteErrorCode[]=['history_quote_una
   'history_quote_state_unverified','history_quote_association_unverified','history_quote_read_failed'];
 const quoteRawType='244813135921';
 type InlineQuoteScope={accountKey:string;conversationKey:string;sourceGeneration:string};
-function historyRecord(value: unknown, target: HistoryTarget, mode: 'normal' | 'quarantine' = 'normal', inlineQuoteScope?:InlineQuoteScope): HistoryRecord {
-  const quarantine = mode === 'quarantine';
+function historyRecord(value: unknown, target: HistoryTarget, inlineQuoteScope?:InlineQuoteScope): HistoryRecord {
   const hasMessageState=!!value&&typeof value==='object'&&Object.hasOwn(value,'messageState');
   const hasMetadataOnly=!!value&&typeof value==='object'&&Object.hasOwn(value,'metadataOnly');
   const hasInlineQuote=!!value&&typeof value==='object'&&Object.hasOwn(value,'quote');
@@ -550,8 +549,8 @@ function historyRecord(value: unknown, target: HistoryTarget, mode: 'normal' | '
   if (!target.tables.some(candidate => candidate.partition === partition && candidate.instance === table)
     || !['owner', 'contact', 'unknown'].includes(row.sender as string)
     || !['text', 'image', 'voice', 'video', 'file', 'sticker', 'other'].includes(row.kind as string)
-    || !['verified', 'unverified'].includes(row.stateAssurance as string) || quarantine && row.stateAssurance !== 'unverified'
-    || !quarantine && row.stateAssurance === 'unverified' && row.text !== null) return fail();
+    || !['verified', 'unverified'].includes(row.stateAssurance as string)
+    || row.stateAssurance === 'unverified' && row.text !== null) return fail();
   if(hasMessageState&&(row.stateAssurance!=='verified'||!['sent','received','recalled','absent'].includes(row.messageState as string)
     ||row.messageState==='sent'&&row.sender!=='owner'||row.messageState==='received'&&row.sender!=='contact'
     ||['recalled','absent'].includes(row.messageState as string)&&(row.kind!=='other'||row.text!==null||row.localId===null)))return fail();
@@ -569,9 +568,8 @@ function historyRecord(value: unknown, target: HistoryTarget, mode: 'normal' | '
   const orderKey = row.orderKey === null ? null : exactInteger(row.orderKey);
   if ((orderScheme === null) !== (orderKey === null)) return fail();
   const originalType = row.originalType === 'unknown' && row.kind === 'other' ? 'unknown' : exactInteger(row.originalType);
-  if(hasMetadataOnly&&(quarantine||row.metadataOnly!==true||row.kind==='text'||row.text!==null||row.stateAssurance!=='unverified'||hasMessageState
+  if(hasMetadataOnly&&(row.metadataOnly!==true||row.kind==='text'||row.text!==null||row.stateAssurance!=='unverified'||hasMessageState
     ||originalType==='unknown'||BigInt(originalType)<0n||(BigInt(originalType)&0xffffffffn)===1n||row.kind!==historyMetadataKind(originalType)))return fail();
-  if(quarantine && (originalType==='unknown'?'other':historyMetadataKind(originalType))!==row.kind)return fail();
   const localId=row.localId===null?null:exactInteger(row.localId),serverId=row.serverId===null?null:exactInteger(row.serverId);
   const inlineQuoteCarrier=inlineQuoteScope!==undefined&&originalType===quoteRawType&&row.kind==='other'&&body===null
     &&hasMetadataOnly&&row.metadataOnly===true&&row.stateAssurance==='unverified'&&!hasMessageState;
@@ -598,7 +596,7 @@ function historyRecord(value: unknown, target: HistoryTarget, mode: 'normal' | '
 function historyMetadataKind(originalType:string):HistoryRecord['kind'] {
   return (BigInt(originalType)&0xffffffffn)===49n ? BigInt(originalType)>>32n===6n?'file':'other' : metadataKind(originalType);
 }
-function historyPage(value: unknown, target: HistoryTarget, cursor: string | null, mode: 'normal' | 'quarantine' = 'normal',inlineQuoteScope?:InlineQuoteScope,checkpointRequested=false): HistoryPage {
+function historyPage(value: unknown, target: HistoryTarget, cursor: string | null, inlineQuoteScope?:InlineQuoteScope,checkpointRequested=false): HistoryPage {
   const hasResume = !!value && typeof value === 'object' && Object.hasOwn(value, 'resumeCursor');
   const hasCheckpoint=!!value&&typeof value==='object'&&Object.hasOwn(value,'checkpointCursor');
   const row = object(value, ['target', 'cursorIn', 'cursorOut', 'records', 'completedPartitions', 'exhausted', ...(hasResume ? ['resumeCursor'] : []),...(hasCheckpoint?['checkpointCursor']:[])]);
@@ -607,16 +605,16 @@ function historyPage(value: unknown, target: HistoryTarget, cursor: string | nul
   if (exhausted ? cursorOut !== null : cursorOut === null || cursorOut === cursor) return fail();
   const completedPartitions = list(row.completedPartitions, 128, hash); unique(completedPartitions);
   if (completedPartitions.some(partition => !target.partitions.includes(partition))) return fail();
-  if (hasResume && (mode !== 'normal' || !exhausted || row.resumeCursor === null)) return fail();
-  if(hasCheckpoint&&(mode!=='normal'||exhausted||!checkpointRequested)||checkpointRequested&&!exhausted&&!hasCheckpoint)return fail();
-  return { target: target.descriptor, cursorIn: cursor, cursorOut, records: list(row.records, pageRecordLimit, value => historyRecord(value, target, mode,inlineQuoteScope)), completedPartitions, exhausted,
+  if (hasResume && (!exhausted || row.resumeCursor === null)) return fail();
+  if(hasCheckpoint&&(exhausted||!checkpointRequested)||checkpointRequested&&!exhausted&&!hasCheckpoint)return fail();
+  return { target: target.descriptor, cursorIn: cursor, cursorOut, records: list(row.records, pageRecordLimit, value => historyRecord(value, target, inlineQuoteScope)), completedPartitions, exhausted,
     ...(hasResume ? { resumeCursor: opaque(row.resumeCursor) } : {}),...(hasCheckpoint?{checkpointCursor:opaque(row.checkpointCursor)}:{}) };
 }
 function historyTailPage(value: unknown, target: HistoryTarget, cursor: string,inlineQuoteScope?:InlineQuoteScope): HistoryTailPage {
   const row = object(value, ['target', 'cursorIn', 'cursorOut', 'records', 'caughtUp']);
   const cursorOut = opaque(row.cursorOut);
   if (row.target !== target.descriptor || row.cursorIn !== cursor || cursorOut === cursor) return fail();
-  return { target: target.descriptor, cursorIn: cursor, cursorOut, records: list(row.records, pageRecordLimit, value => historyRecord(value, target,'normal',inlineQuoteScope)), caughtUp: bool(row.caughtUp) };
+  return { target: target.descriptor, cursorIn: cursor, cursorOut, records: list(row.records, pageRecordLimit, value => historyRecord(value, target, inlineQuoteScope)), caughtUp: bool(row.caughtUp) };
 }
 function historyBoundary(value: unknown, scope: ResolvedWechatScope, schema: WechatSchemaInspection, support: HistorySupportReport): HistoryBoundaryCandidate {
   const row = object(value, ['format', 'scopeDigest', 'sourceGeneration', 'schemaFingerprint', 'target', 'boundaryToken', 'members', 'partitions', 'namespaceContinuity', 'instanceContinuity', 'observedAt']);
@@ -798,7 +796,6 @@ export class NarrowWechatClient {
   #imageKeySupplied=false;
   #tailCursor?: string;
   #lastTail?: { input: string; page: HistoryTailPage };
-  #quarantineTarget?: HistoryTarget;
   #testMetadata?: TestMetadataState;
   #receivedTestMetadata?: TestMetadataState;
   #pending?: PendingResponse;
@@ -880,7 +877,7 @@ export class NarrowWechatClient {
         const row=object(value,['released']);if(row.released!==true)return fail();return true;
       });
       this.#selected=undefined;this.#schema=undefined;this.#support=undefined;this.#growthFromSchema=undefined;
-      this.#target=undefined;this.#tailCursor=undefined;this.#lastTail=undefined;this.#quarantineTarget=undefined;
+      this.#target=undefined;this.#tailCursor=undefined;this.#lastTail=undefined;
       this.#testMetadata=undefined;this.#receivedTestMetadata=undefined;this.#activeImage=undefined;
     },signal);
   }
@@ -912,7 +909,7 @@ export class NarrowWechatClient {
         if (this.#account && (parsed.accountKey !== this.#account.accountKey || parsed.sourceGeneration !== this.#account.sourceGeneration)) return fail('history_scope_changed');
         return parsed;
       });
-      this.#selected = { ...scope }; this.#schema = undefined; this.#support = undefined; this.#growthFromSchema=undefined; this.#target = undefined; this.#tailCursor = undefined; this.#lastTail = undefined; this.#quarantineTarget = undefined; return scope;
+      this.#selected = { ...scope }; this.#schema = undefined; this.#support = undefined; this.#growthFromSchema=undefined; this.#target = undefined; this.#tailCursor = undefined; this.#lastTail = undefined; return scope;
     }, signal);
   }
   inspectSelected(signal?: AbortSignal): Promise<WechatSchemaInspection> {
@@ -1044,7 +1041,7 @@ export class NarrowWechatClient {
     return this.#enqueue(async () => {
       const scope = this.#readableScope();
       return this.#request({ op: 'target', account: scope.accountKey, conversation: scope.conversationKey, consent: 'selected-history-v1' }, value => {
-        const parsed = historyTarget(value, scope, this.#schema); this.#target = structuredClone(parsed); this.#tailCursor = undefined; this.#lastTail = undefined; this.#quarantineTarget=undefined; return parsed;
+        const parsed = historyTarget(value, scope, this.#schema); this.#target = structuredClone(parsed); this.#tailCursor = undefined; this.#lastTail = undefined;  return parsed;
       });
     }, signal);
   }
@@ -1207,7 +1204,7 @@ export class NarrowWechatClient {
       const accepted = this.#target;
       return this.#request({ op: 'page', account: scope.accountKey, conversation: scope.conversationKey, consent: 'selected-history-v1', target: accepted.descriptor, cursor: cursor ?? '',...(checkpoint?{checkpoint:true}:{}) }, value => {
         const inlineQuoteScope=this.#options.inlineQuotes?scope:undefined;
-        const page = historyPage(value, accepted, cursor,'normal',inlineQuoteScope,checkpoint);
+        const page = historyPage(value, accepted, cursor,inlineQuoteScope,checkpoint);
         if (page.resumeCursor && this.#support?.capabilities?.incrementalTail !== 'supported') return fail();
         if (page.resumeCursor) this.#tailCursor = page.resumeCursor;
         return page;
@@ -1243,27 +1240,6 @@ export class NarrowWechatClient {
       if (support.capabilities?.[boundaryProtocol] !== 'supported') return fail('history_boundary_unsupported');
       return this.#request({ op: 'boundary-snapshot', account: scope.accountKey, conversation: scope.conversationKey, consent: 'selected-history-boundary-v1' }, value => historyBoundary(value, scope, schema, structuredClone(support)), boundaryResponseLimit);
     }, signal);
-  }
-  /** 明确同意的单次隔离快照；不提升普通历史支持档，不提供自动重试或续读。 */
-  quarantineTargetSelected(signal?: AbortSignal): Promise<HistoryTarget> {
-    try { signalValid(signal); } catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
-    return this.#enqueue(() => {
-      const scope = this.#selected;
-      if (!scope || !this.#schema || this.#support?.capabilities?.programVersion !== 'supported' || this.#support.capabilities.exactSchema !== 'supported'
-        || this.#support.capabilities.declaredLocalKey !== 'supported') return fail('history_support_unverified');
-      return this.#request({op:'quarantine-target',account:scope.accountKey,conversation:scope.conversationKey,consent:'selected-quarantine-history-v1'},value=>{
-        const parsed=historyTarget(value,scope,this.#schema);this.#quarantineTarget=structuredClone(parsed);this.#target=undefined;this.#tailCursor=undefined;this.#lastTail=undefined;return parsed;
-      });
-    },signal);
-  }
-  quarantinePageSelected(target: HistoryTarget, cursor: string | null, signal?: AbortSignal): Promise<{kind:'quarantine';page:HistoryPage}> {
-    try { signalValid(signal); if(cursor!==null)opaque(cursor); } catch { return Promise.reject(new StorageFailure('history_request_invalid')); }
-    return this.#enqueue(() => {
-      const scope=this.#selected,accepted=this.#quarantineTarget;
-      if(!scope||!accepted||JSON.stringify(target)!==JSON.stringify(accepted))return fail('history_target_unverified');
-      if(cursor!==null)opaque(cursor);
-      return this.#request({op:'quarantine-page',account:scope.accountKey,conversation:scope.conversationKey,consent:'selected-quarantine-history-v1',target:accepted.descriptor,cursor:cursor??''},value=>({kind:'quarantine' as const,page:historyPage(value,accepted,cursor,'quarantine')}),pageResponseLimit);
-    },signal);
   }
   #readableScope(): ResolvedWechatScope {
     if (!this.#selected) return fail('history_scope_unverified');
@@ -1368,7 +1344,7 @@ export class NarrowWechatClient {
   }
   async #stop(code: string): Promise<void> {
     if (this.#stopped) { await this.#stopping; return; }
-    this.#stopped = true; this.#failureCode = allowedErrors.has(code) ? code : 'history_native_unavailable'; this.#selected = undefined; this.#account = undefined; this.#schema = undefined; this.#support = undefined; this.#target = undefined; this.#activeImage=undefined; this.#tailCursor = undefined; this.#lastTail = undefined; this.#quarantineTarget=undefined; this.#testMetadata = undefined; this.#receivedTestMetadata = undefined;
+    this.#stopped = true; this.#failureCode = allowedErrors.has(code) ? code : 'history_native_unavailable'; this.#selected = undefined; this.#account = undefined; this.#schema = undefined; this.#support = undefined; this.#target = undefined; this.#activeImage=undefined; this.#tailCursor = undefined; this.#lastTail = undefined;  this.#testMetadata = undefined; this.#receivedTestMetadata = undefined;
     this.#stoppedSignal.resolve();
     const listeners=[...this.#stopListeners];this.#stopListeners.clear();
     for(const listener of listeners)try{listener();}catch{/* 订阅者失败不得阻止进程排空。 */}

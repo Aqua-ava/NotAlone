@@ -40,16 +40,16 @@ async function fixture(t,sharedMode=false,storageOptions={},contactCount=2,manif
  if(JSON.stringify(process.argv.slice(2))!==JSON.stringify(['notalone-history']))process.exit(91);
  readline.createInterface({input:process.stdin}).on('line',line=>{
   const r=JSON.parse(line),plan=JSON.parse(fs.readFileSync(planFile));fs.appendFileSync(logFile,JSON.stringify(r)+'\\n');let data;
-  if(['page','quarantine-page','tail'].includes(r.op)&&r.target!==currentTarget){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_target_unverified'}})+'\\n');return;}
+  if(['page','tail'].includes(r.op)&&r.target!==currentTarget){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_target_unverified'}})+'\\n');return;}
   if(r.op==='resolve'){selected=r.displayName;schema.scopeDigest=crypto.createHash('sha256').update('${account}\\0'+selected).digest('hex');}
   if(r.op==='release-selection'&&plan.mode==='release-blocked')return;
   if(r.op==='release-selection'&&plan.mode==='release-fail'){process.stdout.write(JSON.stringify({ok:false,error:{code:'history_account_changed'}})+'\\n');return;}
   if(r.op==='release-selection'){currentTarget=null;data={released:true};}
   else if(r.op==='resolve')data={accountKey:plan.mode==='wrong-account'?'synthetic-other':'${account}',conversationKey:plan.mode==='wrong-conversation'?'synthetic-other':selected,displayName:'只作展示',sourceGeneration:plan.mode==='wrong-generation'?'f'.repeat(64):'${generation}'};
   else if(r.op==='inspect')data=schema;
-  else if(r.op==='support')data={protocol:'private-history-v1',profileId:'synthetic-history-v1',adapterVersion:'1',status:['unverified','quarantine','quarantine-forged'].includes(plan.mode)?'unverified':'supported',reason:['unverified','quarantine','quarantine-forged'].includes(plan.mode)?'history_message_state_unverified':null,accountKey:'${account}',conversationKey:selected,sourceGeneration:'${generation}',programVersion:'synthetic',build:'1',artifactSha256:crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex'),schemaFingerprint:schema.schemaFingerprint,declaredPrimaryKey:['local_id'],serverAliasSemantics:'unverified',identity:'source-table-local-v1',statusSemantics:'synthetic-final',continuity:${sharedMode?"'same-source-instances-normal-use-v1'":"'synthetic-fixed-source'"},...(plan.capabilities?{capabilities:plan.capabilities}:plan.mode.startsWith('quarantine')?{capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory'].map(k=>[k,['programVersion','exactSchema','declaredLocalKey'].includes(k)?'supported':'unverified']))}:{})};
+  else if(r.op==='support')data={protocol:'private-history-v1',profileId:'synthetic-history-v1',adapterVersion:'1',status:plan.mode==='unverified'?'unverified':'supported',reason:plan.mode==='unverified'?'history_message_state_unverified':null,accountKey:'${account}',conversationKey:selected,sourceGeneration:'${generation}',programVersion:'synthetic',build:'1',artifactSha256:crypto.createHash('sha256').update(fs.readFileSync(__filename)).digest('hex'),schemaFingerprint:schema.schemaFingerprint,declaredPrimaryKey:['local_id'],serverAliasSemantics:'unverified',identity:'source-table-local-v1',statusSemantics:'synthetic-final',continuity:${sharedMode?"'same-source-instances-normal-use-v1'":"'synthetic-fixed-source'"},...(plan.capabilities?{capabilities:plan.capabilities}:plan.mode.startsWith('quarantine')?{capabilities:Object.fromEntries(['programVersion','exactSchema','declaredLocalKey','automaticAllocation','serverIdUniqueConstraint','statusColumn','statusSemantics','sourceLifecycle','restartContinuity','recoveryMapping','snapshotBarrier','partitionCoverage','normalHistory'].map(k=>[k,['programVersion','exactSchema','declaredLocalKey'].includes(k)?'supported':'unverified']))}:{})};
   else if(r.op==='recover-target'){currentTarget='synthetic-recovered-target';data={target:{protocol:'private-history-v1',descriptor:currentTarget,partitions:schema.checkedPartitions,tables:[{partition:'d'.repeat(64),instance:'c'.repeat(64)}],sourceGeneration:'${generation}'},cursor:'synthetic-recovery-proof',anchors:plan.recoveryRows||[]};}
-  else if((r.op==='target'||r.op==='quarantine-target'||r.op==='resume-target')){resumed=r.op==='resume-target';currentTarget=${sharedMode?"'synthetic-target-'+(++targetSerial)":"'synthetic-target'"};
+  else if((r.op==='target'||r.op==='resume-target')){resumed=r.op==='resume-target';currentTarget=${sharedMode?"'synthetic-target-'+(++targetSerial)":"'synthetic-target'"};
    if(plan.mode==='slices'){
     const checkpoints=fs.existsSync(checkpointFile)?JSON.parse(fs.readFileSync(checkpointFile)):{};
     const checkpoint=resumed?checkpoints[r.cursor]:null;
@@ -57,7 +57,7 @@ async function fixture(t,sharedMode=false,storageOptions={},contactCount=2,manif
     sliceIndex=checkpoint?.index||0;sliceCursor=null;currentTarget+='-'+process.pid;
    }
    data={protocol:'private-history-v1',descriptor:currentTarget,partitions:schema.checkedPartitions,tables:[{partition:'d'.repeat(64),instance:'c'.repeat(64)}],sourceGeneration:'${generation}'};}
-  else if((r.op==='page'||r.op==='quarantine-page')){
+  else if(r.op==='page'){
    if(plan.mode==='blocked')return;
    const row={partition:'d'.repeat(64),table:'c'.repeat(64),localId:'9007199254740993',serverId:plan.serverId,sender:'contact',kind:'text',text:${sharedMode?"'合成历史正文:'+selected":"'合成历史正文'"},originalType:'1',sentAt:'1700000000000',timePrecision:'second',orderScheme:null,orderKey:null,status:'0',stateAssurance:plan.mode==='quarantine'?'unverified':'verified'};
    data={target:r.target,cursorIn:r.cursor||null,cursorOut:null,records:[row,{...row,localId:'2',serverId:'0',kind:'voice',text:plan.mode==='malicious'?'forbidden-body':null,originalType:'34'}],completedPartitions:schema.checkedPartitions,exhausted:true,...(plan.resumeCursor?{resumeCursor:plan.resumeCursor}:{})};
@@ -342,23 +342,6 @@ test('关闭或取消等待真实子进程退出，持久旧游标不伪装为�
  const f=await fixture(t),scope=await f.scope(),first=createWechatHistoryChannel(f.executable);await first.inspect(scope);const target=await first.target(scope);await first.close();
  const reopened=createWechatHistoryChannel(f.executable);await reopened.inspect(scope);await assert.rejects(reopened.page(scope,target,'old-process-cursor'),{code:'history_cursor_invalid'});await reopened.close();
  assert.equal((await requests(f.logFile)).filter(row=>row.op==='page').length,0);
-});
-
-
-test('隔离客户端保留未核验文字，普通历史仍拒绝且伪造认证记录被拒绝',async t=>{
- for(const mode of ['quarantine','quarantine-forged']){
-  const f=await fixture(t);await f.setPlan({mode});
-  const client=new NarrowWechatClient({executable:f.executable,expectedCliSha256:f.manifest.cliSha256,expectedWcdbSha256:f.manifest.wcdbSha256});t.after(()=>client.close());
-  await client.resolveSelected(conversation);await client.inspectSelected();await client.supportSelected();
-  await assert.rejects(client.targetSelected(),{code:'history_support_unverified'});
-  const target=await client.quarantineTargetSelected();
-  if(mode==='quarantine-forged'){await assert.rejects(client.quarantinePageSelected(target,null),{code:'history_protocol_invalid'});continue;}
-  const result=await client.quarantinePageSelected(target,null);assert.equal(result.kind,'quarantine');
-  assert.equal(result.page.records[0].text,'合成历史正文');assert.equal(result.page.records[0].stateAssurance,'unverified');assert.equal(result.page.records[1].text,null);
-  await assert.rejects(client.targetSelected(),{code:'history_support_unverified'});
-  await client.close();
-  assert.equal((await f.history.read(f.binding.contact_id)).messages.length,0);
- }
 });
 
 

@@ -2,8 +2,8 @@ import type { ContactSummary } from '../../shared/contact-session-bridge';
 import type { BackendHost } from '../backend/host';
 import { normalizeUuid } from '../uuid';
 import type { ContactDirectoryResult } from './session';
+import { isRecord } from '../../shared/record';
 
-const record = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value);
 
 export async function readContactDirectory(backend: BackendHost): Promise<ContactDirectoryResult> {
   const generation = backend.getConnectionGeneration();
@@ -17,20 +17,20 @@ export async function readContactDirectory(backend: BackendHost): Promise<Contac
 }
 
 export function runtimeOwnerConfigured(value: unknown): boolean {
-  if (!record(value) || typeof value.runtime_owner_configured !== 'boolean') throw new Error('本人身份状态不可用。');
+  if (!isRecord(value) || typeof value.runtime_owner_configured !== 'boolean') throw new Error('本人身份状态不可用。');
   return value.runtime_owner_configured;
 }
 
 // 只投影现有 contacts 的真实摘要，不从名称推断身份或补造详情字段。
 export function contactSummaries(value: unknown): ContactSummary[] {
-  if (!record(value) || !Array.isArray(value.contacts)) throw new Error('联系人目录不可用。');
+  if (!isRecord(value) || !Array.isArray(value.contacts)) throw new Error('联系人目录不可用。');
   const known = new Set<string>();
   return value.contacts.map((entry: unknown) => {
-    if (!record(entry)) throw new Error('联系人目录不可用。');
+    if (!isRecord(entry)) throw new Error('联系人目录不可用。');
     const contactId = normalizeUuid(entry.contact_id);
     if (contactId === null
       || typeof entry.display_name !== 'string' || !entry.display_name.trim()
-      || !record(entry.data_status)) throw new Error('联系人目录不可用。');
+      || !isRecord(entry.data_status)) throw new Error('联系人目录不可用。');
     if (entry.avatar_revision !== undefined && entry.avatar_revision !== null
       && (typeof entry.avatar_revision !== 'string' || entry.avatar_revision.length > 128)) throw new Error('联系人目录不可用。');
     const { message_count: messageCount, source_count: sourceCount } = entry.data_status;

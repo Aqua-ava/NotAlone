@@ -1,31 +1,11 @@
 import type { ContactSessionView } from './contact-session';
-import { useEffect, useRef, useState } from 'react';
-import { readInitialState } from './initial-read';
+import { useBridgeState } from './use-bridge-state';
 import { initialForegroundState, type ForegroundBridge, type ForegroundState } from '../shared/foreground-bridge';
 import { foregroundFailureReason, isTransientForegroundContextChange, isUnsupportedForegroundConversation } from '../shared/foreground-failure.mjs';
 import { ScreenPermissionPanel, type ScreenPermissionView } from './ScreenPermissionPanel';
 
 export function useForegroundState(bridge: ForegroundBridge, enabled: boolean): { state: ForegroundState; error: string; retry: () => void } {
-  const [state, setState] = useState<ForegroundState>(initialForegroundState);
-  const [error, setError] = useState('');
-  const [readAttempt, setReadAttempt] = useState(0);
-  const reading = useRef(false);
-  const latestRevision = useRef(initialForegroundState.revision);
-  const stateVersion = useRef(0);
-  useEffect(() => {
-    if (!enabled) return;
-    let active = true;
-    const receive = (next: ForegroundState) => {
-      if (!active || next.revision < latestRevision.current) return;
-      latestRevision.current = next.revision; stateVersion.current++;
-      setError(''); setState(next);
-    };
-    const unsubscribe = bridge.onStateChanged(receive);
-    void readInitialState({ read: () => bridge.getState(), receive, reportError: setError,
-      isActive: () => active, busy: reading, getStateVersion: () => stateVersion.current });
-    return () => { active = false; unsubscribe(); };
-  }, [bridge, enabled, readAttempt]);
-  return { state, error, retry: () => setReadAttempt((value) => value + 1) };
+  return useBridgeState(bridge, initialForegroundState, enabled);
 }
 
 export function ForegroundPanel({ state, session, permission }: { state: ForegroundState; session?: ContactSessionView; permission?: ScreenPermissionView }) {

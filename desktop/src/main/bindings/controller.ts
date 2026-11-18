@@ -7,10 +7,10 @@ import { ContactDeletionQuiet } from '../contacts/deletion-quiet';
 import type { ContactSession } from '../contacts/session';
 import { setSyncEnabled } from '../sync/status';
 import { isBindingIdentifier, isConversationLocator } from './validation';
+import { isRecord } from '../../shared/record';
 
-const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 function savedSyncEnabled(value: unknown): boolean | undefined {
-  if (!record(value) || !Object.hasOwn(value, 'sync_enabled')) return undefined;
+  if (!isRecord(value) || !Object.hasOwn(value, 'sync_enabled')) return undefined;
   if (typeof value.sync_enabled !== 'boolean') throw new Error('同步开关不可用。');
   return value.sync_enabled;
 }
@@ -28,20 +28,20 @@ const locator = (value: unknown): string => {
   return value;
 };
 export function bindingSummary(value: unknown): BindingSummary {
-  if (!record(value) || (value.status !== 'active' && value.status !== 'revoked')
+  if (!isRecord(value) || (value.status !== 'active' && value.status !== 'revoked')
     || (value.display_name !== null && typeof value.display_name !== 'string')) throw new Error('授权目录不可用。');
   return { bindingId: identifier(value.binding_id), contactId: identifier(value.contact_id),
     locator: locator(value.conversation_locator), displayName: value.display_name, status: value.status,
     ...(value.selection_generation === undefined ? {} : { selectionGeneration: selectionGeneration(value.selection_generation) }) };
 }
 function bindings(value: unknown): BindingSummary[] {
-  if (!record(value) || !Array.isArray(value.bindings)) throw new Error('授权目录不可用。');
+  if (!isRecord(value) || !Array.isArray(value.bindings)) throw new Error('授权目录不可用。');
   const items = value.bindings.map(bindingSummary);
   if (items.some((item) => item.status !== 'active') || new Set(items.map((item) => item.locator)).size !== items.length) throw new Error('授权目录不可用。');
   return items;
 }
 function knownBindings(value: unknown, active: BindingSummary[]): BindingSummary[] {
-  if (!record(value) || (value.revoked_bindings !== undefined && !Array.isArray(value.revoked_bindings))) throw new Error('关联目录不可用。');
+  if (!isRecord(value) || (value.revoked_bindings !== undefined && !Array.isArray(value.revoked_bindings))) throw new Error('关联目录不可用。');
   const revoked = (value.revoked_bindings as unknown[] | undefined ?? []).map(bindingSummary);
   const items = [...active, ...revoked];
   if (revoked.some((item) => item.status !== 'revoked')
@@ -49,9 +49,9 @@ function knownBindings(value: unknown, active: BindingSummary[]): BindingSummary
   return items;
 }
 function sessions(value: unknown): CliSessionSummary[] {
-  if (!record(value) || !Array.isArray(value.sessions)) throw new Error('会话元数据不可用。');
+  if (!isRecord(value) || !Array.isArray(value.sessions)) throw new Error('会话元数据不可用。');
   const items = value.sessions.map((entry): CliSessionSummary => {
-    if (!record(entry) || typeof entry.display_name !== 'string' || !entry.display_name.trim()
+    if (!isRecord(entry) || typeof entry.display_name !== 'string' || !entry.display_name.trim()
       || (entry.last_timestamp !== null && (!Number.isSafeInteger(entry.last_timestamp) || typeof entry.last_timestamp !== 'number'))) throw new Error('会话元数据不可用。');
     return { locator: locator(entry.username), displayName: entry.display_name, lastTimestamp: entry.last_timestamp as number | null,
       boundContactId: entry.bound_contact_id === null ? null : identifier(entry.bound_contact_id),
@@ -191,7 +191,7 @@ export class BindingConsentController {
       }
       const directory = await this.backend.requestJson({ method: 'GET', path: '/api/sync/cli-bindings' });
       if (!this.current(operation)) return false;
-      this.identityProtocol = record(directory.data) && directory.data.identity_protocol === 'sqlite-selected-v1';
+      this.identityProtocol = isRecord(directory.data) && directory.data.identity_protocol === 'sqlite-selected-v1';
       let active = bindings(directory.data);
       let known = knownBindings(directory.data, active);
       let enabled = savedSyncEnabled(directory.data);
@@ -210,7 +210,7 @@ export class BindingConsentController {
         sessionList = sessions(list[0].value.data);
         if (this.identityProtocol) {
           const payload = list[0].value.data;
-          if (!record(payload) || typeof payload.snapshot_token !== 'string') throw new Error('名单核验凭据不可用。');
+          if (!isRecord(payload) || typeof payload.snapshot_token !== 'string') throw new Error('名单核验凭据不可用。');
           this.snapshotToken = payload.snapshot_token;
           this.snapshotGenerations = new Map(sessionList.map(row => [row.locator, row.selectionGeneration ?? '']));
         }
@@ -225,7 +225,7 @@ export class BindingConsentController {
       }
       const status = list[1].status === 'fulfilled' ? list[1].value.data : null;
       this.publish({ phase: 'ready', selectionOnly: this.identityProtocol, bindings: active, knownBindings: known, sessions: sessionList, sessionIssue,
-        syncEnabled: enabled ?? (record(status) && typeof status.sync_enabled === 'boolean' ? status.sync_enabled : null) });
+        syncEnabled: enabled ?? (isRecord(status) && typeof status.sync_enabled === 'boolean' ? status.sync_enabled : null) });
       this.cancelQuietRetry();
       return true;
     } catch (error) {
@@ -268,7 +268,7 @@ export class BindingConsentController {
           ...(item.contactId === null ? {} : { contact_id: item.contactId }) })),
       } });
       if (!this.current(operation) || result.generation !== operation.generation) return;
-      if (!record(result.data) || typeof result.data.sync_enabled !== 'boolean') throw new Error('授权确认结果不可用。');
+      if (!isRecord(result.data) || typeof result.data.sync_enabled !== 'boolean') throw new Error('授权确认结果不可用。');
       let syncEnabled = result.data.sync_enabled;
       let syncStartFailed = false;
       if (confirmation.startSync === true && !syncEnabled) {

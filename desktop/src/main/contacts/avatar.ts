@@ -1,16 +1,16 @@
 import type { BackendHost } from '../backend/host';
 import type { ContactAvatarData, ContactSelection } from '../../shared/contact-session-bridge';
 import type { ContactSession } from './session';
+import { isRecord } from '../../shared/record';
 
 const maxAvatarBytes = 256 * 1024;
-const record = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const unavailable = () => new Error('联系人头像暂不可用。');
 
 export function parseContactAvatar(value: unknown): ContactAvatarData | null {
-  if (!record(value) || Object.keys(value).join(',') !== 'avatar') throw unavailable();
+  if (!isRecord(value) || Object.keys(value).join(',') !== 'avatar') throw unavailable();
   if (value.avatar === null) return null;
   const avatar = value.avatar;
-  if (!record(avatar) || Object.keys(avatar).sort().join(',') !== 'base64,mime_type'
+  if (!isRecord(avatar) || Object.keys(avatar).sort().join(',') !== 'base64,mime_type'
     || typeof avatar.base64 !== 'string' || !avatar.base64.length || avatar.base64.length > Math.ceil(maxAvatarBytes / 3) * 4
     || avatar.base64.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(avatar.base64)) throw unavailable();
   const bytes = Buffer.from(avatar.base64, 'base64');
