@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {validateProfile} from '../src/memory/profiles/document.ts';
+import {validateProfile} from '../src/memory/profiles/index.ts';
 import {DEFAULT_L2_SCENARIO_BUDGET} from '../src/memory/scenarios/document.ts';
 
 const first='10000000-0000-4000-8000-000000000001';

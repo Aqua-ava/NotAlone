@@ -4,15 +4,13 @@ import {createHash,randomUUID} from 'node:crypto';
 import {isDeepStrictEqual} from 'node:util';
 import {
   L3ProfileWorkspace,
-  runProfileDocumentAgent,
-  verifyProfileProposal,
-} from '../src/memory/profiles/workspace.ts';
-import {
   filterProfileProposal,
   renderProfile,
+  runProfileDocumentAgent,
   validateIncrementalProfile,
   validateProfile,
-} from '../src/memory/profiles/document.ts';
+  verifyProfileProposal,
+} from '../src/memory/profiles/index.ts';
 
 const memory = {
   memory_id: randomUUID(),

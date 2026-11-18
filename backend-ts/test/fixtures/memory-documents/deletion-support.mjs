@@ -6,7 +6,7 @@ import {SqliteMemoryAdjudication} from '../../../src/memory/sqlite/management/ad
 import {SqliteMemoryDocuments} from '../../../src/memory/sqlite/documents/service.ts';
 import {DeletionService} from '../../../src/storage/sqlite/deletion/service.ts';
 import {ManagedFiles} from '../../../src/storage/sqlite/deletion/managed-files.ts';
-import {renderProfile} from '../../../src/memory/profiles/document.ts';
+import {renderProfile} from '../../../src/memory/profiles/index.ts';
 import {ActiveHolders} from '../../../src/storage/sqlite/deletion/holders.ts';
 const registryModule=new URL('./deletion-registry.mjs',import.meta.url).href;
 export async function deletionFixture(t,{beforeCall,beforeExtractionPrepare,beforeDocuments,extractionResponse,documentResponse,twoContacts=false,twoCaptures=false,noMemory=false,ownerB=true,targetOnly=false,orderOwnerA=false,preferText,laterScheduling=false,laterSchedulingContactOnly=false}={}){

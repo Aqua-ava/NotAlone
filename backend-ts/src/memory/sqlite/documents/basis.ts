@@ -1,7 +1,7 @@
 import type {StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
 import type {L2ScenarioMemory,L2ScenarioReference,L2ScenarioVersion} from '../../scenarios/document.ts';
-import type {L3ProfileDocument,L3ProfileEntry} from '../../profiles/document.ts';
+import type {L3ProfileDocument,L3ProfileEntry} from '../../profiles/index.ts';
 import {sha256} from '../../../platform/sha256.ts';
 import {assertSourceEligibility,assertSourcesEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
 import type {MessageSourceReference} from '../../../history/sqlite/contracts.ts';

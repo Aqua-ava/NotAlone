@@ -9,7 +9,7 @@ import type {ModelLedgerReceipt} from '../../../platform/models/model-ledger-con
 import type {SqliteExtractionModelPreparation} from '../model-port.ts';
 import {DEFAULT_L2_SCENARIO_BUDGET,L2ScenarioError,L2ScenarioVerificationError,scenarioVerificationFeedback} from '../../scenarios/document.ts';
 import {L2ScenarioDocumentWorkspace,runScenarioDocumentAgent,verifyScenarioProposal,type ScenarioDocumentCallPort} from '../../scenarios/workspace.ts';
-import {L3ProfileWorkspace,runProfileDocumentAgent,verifyProfileProposal} from '../../profiles/workspace.ts';
+import {L3ProfileWorkspace,runProfileDocumentAgent,verifyProfileProposal} from '../../profiles/index.ts';
 import type {DocumentClaim,DocumentWork} from './stages.ts';
 
 export interface DocumentRequest {system:string;user:string;messages:any[];tools:any[];validateOutput(blocks:readonly unknown[]):void;}
