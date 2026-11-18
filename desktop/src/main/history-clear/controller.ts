@@ -1,6 +1,7 @@
 import { type HistoryBoundaryView, type HistoryClearRequest, type HistoryClearState, type HistoryClearView, type HistoryResyncView, type HistoryResyncRequest } from '../../shared/history-clear-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
+import { StateStore } from '../state-store';
 
 type Scope = { generation: number; contactId: string; scopeRevision: number };
 const phases = new Set(['none', 'boundary_pending', 'cleaning', 'cleanup_blocked', 'completed']);
@@ -40,28 +41,21 @@ function resyncView(value: unknown): HistoryResyncView {
   return { contactId: row.contact_id, requestKey: typeof row.request_key === 'string' ? row.request_key : null, state: row.state as HistoryResyncView['state'],
     completed: row.completed, goalPhase, messageCount, nonTextCount, failureCode };
 }
-export class HistoryClearController {
-  private state: HistoryClearState = { revision: 0, contactId: null, scopeRevision: 0, phase: 'idle', clear: null, resync: null, busy: null, error: null };
+export class HistoryClearController extends StateStore<HistoryClearState> {
   private scope: Scope | undefined;
   private revision = 0;
   private pending: AbortController | undefined;
   private disposed = false;
-  private readonly listeners = new Set<(state: HistoryClearState) => void>();
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession) {
+    super({ revision: 0, contactId: null, scopeRevision: 0, phase: 'idle', clear: null, resync: null, busy: null, error: null });
     contacts.onStateChanged(() => this.synchronizeScope());
     backend.onStateChanged(() => this.synchronizeScope());
     this.synchronizeScope();
   }
-  getState(): HistoryClearState { return structuredClone(this.state); }
-  onStateChanged(listener: (state: HistoryClearState) => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+  override getState(): HistoryClearState { return structuredClone(this.state); }
   dispose(): void {
     if (this.disposed) return;
-    this.disposed = true; this.cancel(); this.listeners.clear();
-  }
-  private publish(patch: Partial<HistoryClearState>): void {
-    const next = { ...this.state, ...patch, revision: this.state.revision + 1 };
-    this.state = next;
-    for (const listener of this.listeners) listener(this.getState());
+    this.disposed = true; this.cancel(); this.clearListeners();
   }
   private cancel(): void { this.pending?.abort(); this.pending = undefined; ++this.revision; }
   private synchronizeScope(): void {

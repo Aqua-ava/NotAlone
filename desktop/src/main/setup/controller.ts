@@ -3,20 +3,20 @@ import { DEFAULT_MODEL_PARAMETERS, equalModelParameters, isModelParameters, mode
 import { BackendRequestFailure } from '../backend/json-client';
 import type { SetupState } from '../../shared/setup-bridge';
 import type { BackendHost } from '../backend/host';
+import { StateStore } from '../state-store';
 
 type Operation = { generation: number; epoch: number };
 
-export class SetupController {
-  private state: SetupState = { phase: 'offline', credentialsConfigured: false, revision: 0 };
+export class SetupController extends StateStore<SetupState> {
   private generation: number | undefined;
   private epoch = 0;
   private busy = false;
   private savedConfigPending = false;
   private savedExpectation: 'credentials' | 'parameters' = 'credentials';
   private savedModelParameters: ModelParameters | undefined;
-  private readonly listeners = new Set<(state: SetupState) => void>();
 
   constructor(private readonly backend: BackendHost) {
+    super({ phase: 'offline', credentialsConfigured: false, revision: 0 });
     backend.onStateChanged(() => {
       const generation = backend.getConnectionGeneration();
       if (generation === this.generation) return;
@@ -28,10 +28,7 @@ export class SetupController {
       else void this.refresh();
     });
   }
-  getState(): SetupState { return structuredClone(this.state); }
-  onStateChanged(listener: (state: SetupState) => void): () => void {
-    this.listeners.add(listener); return () => this.listeners.delete(listener);
-  }
+  override getState(): SetupState { return structuredClone(this.state); }
   async refresh(): Promise<void> {
     const operation = this.beginOperation();
     if (operation) await this.readStatus(operation);
@@ -141,9 +138,5 @@ export class SetupController {
   }
   private isCurrent(operation: Operation): boolean {
     return operation.generation === this.backend.getConnectionGeneration() && operation.epoch === this.epoch;
-  }
-  private publish(update: Partial<SetupState>): void {
-    this.state = { ...this.state, ...update, revision: this.state.revision + 1 };
-    for (const listener of this.listeners) listener(this.getState());
   }
 }

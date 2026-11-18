@@ -3,13 +3,13 @@ import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import { ContactDeletionQuiet } from '../contacts/deletion-quiet';
 import type { ContactSession } from '../contacts/session';
+import { StateStore } from '../state-store';
 import { readSyncStatus, setSyncEnabled, setSyncScope, setHistoryAuthorization } from './status';
 
 type Scope = { generation: number };
 type Operation = 'refresh' | 'enable' | 'disable' | 'scope' | 'history';
 
-export class SyncControlController {
-  private state: SyncControlState = { revision: 0, scopeRevision: 0, phase: 'offline', report: null, busy: null, errorCode: null };
+export class SyncControlController extends StateStore<SyncControlState> {
   private scope: Scope | undefined;
   private epoch = 0;
   private pending: AbortController | undefined;
@@ -22,25 +22,22 @@ export class SyncControlController {
   private directoryRefresh: { scope: Scope; count: number; avatarRevision?: string } | undefined;
   private disposed = false;
   private readonly unsubscribe: (() => void)[];
-  private readonly listeners = new Set<(state: SyncControlState) => void>();
 
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession,
     private readonly beginReadingScopeChange: () => (() => void) = () => () => {},
     private readonly quiet: ContactDeletionQuiet = new ContactDeletionQuiet()) {
+    super({ revision: 0, scopeRevision: 0, phase: 'offline', report: null, busy: null, errorCode: null });
     this.unsubscribe = [backend.onStateChanged(() => this.synchronizeScope()),
       contacts.onStateChanged(() => this.synchronizeScope())];
     this.synchronizeScope();
   }
-  getState(): SyncControlState { return structuredClone(this.state); }
-  onStateChanged(listener: (state: SyncControlState) => void): () => void {
-    this.listeners.add(listener); return () => this.listeners.delete(listener);
-  }
+  override getState(): SyncControlState { return structuredClone(this.state); }
   dispose(): void {
     this.disposed = true; this.cancelRecovery(); this.cancelSnapshot();
     this.directoryRefresh = undefined;
     this.pending?.abort(); this.pending = undefined; ++this.epoch;
     for (const unsubscribe of this.unsubscribe) unsubscribe();
-    this.listeners.clear();
+    this.clearListeners();
   }
   private cancelRecovery(): void {
     clearTimeout(this.recoveryTimer); this.recoveryTimer = undefined; this.recoveryFailures = 0;
@@ -226,9 +223,5 @@ export class SyncControlController {
     }).catch(() => {}).finally(() => {
       if (this.directoryRefresh === refresh) this.directoryRefresh = undefined;
     });
-  }
-  private publish(update: Partial<SyncControlState>): void {
-    this.state = { ...this.state, ...update, revision: this.state.revision + 1 };
-    for (const listener of this.listeners) listener(this.getState());
   }
 }

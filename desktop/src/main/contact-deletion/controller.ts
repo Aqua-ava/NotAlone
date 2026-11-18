@@ -5,6 +5,7 @@ import { BackendRequestFailure, requestTimeoutLimitMs } from '../backend/json-cl
 import type { ContactSession } from '../contacts/session';
 import { ContactDeletionQuiet } from '../contacts/deletion-quiet';
 import { deletionOperation, deletionOperations, deletionReceipt } from './read';
+import { StateStore } from '../state-store';
 import { isUuid } from '../uuid';
 
 type Operation = { generation: number; epoch: number };
@@ -50,8 +51,7 @@ function pause(ms: number, signal: AbortSignal): Promise<void> {
 const unknownResult = '删除结果尚未确认。请刷新状态或重试原删除操作，未确认完成前不会显示已删除。';
 
 // 删除任务按当前本人连接跟踪，不依赖已被删除的联系人仍在目录中。
-export class ContactDeletionController {
-  private state: ContactDeletionState = { revision: 0, scopeRevision: 0, phase: 'offline', operations: [], busyId: null, error: null };
+export class ContactDeletionController extends StateStore<ContactDeletionState> {
   private generation: number | undefined;
   private ownerId: string | undefined;
   private previousScope: { ownerId: string; operations: ContactDeletionItem[] } | undefined;
@@ -76,12 +76,12 @@ export class ContactDeletionController {
   private readonly discoverTimeoutMs: number;
   private readonly settleProbeDelaysMs: number[];
   private readonly quietMaxMs: number;
-  private readonly listeners = new Set<(state: ContactDeletionState) => void>();
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession,
     private readonly beginReadingScopeChange: () => (() => void) = () => () => {},
     private readonly invalidateContact: (contactId: string) => void = () => {},
     private readonly quiet: ContactDeletionQuiet = new ContactDeletionQuiet(),
     options: ContactDeletionOptions = {}) {
+    super({ revision: 0, scopeRevision: 0, phase: 'offline', operations: [], busyId: null, error: null });
     this.autoRetryDelaysMs = options.autoRetryDelaysMs ?? defaultAutoRetryDelaysMs;
     this.autoResumeEnabled = options.autoResume ?? true;
     this.contactPollMs = options.contactPollMs ?? 1_500;
@@ -94,11 +94,8 @@ export class ContactDeletionController {
     backend.onStateChanged(() => this.synchronize());
     this.synchronize();
   }
-  getState(): ContactDeletionState { return structuredClone(this.state); }
-  onStateChanged(listener: (state: ContactDeletionState) => void): () => void {
-    this.listeners.add(listener); return () => { this.listeners.delete(listener); };
-  }
-  dispose(): void { this.disposed = true; this.cancel(); this.endQuietWindow(); this.listeners.clear(); }
+  override getState(): ContactDeletionState { return structuredClone(this.state); }
+  dispose(): void { this.disposed = true; this.cancel(); this.endQuietWindow(); this.clearListeners(); }
   /**
    * 后端只要还有未完成的联系人删除就整体关闭名单服务，因此窗口覆盖整个未完成期间，而不只是单次请求。
    * 删除被重试、续跑或重连打断时继续保留窗口；全部完成、确认没有未完成任务或兜底超时后才恢复无关读取。
@@ -538,8 +535,4 @@ export class ContactDeletionController {
     return !this.disposed && operation.generation === this.backend.getConnectionGeneration() && operation.epoch === this.epoch;
   }
   private cancel(): void { ++this.epoch; this.pending?.abort(); this.pending = undefined; }
-  private publish(update: Partial<ContactDeletionState>): void {
-    this.state = { ...this.state, ...update, revision: this.state.revision + 1 };
-    for (const listener of this.listeners) listener(this.getState());
-  }
 }

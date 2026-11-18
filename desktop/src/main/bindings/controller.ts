@@ -5,6 +5,7 @@ import { BackendRequestFailure } from '../backend/json-client';
 import { runtimeOwnerConfigured } from '../contacts/directory';
 import { ContactDeletionQuiet } from '../contacts/deletion-quiet';
 import type { ContactSession } from '../contacts/session';
+import { StateStore } from '../state-store';
 import { setSyncEnabled } from '../sync/status';
 import { isBindingIdentifier, isConversationLocator } from './validation';
 import { isRecord } from '../../shared/record';
@@ -68,9 +69,7 @@ const defaultQuietRetryDelaysMs = [2_000, 4_000, 8_000, 15_000, 30_000];
 export interface BindingConsentOptions { quietRetryDelaysMs?: number[] }
 
 // 认证传输复用 BackendHost，读取范围始终由服务端的运行身份决定。
-export class BindingConsentController {
-  private state: BindingConsentState = { revision: 0, scopeRevision: 0, phase: 'offline',
-    sessions: [], bindings: [], knownBindings: [], syncEnabled: null, sessionIssue: 'not-requested', busy: null, errorCode: null, notice: null };
+export class BindingConsentController extends StateStore<BindingConsentState> {
   private identityProtocol = false;
   private snapshotToken: string | undefined;
   private snapshotGenerations = new Map<string, string>();
@@ -82,11 +81,12 @@ export class BindingConsentController {
   private quietRetryAttempt = 0;
   private readonly quietRetryDelaysMs: number[];
   private readonly unsubscribeState: () => void;
-  private readonly listeners = new Set<(state: BindingConsentState) => void>();
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession,
     private readonly beginReadingScopeChange: () => (() => void) = () => () => {},
     private readonly quiet: ContactDeletionQuiet = new ContactDeletionQuiet(),
     options: BindingConsentOptions = {}) {
+    super({ revision: 0, scopeRevision: 0, phase: 'offline',
+      sessions: [], bindings: [], knownBindings: [], syncEnabled: null, sessionIssue: 'not-requested', busy: null, errorCode: null, notice: null });
     this.quietRetryDelaysMs = options.quietRetryDelaysMs ?? defaultQuietRetryDelaysMs;
     const unsubscribe = backend.onStateChanged(() => {
       if (this.disposed) return;
@@ -104,19 +104,16 @@ export class BindingConsentController {
     });
     this.unsubscribeState = typeof unsubscribe === 'function' ? unsubscribe : () => {};
   }
-  getState(): BindingConsentState { return { ...this.state, sessions: this.state.sessions.map((item) => ({ ...item })),
+  override getState(): BindingConsentState { return { ...this.state, sessions: this.state.sessions.map((item) => ({ ...item })),
     bindings: this.state.bindings.map((item) => ({ ...item })),
     knownBindings: this.state.knownBindings?.map((item) => ({ ...item })) }; }
-  onStateChanged(listener: (state: BindingConsentState) => void): () => void {
-    this.listeners.add(listener); return () => { this.listeners.delete(listener); };
-  }
   dispose(): void {
     this.disposed = true;
     this.cancelQuietRetry();
     this.unsubscribeState();
     this.pendingRead = undefined;
     ++this.epoch;
-    this.listeners.clear();
+    this.clearListeners();
   }
   async refresh(): Promise<void> {
     await this.refreshState(true);
@@ -345,9 +342,5 @@ export class BindingConsentController {
   }
   private current(operation: Operation): boolean {
     return operation.generation === this.backend.getConnectionGeneration() && operation.epoch === this.epoch;
-  }
-  private publish(update: Partial<BindingConsentState>): void {
-    this.state = { ...this.state, ...update, revision: this.state.revision + 1 };
-    for (const listener of this.listeners) listener(this.getState());
   }
 }

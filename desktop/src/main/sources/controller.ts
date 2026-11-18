@@ -4,11 +4,11 @@ import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
 import { deletionSources, deletionTask } from './read';
 import { SourceDeletionTracking } from './tracking';
+import { StateStore } from '../state-store';
 type Scope = { generation: number; contactId: string; scopeRevision: number };
 
 // DELETE只表示请求被接受；每次公开重读原任务及固定最终步骤，绝不推断SSE或百分比完成。
-export class SourceDeletionController {
-  private state: SourceDeletionState = { revision: 0, contactId: null, scopeRevision: 0, phase: 'idle', sources: [], busySourceId: null, error: null };
+export class SourceDeletionController extends StateStore<SourceDeletionState> {
   private scope: Scope | undefined;
   private revision = 0;
   private pending: AbortController | undefined;
@@ -16,17 +16,16 @@ export class SourceDeletionController {
   private pollCount = 0;
   private readonly tracking: SourceDeletionTracking;
   private readonly verified = new Set<string>();
-  private readonly listeners = new Set<(state: SourceDeletionState) => void>();
   private readonly deletionListeners = new Set<(phase: 'started' | 'settled') => void>();
   constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession,
     private readonly onSourceChanged: (contactId: string) => Promise<void>) {
+    super({ revision: 0, contactId: null, scopeRevision: 0, phase: 'idle', sources: [], busySourceId: null, error: null });
     this.tracking = new SourceDeletionTracking(backend, onSourceChanged);
     contacts.onStateChanged(() => this.synchronizeScope());
     backend.onStateChanged(() => this.synchronizeScope());
     this.synchronizeScope();
   }
-  getState() { return structuredClone(this.state); }
-  onStateChanged(listener: (state: SourceDeletionState) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
+  override getState(): SourceDeletionState { return structuredClone(this.state); }
   // 对应一次公开删除请求的起止；凭据及后台原任务复验继续使用 onSourceChanged。
   onDeletion(listener: (phase: 'started' | 'settled') => void) {
     this.deletionListeners.add(listener); return () => { this.deletionListeners.delete(listener); };
@@ -101,5 +100,4 @@ export class SourceDeletionController {
     finally { if (this.pending === pending) this.pending = undefined; }
   }
   private cancel() { ++this.revision; this.pending?.abort(); this.pending = undefined; clearTimeout(this.poll); this.poll = undefined; }
-  private publish(update: Partial<SourceDeletionState>) { this.state = { ...this.state, ...update, revision: this.state.revision + 1 }; for (const listener of this.listeners) listener(this.getState()); }
 }

@@ -1,6 +1,7 @@
 import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import { validWechatSetupConfirmation, type WechatSetupConfirmation, type WechatSetupState } from '../../shared/wechat-setup-bridge';
+import { StateStore } from '../state-store';
 
 type Operation = { generation: number; epoch: number };
 type Report = { state: WechatSetupState['phase']; account_id: string | null; candidate_token: string | null; failure_code: string | null; source_reconfirmation_required?: boolean;
@@ -34,15 +35,14 @@ function report(data: unknown): Report {
 }
 
 // 授权候选只保存在主进程，渲染进程不能指定本人或微信账号。
-export class WechatSetupController {
-  private state: WechatSetupState = { phase: 'offline', accountId: null, failureCode: null, revision: 0 };
+export class WechatSetupController extends StateStore<WechatSetupState> {
   private token: string | null = null;
   private epoch = 0;
   private busy = false;
   private pendingRestart = false;
   private generation: number | undefined;
-  private listeners = new Set<(state: WechatSetupState) => void>();
   constructor(private readonly backend: BackendHost) {
+    super({ phase: 'offline', accountId: null, failureCode: null, revision: 0 });
     this.generation = backend.getConnectionGeneration();
     backend.onStateChanged(() => {
       const generation = backend.getConnectionGeneration();
@@ -55,10 +55,6 @@ export class WechatSetupController {
       this.publish({ phase: 'offline', accountId: null, failureCode: null, sourceReconfirmationRequired: false, versionCheck: undefined });
       if (generation !== undefined) void this.refresh();
     });
-  }
-  getState(): WechatSetupState { return { ...this.state }; }
-  onStateChanged(listener: (state: WechatSetupState) => void): () => void {
-    this.listeners.add(listener); return () => this.listeners.delete(listener);
   }
   async refresh(): Promise<void> {
     if (this.busy) return;
@@ -193,9 +189,5 @@ export class WechatSetupController {
   }
   private current(operation: Operation): boolean {
     return operation.generation === this.backend.getConnectionGeneration() && operation.epoch === this.epoch;
-  }
-  private publish(update: Partial<WechatSetupState>): void {
-    this.state = { ...this.state, ...update, revision: this.state.revision + 1 };
-    for (const listener of this.listeners) listener(this.getState());
   }
 }

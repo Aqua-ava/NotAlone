@@ -1,4 +1,5 @@
 import { initialScreenPermissionState, type ScreenPermissionState } from '../../shared/screen-permission-bridge';
+import { StateStore } from '../state-store';
 
 export interface ScreenPermissionEffects {
   inspect(request: boolean, signal: AbortSignal): Promise<boolean | undefined>;
@@ -7,18 +8,12 @@ export interface ScreenPermissionEffects {
 }
 
 // 只管理权限引导，不读取微信或授予联系人／生成资格。
-export class ScreenPermissionController {
-  private state = { ...initialScreenPermissionState };
-  private readonly listeners = new Set<(state: ScreenPermissionState) => void>();
+export class ScreenPermissionController extends StateStore<ScreenPermissionState> {
   private flight: Promise<ScreenPermissionState> | undefined;
   private abort: AbortController | undefined;
   private disposed = false;
   private started = false;
-  constructor(private readonly effects: ScreenPermissionEffects) {}
-  getState(): ScreenPermissionState { return { ...this.state }; }
-  onStateChanged(listener: (state: ScreenPermissionState) => void): () => void {
-    this.listeners.add(listener); return () => this.listeners.delete(listener);
-  }
+  constructor(private readonly effects: ScreenPermissionEffects) { super({ ...initialScreenPermissionState }); }
   startup(): Promise<ScreenPermissionState> {
     if (this.started || this.disposed) return Promise.resolve(this.getState());
     this.started = true;
@@ -37,7 +32,7 @@ export class ScreenPermissionController {
     if (!this.state.busy) this.publish({ phase: 'missing' });
   }
   dispose(): void {
-    this.disposed = true; this.abort?.abort(); this.listeners.clear();
+    this.disposed = true; this.abort?.abort(); this.clearListeners();
   }
   private async requestAccess(signal: AbortSignal): Promise<void> {
     const granted = await this.inspect(true, signal);
@@ -64,9 +59,9 @@ export class ScreenPermissionController {
     this.flight = pending;
     return pending;
   }
-  private publish(update: Partial<ScreenPermissionState>): void {
+  // 释放后不再改动状态或递增 revision。
+  protected override publish(update: Partial<ScreenPermissionState>): void {
     if (this.disposed) return;
-    this.state = { ...this.state, ...update, revision: this.state.revision + 1 };
-    for (const listener of this.listeners) listener(this.getState());
+    super.publish(update);
   }
 }
