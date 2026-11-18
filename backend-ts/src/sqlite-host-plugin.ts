@@ -336,15 +336,14 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
             respond(200,{configured:true,restart_required:true});
           }catch(error){respond(400,{error:error instanceof StorageFailure?error.code:'setup_request_invalid'});}return;
         }
-        if(req.method==='POST'&&(url.pathname==='/api/setup/credentials'||url.pathname==='/api/setup/official-deepseek'||url.pathname==='/api/setup/deepseek-configuration')){
+        if(req.method==='POST'&&url.pathname==='/api/setup/deepseek-configuration'){
           try {
             const body=await readHttpBody(req,16384,10000);
-            const payload=JSON.parse(body.toString('utf8')),official=url.pathname==='/api/setup/official-deepseek',custom=url.pathname==='/api/setup/deepseek-configuration';
-            if(!payload||typeof payload!=='object'||Array.isArray(payload)||typeof payload.api_key!=='string'||
-              (custom?(typeof payload.base_url!=='string'||Object.keys(payload).length!==2||Object.keys(payload).some(key=>!['base_url','api_key'].includes(key))):official?(payload.confirm_official_defaults!==true||Object.keys(payload).some(key=>!['api_key','confirm_official_defaults'].includes(key))):
-                (payload.provider!=='deepseek'||Object.keys(payload).some(key=>!['provider','api_key'].includes(key)))))throw new StorageFailure('setup_request_invalid');
-            if(custom)await modelSetup.saveConfiguration(payload.base_url,payload.api_key);else await modelSetup.save(payload.api_key,official);
-            respond(200,{provider:'deepseek',configured:true,restart_required:true,...(official?{official_deepseek_defaults:true}:{})});
+            const payload=JSON.parse(body.toString('utf8'));
+            if(!payload||typeof payload!=='object'||Array.isArray(payload)||typeof payload.api_key!=='string'||typeof payload.base_url!=='string'||
+              Object.keys(payload).length!==2||Object.keys(payload).some(key=>!['base_url','api_key'].includes(key)))throw new StorageFailure('setup_request_invalid');
+            await modelSetup.saveConfiguration(payload.base_url,payload.api_key);
+            respond(200,{provider:'deepseek',configured:true,restart_required:true});
           }catch(error){respond(400,{error:error instanceof StorageFailure?error.code:'setup_request_invalid'});}return;
         }
         if(foreground&&url.pathname==='/api/sync/foreground/permission-restored'){

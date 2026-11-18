@@ -29,9 +29,8 @@ test('SQLite 正式宿主提供模型设置，保存后重开生效且不泄露�
  assert.equal(await readFile(envFilePath,'utf8'),beforeParameters);
  result=await running.request('/api/setup/model-parameters',parameters);assert.deepEqual(result,{status:200,data:{configured:true,restart_required:true}});
  result=await running.request('/api/setup/status');assert.deepEqual(result.data.model_parameters,parameters);assert.equal(result.data.runtime_configuration_pending,true);assert.equal(result.data.credentials_configured,false);
- result=await running.request('/api/setup/official-deepseek',{api_key:'synthetic-rejected-key',confirm_official_defaults:false});assert.equal(result.status,400);
- result=await running.request('/api/setup/credentials',{provider:'deepseek',api_key:'synthetic-test-key',extra:true});assert.equal(result.status,400);
- result=await running.request('/api/setup/credentials',{provider:'deepseek',api_key:'synthetic-test-key'});assert.equal(result.status,200);assert.equal(result.data.configured,true);assert.doesNotMatch(JSON.stringify(result),/synthetic-test-key/);
+ for(const route of ['/api/setup/credentials','/api/setup/official-deepseek']){result=await running.request(route,{provider:'deepseek',api_key:'synthetic-test-key'});assert.notEqual(result.status,200);assert.equal(result.data?.configured,undefined);}
+ assert.doesNotMatch(await readFile(envFilePath,'utf8'),/synthetic-test-key/);
  result=await running.request('/api/setup/status');assert.equal(result.data.runtime_configuration_pending,true);assert.doesNotMatch(JSON.stringify(result),/synthetic-test-key/);
  const beforeCustom=await readFile(envFilePath,'utf8');
  result=await running.request('/api/setup/deepseek-configuration',{base_url:'https://gateway.invalid/v1',api_key:'synthetic-custom-key'},{Origin:'https://untrusted.invalid'});assert.equal(result.status,401);assert.equal(await readFile(envFilePath,'utf8'),beforeCustom);
@@ -55,24 +54,13 @@ test('模型设置拒绝环境覆盖、无效密钥与符号链接，保留原�
  const existing=await readFile(location,'utf8');
  const overridden=await SqliteModelSetup.open(location,{NOTALONE_DEEPSEEK_API_KEY:'external-synthetic'});
  assert.equal(overridden.status().runtime_configuration_environment_override,true);
- await assert.rejects(overridden.save('new-synthetic',false),{code:'configuration_environment_override'});
+ await assert.rejects(overridden.saveConfiguration('https://api.deepseek.com','new-synthetic'),{code:'configuration_environment_override'});
  const disabled=await SqliteModelSetup.open(location,{NOTALONE_DISABLE_DOTENV:'1'});
- await assert.rejects(disabled.save('new-synthetic',false),{code:'configuration_environment_override'});
+ await assert.rejects(disabled.saveConfiguration('https://api.deepseek.com','new-synthetic'),{code:'configuration_environment_override'});
  const setup=await SqliteModelSetup.open(location,{});
- await assert.rejects(setup.save('invalid\ninjection',false),{code:'setup_request_invalid'});
+ await assert.rejects(setup.saveConfiguration('https://api.deepseek.com','invalid\ninjection'),{code:'setup_request_invalid'});
  assert.equal(await readFile(location,'utf8'),existing);
  const link=path.join(root,'link.env');await symlink(location,link);await assert.rejects(SqliteModelSetup.open(link,{}));
-});
-
-test('官方配置必须明确选择，保存时保留其他配置，重开读取新快照',async t=>{
- const {SqliteModelSetup}=await import('../src/host/sqlite-model-setup.ts');
- const root=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-setup-official-')));t.after(()=>rm(root,{recursive:true,force:true}));
- const location=path.join(root,'model.env');await writeFile(location,'OTHER=value\nNOTALONE_DEEPSEEK_MODEL=custom\nNOTALONE_DEEPSEEK_BASE_URL=https://example.invalid\n',{mode:0o600});
- const setup=await SqliteModelSetup.open(location,{});assert.equal(setup.status().official_deepseek_defaults,false);
- await setup.save('synthetic-new-key',false);assert.equal(setup.status().official_deepseek_defaults,false);
- await setup.save('synthetic-official-key',true);assert.equal(setup.status().runtime_configuration_pending,true);
- const saved=await readFile(location,'utf8');assert.match(saved,/OTHER=value/);assert.doesNotMatch(saved,/example\.invalid|synthetic-new-key/);
- const restarted=await SqliteModelSetup.open(location,{});assert.equal(restarted.status().official_deepseek_defaults,true);assert.equal(restarted.status().runtime_configuration_pending,false);
 });
 
 test('自填模型地址和新密钥原子保存，规范地址回显但密钥不回显，保留模型与其他配置',async t=>{
@@ -111,7 +99,7 @@ test('两套凭据并存时按地址显示状态和保存，切换接收方不�
  const setup=await SqliteModelSetup.open(file,{});assert.equal(setup.status().credentials_configured,true);
  await setup.saveConfiguration('https://opencode.ai/inference/go/anthropic','synthetic-new-opencode-key');
  let saved=await readFile(file,'utf8');assert.match(saved,/NOTALONE_OPENCODE_API_KEY=synthetic-new-opencode-key/);assert.match(saved,/NOTALONE_DEEPSEEK_API_KEY=synthetic-official-key/);
- await setup.save('synthetic-new-official-key',true);saved=await readFile(file,'utf8');
+ await setup.saveConfiguration('https://api.deepseek.com','synthetic-new-official-key');saved=await readFile(file,'utf8');
  assert.match(saved,/NOTALONE_DEEPSEEK_API_KEY=synthetic-new-official-key/);assert.match(saved,/NOTALONE_OPENCODE_API_KEY=synthetic-new-opencode-key/);
- const reopened=await SqliteModelSetup.open(file,{});assert.equal(reopened.status().official_deepseek_defaults,true);assert.doesNotMatch(JSON.stringify(reopened.status()),/synthetic/);
+ const reopened=await SqliteModelSetup.open(file,{});assert.equal(reopened.status().deepseek_base_url,'https://api.deepseek.com');assert.doesNotMatch(JSON.stringify(reopened.status()),/synthetic/);
 });

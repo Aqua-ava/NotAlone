@@ -67,7 +67,7 @@ test('认证停读先接纳，等待在途请求排空后由原状态接口确�
  const ready=await (await request('/api/runtime/status')).json();assert.equal(ready.shutdownProtocol,'poll-v1');
  assert.equal((await fetch(base+'/api/runtime/shutdown/begin',{method:'POST'})).status,401);
  const continued=Promise.withResolvers(),response=Promise.withResolvers();
- pendingRequest=httpRequest(base+'/api/setup/credentials',{method:'POST',headers:{...headers,'Content-Length':'2',Expect:'100-continue'}},res=>{res.resume();res.on('end',()=>response.resolve(res.statusCode));});
+ pendingRequest=httpRequest(base+'/api/setup/deepseek-configuration',{method:'POST',headers:{...headers,'Content-Length':'2',Expect:'100-continue'}},res=>{res.resume();res.on('end',()=>response.resolve(res.statusCode));});
  pendingRequest.on('error',error=>{continued.reject(error);response.reject(error);});
  void response.promise.catch(()=>{});pendingRequest.once('continue',()=>continued.resolve());pendingRequest.flushHeaders();await continued.promise;pendingRequest.write('{');
  for(let i=0;i<2;i++){

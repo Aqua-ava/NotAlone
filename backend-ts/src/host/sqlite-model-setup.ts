@@ -37,15 +37,7 @@ export class SqliteModelSetup {
  private baseUrl():string|null {try{return normalizeModelBaseUrl(this.values.NOTALONE_DEEPSEEK_BASE_URL??'https://api.deepseek.com');}catch{return null;}}
  status(){return {deepseek_base_url:this.baseUrl(),model_parameters:readModelParameters(this.values),initialized:true,owner_configured:true,runtime_owner_configured:true,
   credentials_configured:Boolean(this.baseUrl()&&this.values[modelCredentialKey(this.baseUrl()!)]?.trim()),
-  official_deepseek_defaults:(this.values.NOTALONE_DEEPSEEK_MODEL||'deepseek-flash')==='deepseek-flash'&&['https://api.deepseek.com','https://api.deepseek.com/v1'].includes((this.values.NOTALONE_DEEPSEEK_BASE_URL??'https://api.deepseek.com').replace(/\/+$/,'')),
   runtime_configuration_pending:this.pending,runtime_configuration_environment_override:this.overridden};}
- async save(key:string,official:boolean):Promise<void>{
-  if(typeof key!=='string'||!key.trim()||key.length>4096||!/^[-A-Za-z0-9_]+$/.test(key.trim()))throw new StorageFailure('setup_request_invalid');
-  const base=official?'https://api.deepseek.com':this.baseUrl();if(!base)throw new StorageFailure('setup_request_invalid');
-  const changes:Record<string,string>={[modelCredentialKey(base)]:key.trim()};
-  if(official){changes.NOTALONE_DEEPSEEK_MODEL='deepseek-flash';changes.NOTALONE_DEEPSEEK_BASE_URL='https://api.deepseek.com';}
-  await this.writeChanges(changes);
- }
  async saveConfiguration(baseUrl:string,apiKey:string):Promise<void>{
   const normalized=normalizeModelBaseUrl(baseUrl);
   if(typeof apiKey!=='string'||!apiKey.trim()||apiKey.length>4096||!/^[-A-Za-z0-9_]+$/.test(apiKey.trim()))throw new StorageFailure('setup_request_invalid');

@@ -14,8 +14,8 @@ function fixture(mode = 'managed') {
     async requestJson(request) {
       calls.push({ method: request.method, path: request.path });
       if (request.method === 'POST' && rejectSave) throw new BackendRequestFailure('response', 400, 'configuration_environment_override');
-      if (request.method === 'POST') { pending = true; ++writes; return { data: { provider: 'deepseek', configured: true, official_deepseek_defaults: true, restart_required: true } }; }
-      return { data: { initialized: true, owner_configured: true, runtime_owner_configured: true, credentials_configured: true, official_deepseek_defaults: true, runtime_configuration_pending: pending, runtime_configuration_environment_override: environmentOverride } };
+      if (request.method === 'POST') { pending = true; ++writes; return { data: { provider: 'deepseek', configured: true, restart_required: true } }; }
+      return { data: { initialized: true, owner_configured: true, runtime_owner_configured: true, credentials_configured: true, runtime_configuration_pending: pending, runtime_configuration_environment_override: environmentOverride } };
     },
     async restart() {
       ++restarts;
