@@ -17,7 +17,7 @@
 
 [test:pages](../scripts/test-pages.mjs)当前仅保留 `--status` 与合成租约探针；其他参数一律拒绝，页面测试不经此入口运行。当前页面测试按 inventory 运行；产品历史候选功能的测试名称不等于退役后台测试。
 
-记忆页面回归由 `memory-processing-entry`、`memory-page-fixed-processing` 与 `sqlite-memory-management-view` 覆盖连接核验、资料展示、编辑与范围失效；旧 `LegacyMemoryPage` 专用夹具随入口删除，主进程控制器和事件用例仍保留。旧条件编辑及全局本人页面不计作当前 SQLite 功能覆盖。
+记忆页面回归由 `memory-processing-entry`、`memory-page-fixed-processing` 与 `sqlite-memory-management-view` 覆盖连接核验、资料展示、编辑与范围失效。
 
 [test:app](../scripts/test-app.mjs)保留明确范围、期限、启动数和互斥参数，`pnpm run test:app:status` 只读占用。自动化参数不要求用户额外预约，也不授权打包或执行与热更新约束不兼容的旧夹具。未知残留须先核对归属，不能删除锁或终止未知进程继续。
 
@@ -36,7 +36,7 @@
 | 来源失效同时撤下候选、依据、选稿、草稿与实际 Skill；迟到读取不能恢复 | `sqlite-reply-candidates`、`sqlite-discussion-source-lifecycle`；后台 `sqlite-reply-candidates`、`sqlite-reply-candidate-input-regressions` |
 | 独立想法在准备、读取失败、新开与合法范围往返时保留；删除及范围失效清除旧副本 | `sqlite-first-session-regression`、`workspace-local-draft-transition`、`workspace-draft-sqlite-handoff`、`desktop-state-optimization` |
 | 编辑独立想法不随累计讨论重传正文；IPC 断档只发一次权威补读 | `reply-input-stream`（10／100／1000 条 SQLite 发言） |
-| 历史设置与要求保持原实际输入，不用当前资料补造历史证明 | 后台 `sqlite-reply-input-materials`；桌面 `sqlite-reply-candidates`、`memory-current-status` |
+| 历史设置与要求保持原实际输入，不用当前资料补造历史证明 | 后台 `sqlite-reply-input-materials`；桌面 `sqlite-reply-candidates` |
 | 长期概览保留推断分类、依据、局限与真实底层版本，不升级为稳定事实 | `sqlite-profile-inference`；后台 `l3-profile-workspace`、`sqlite-memory-documents-reply` |
 | 通用 JSON 与真实 HTTP 无损往返大整数，IPC 克隆保留数字类型 | `backend-json-integers` |
 | 历史聊天保留引用作者、类型、精确顺序与未知时间；删除或失败撤下正文 | `contact-history-quotes`、`sqlite-history-messages`、`contact-history-controller` |

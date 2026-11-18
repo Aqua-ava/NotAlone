@@ -30,10 +30,6 @@ let package = Package(
             name: "NotAloneSyncCLI",
             dependencies: ["NotAloneSyncCore"]
         ),
-        .executableTarget(
-            name: "NotAloneSyncApp",
-            dependencies: ["NotAloneSyncCore"]
-        ),
         .target(
             name: "SessionEventDiagnostics",
             path: "Diagnostics",

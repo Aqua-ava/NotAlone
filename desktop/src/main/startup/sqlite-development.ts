@@ -1,6 +1,4 @@
 import { spawn } from 'node:child_process';
-import { realpath } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import type { SqliteLaunchConfiguration } from '../../../../backend-ts/src/launch';
@@ -32,7 +30,7 @@ export class SqliteDevelopmentProbe {
     this.contactConfiguration = undefined;
     if (!canStart()) return blocked('sqlite_cancelled');
     let result: ReadyResult | PreparedResult | MaintenanceResult;
-    try { result = await this.probe(await this.isolatedRoot()); }
+    try { result = await this.probe(); }
     catch { return blocked('sqlite_diagnostic_failed'); }
     if (!canStart()) return blocked('sqlite_cancelled');
     if (result.phase === 'maintenance') return blocked(typeof result.code === 'string' && failureCodes.has(result.code) ? result.code : 'cutover_storage_failed');
@@ -43,21 +41,12 @@ export class SqliteDevelopmentProbe {
       capabilities: result.configuration.capabilities };
   }
 
-  /** synthetic 授权只允许在系统临时根下的隔离资料目录使用。 */
-  private async isolatedRoot(): Promise<boolean> {
-    try {
-      const temporary = await realpath(tmpdir());
-      const candidate = await realpath(this.userData);
-      return candidate.startsWith(`${temporary}${path.sep}`);
-    } catch { return false; }
-  }
-
-  private probe(allowSyntheticAuthorization: boolean): Promise<ReadyResult | PreparedResult | MaintenanceResult> {
+  private probe(): Promise<ReadyResult | PreparedResult | MaintenanceResult> {
     const moduleUrl = pathToFileURL(path.join(this.projectDirectory, 'backend-ts/src/platform/database-startup.ts')).href;
     // 与开发宿主同一 Node；切换检查只读写 SQLite 与受控目录，不启动 DSH、微信或模型。
     const program = `(async()=>{ try {
       const {prepareDatabaseStartup}=await import(${JSON.stringify(moduleUrl)});
-      const result=await prepareDatabaseStartup({userData:${JSON.stringify(this.userData)},skillPackageRoot:${JSON.stringify(path.join(this.projectDirectory, 'reply-skills/romance'))},allowSyntheticAuthorization:${allowSyntheticAuthorization}});
+      const result=await prepareDatabaseStartup({userData:${JSON.stringify(this.userData)},skillPackageRoot:${JSON.stringify(path.join(this.projectDirectory, 'reply-skills/romance'))}});
       console.log(JSON.stringify(result));
     } catch(error) { console.log(JSON.stringify({phase:'maintenance',code:'cutover_storage_failed',detail:'probe_failed'})); } })();`;
     return new Promise((resolve, reject) => {

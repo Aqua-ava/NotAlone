@@ -1,5 +1,5 @@
-/** 本轮实际 DDL 的结构基线：77 表逻辑目录中的实现、替代与暂缓分类（数量仅用于查漏）。 */
-export const IMPLEMENTED_DESIGN_TABLES = [
+/** 本轮实际 DDL 的结构基线：已实现的设计表、关联账本表与固定检索索引表合成 EXPECTED_TABLES。 */
+const IMPLEMENTED_DESIGN_TABLES = [
   'owner', 'contact', 'channel_account', 'channel_conversation', 'conversation_binding', 'binding_verification', 'read_grant', 'read_goal',
   'history_cutoff', 'sync_capture', 'capture_record', 'message', 'manual_confirmation', 'processing_run', 'run_contact', 'processing_item',
   'run_input', 'processing_task', 'task_contribution', 'processing_step', 'step_input', 'step_attempt', 'model_operation', 'operation_item',
@@ -11,21 +11,18 @@ export const IMPLEMENTED_DESIGN_TABLES = [
   'deletion_operation', 'deletion_target', 'deletion_check', 'request_tombstone', 'database_instance', 'schema_migration', 'message_media',
   'media_extraction_attempt', 'media_file',
 ] as const;
-/** 13 偏好、15 纠错／诊断本轮暂缓：不建空表，入口保持关闭。 */
-export const DEFERRED_DESIGN_TABLES = ['expression_preference', 'expression_preference_version', 'preference_source',
-  'organization_feedback', 'feedback_input', 'quality_case', 'quality_case_input', 'quality_run', 'quality_attempt'] as const;
-/** 设计中的整会话读取排除由 06 的来源级排除替代；未实现未确认的整会话分支。 */
-export const REPLACED_DESIGN_TABLES = ['read_exclusion'] as const;
 /** 实现需要的关联/账本/范围表，均有对应票与真实动作，不冒充逻辑目录之外的领域平台。 */
-export const IMPLEMENTATION_TABLES = ['contact_avatar', 'contact_avatar_clock', 'skill_group', 'skill_group_package', 'contact_skill_group', 'memory_document_later_schedule', 'memory_document_later_cursor', 'memory_document_later_run_requirement', 'document_effect_scope', 'document_extraction_reuse', 'document_publication_identity',
+const IMPLEMENTATION_TABLES = ['contact_avatar', 'contact_avatar_clock', 'skill_group', 'skill_group_package', 'contact_skill_group', 'memory_document_later_schedule', 'memory_document_later_cursor', 'memory_document_later_run_requirement', 'document_effect_scope', 'document_extraction_reuse', 'document_publication_identity',
   'document_replacement', 'history_cutoff_member', 'history_deletion_fence', 'source_proof', 'history_source_equivalence', 'history_message_quarantine', 'history_quote', 'history_quote_attempt', 'history_restore', 'history_source_exclusion', 'history_source_terminal',
   'message_alias', 'reply_candidate_context', 'reply_candidate_input', 'reply_candidate_input_source', 'reply_candidate_request',
   'reply_execution_input', 'run_content_input', 'runtime_file'] as const;
 /** 固定版本FTS5/vec0的真实主表与影子表都纳入结构核验。 */
-export const RETRIEVAL_INDEX_TABLES=['retrieval_document','retrieval_text_pending','retrieval_vector_cursor',
+const RETRIEVAL_INDEX_TABLES=['retrieval_document','retrieval_text_pending','retrieval_vector_cursor',
   'retrieval_fts','retrieval_fts_config','retrieval_fts_content','retrieval_fts_data','retrieval_fts_docsize','retrieval_fts_idx',
   'retrieval_vec','retrieval_vec_chunks','retrieval_vec_info','retrieval_vec_rowids','retrieval_vec_vector_chunks00'] as const;
 export const EXPECTED_TABLES: readonly string[] = [...IMPLEMENTED_DESIGN_TABLES, ...IMPLEMENTATION_TABLES,...RETRIEVAL_INDEX_TABLES].sort();
-export const RETIRED_IMPLEMENTATION_TABLES = ['history_continuity_fence','history_continuity_scope','history_guard_lease','history_source_recertification','history_source_recertification_cancel','history_superseded_cleanup'] as const;
-export const FORBIDDEN_TABLES: readonly string[] = [...DEFERRED_DESIGN_TABLES, ...REPLACED_DESIGN_TABLES, ...RETIRED_IMPLEMENTATION_TABLES].sort();
-export const LOGICAL_CATALOG_TABLES = [...IMPLEMENTED_DESIGN_TABLES, ...DEFERRED_DESIGN_TABLES, ...REPLACED_DESIGN_TABLES].sort();
+/** 从不创建的表：13 偏好与 15 纠错／诊断暂缓、整会话读取排除由来源级排除替代、以及已退役的历史连续性账本。 */
+export const FORBIDDEN_TABLES: readonly string[] = ['expression_preference', 'expression_preference_version', 'preference_source',
+  'organization_feedback', 'feedback_input', 'quality_case', 'quality_case_input', 'quality_run', 'quality_attempt', 'read_exclusion',
+  'history_continuity_fence', 'history_continuity_scope', 'history_guard_lease', 'history_source_recertification',
+  'history_source_recertification_cancel', 'history_superseded_cleanup'].sort();

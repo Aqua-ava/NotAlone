@@ -7,15 +7,11 @@
 .memory-section h2 { color: var(--panel-heading); font-size: 15px; font-weight: 500; }
 .memory-section > header p { margin-top: 9px; color: #737e80; font-size: 12px; line-height: 1.9; }
 
-.memory-card { padding: 17px; border: 1px solid var(--panel-border); border-radius: var(--panel-radius); background: var(--panel-background); min-width: 0; }
-
 .memory-more { position: relative; flex-shrink: 0; }
 .memory-more > summary { list-style: none; cursor: pointer; color: #627985; font-size: 22px; line-height: 1; padding: 4px 8px; border-radius: 4px; }
 .memory-more > summary::-webkit-details-marker { display: none; }
 .memory-more > summary:hover { background: #edf3f4; }
 .memory-more > summary:focus-visible { outline: 2px solid #426f8a; outline-offset: 2px; }
-
-.memory-card > .button { margin: 8px 6px 0 0; padding: 6px 9px; font-size: 11px; }
 
 @media (max-width: 900px) {   }
 

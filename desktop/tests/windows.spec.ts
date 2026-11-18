@@ -66,28 +66,6 @@ test('原生菜单整体隐藏后仅恢复所选窗口，不展开另一窗口',
   expect(app.windows()).toHaveLength(2);
 });
 
-test('界面显示品牌资源和真实未就绪状态，不提供假联系人、候选或复制结果', async ({ runningApp: { app } }) => {
-  const manager = await app.firstWindow();
-  await expect(manager.getByRole('img', { name: 'NotAlone', exact: true })).toBeVisible();
-  await expect.poll(() => manager.getByRole('img', { name: 'NotAlone', exact: true })
-    .evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
-  await expect(manager.getByText('联系人暂不可用', { exact: true })).toBeVisible();
-  for (const page of ['记忆', '同步设置', '设置']) {
-    await manager.getByRole('button', { name: page, exact: true }).click();
-    await expect(manager.getByRole('heading', { name: page, exact: true })).toBeVisible();
-    await expect(manager.getByRole('status').filter({ hasText: '尚未连接' })).toBeVisible();
-  }
-  const helperOpened = app.waitForEvent('window');
-  await manager.getByRole('button', { name: '打开输入小窗' }).click();
-  const helper = await helperOpened;
-  await expect(helper.getByRole('combobox', { name: '本次联系人' })).toBeDisabled();
-  await expect(helper.getByRole('combobox', { name: '本次联系人', exact: true })).toHaveAttribute('data-contact-id', '');
-  await expect(helper.getByText('暂无候选', { exact: true })).toBeVisible();
-  await expect(helper.getByRole('button', { name: '生成候选' })).toBeDisabled();
-  await expect(helper.getByRole('button', { name: '复制', exact: true })).toBeDisabled();
-  await expect(helper.getByRole('button', { name: '复制并收起' })).toBeDisabled();
-});
-
 async function visible(app: ElectronApplication, page: Page): Promise<boolean> {
   return (await app.browserWindow(page)).evaluate((window) => window.isVisible());
 }

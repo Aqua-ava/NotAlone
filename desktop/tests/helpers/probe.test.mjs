@@ -188,22 +188,15 @@ process.stdout.write(JSON.stringify({ paths, probe: config.syncProbePath,
     assert.equal(fullBundle.probe, probe);
     assert.equal(fullBundle.headerChange, helper);
 
-    // 加载实际现场用例的选项，替换测试注册器，绝不执行用例或启动App。
+    // 按隔离环境构造器分别合成签名包与仓库探针环境，只读取变量，不启动App。
     const layoutConfiguration = path.join(owned, 'layout-configuration.mjs');
-    await build({ stdin: { contents: `import './tests/native-foreground-layout.spec';
+    await build({ stdin: { contents: `import path from 'node:path';
 import { isolatedAppEnvironment } from './tests/isolated-environment';
-const environment = isolatedAppEnvironment(process.argv[2], globalThis.layoutOptions.appEnvironment);
+const environment = isolatedAppEnvironment(process.argv[2], { NOTALONE_SYNC_PROBE: process.env.NOTALONE_TEST_APP_EXECUTABLE
+  ? '' : path.resolve('../native/macos/build/cli/notalone-sync-probe') });
 process.stdout.write(JSON.stringify({ NOTALONE_SYNC_PROBE: environment.NOTALONE_SYNC_PROBE,
   NOTALONE_WECHAT_CLI: environment.NOTALONE_WECHAT_CLI }));`, resolveDir: process.cwd(), sourcefile: 'layout-configuration.ts', loader: 'ts' },
-    outfile: layoutConfiguration, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent', plugins: [{
-      name: '仅登记现场测试选项', setup(builder) {
-        builder.onResolve({ filter: /^(\.\/app-fixture|@playwright\/test)$/ }, ({ path: request }) => ({ path: request, namespace: 'layout-test-registration' }));
-        builder.onLoad({ filter: /.*/, namespace: 'layout-test-registration' }, ({ path: request }) => ({ contents: request === './app-fixture'
-          ? `export const test = Object.assign(() => {}, { skip() {}, use(options) { globalThis.layoutOptions = options; } });
-export function selectMenu() { throw new Error('本检查禁止运行App用例'); }`
-          : `export function expect() { throw new Error('本检查禁止执行App断言'); }`, loader: 'js' }));
-      },
-    }] });
+    outfile: layoutConfiguration, bundle: true, platform: 'node', format: 'esm', logLevel: 'silent' });
     const layoutEnvironment = (packaged) => {
       const result = spawnSync(process.execPath, [layoutConfiguration, userData], { encoding: 'utf8', timeout: 10_000,
         env: { PATH: '/usr/bin:/bin', ...(packaged ? { NOTALONE_TEST_APP_EXECUTABLE: '/synthetic-host' } : {}) } });

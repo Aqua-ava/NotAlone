@@ -74,10 +74,6 @@ html:has(.admin-layout)::-webkit-scrollbar { display: none; }
 .connection-note::before { content: none; }
 .connection-note b { font-size: 13px; font-weight: 500; }
 .connection-note p { color: #737c80; font-size: 11px; margin-top: 7px; }
-.empty-panel { text-align: center; padding: 42px 20px; background: var(--panel-background); border: 1px solid var(--panel-border); border-radius: var(--panel-radius); }
-.empty-symbol { display: inline-grid; place-items: center; width: 66px; height: 58px; background: radial-gradient(ellipse at 25% 30%, #a6d1df80, transparent 75%), #e4ecea; border-radius: 4px 8px 5px 7px; color: #6287a0; margin-bottom: 19px; }
-.empty-panel h2 { font-size: 15px; font-weight: 500; color: var(--panel-heading); }
-.empty-panel p { font-size: 12px; line-height: 1.9; color: #777c7b; max-width: 470px; margin: 12px auto 23px; }
 .admin-footer { padding: 15px 38px 24px; color: #787870; font-size: 10px; line-height: 1.8; }
 .operation-error { color: #99594e; font-size: 12px; margin-top: 20px; }
 

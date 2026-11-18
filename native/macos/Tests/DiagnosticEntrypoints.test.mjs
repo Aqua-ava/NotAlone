@@ -7,12 +7,11 @@ import test from 'node:test';
 const root = new URL('../', import.meta.url);
 const executable = fileURLToPath(new URL('.build/debug/notalone-sync-probe', root));
 const cli = readFileSync(new URL('Sources/NotAloneSyncCLI/main.swift', root), 'utf8');
-const legacyApp = readFileSync(new URL('Sources/NotAloneSyncApp/MenuBarProbeApp.swift', root), 'utf8');
 const core = readFileSync(new URL('Sources/NotAloneSyncCore/CaptureSupport.swift', root), 'utf8');
 
 function run(arguments_) {
   // 先核对旧捕获器已移除，避免回归测试本身恢复正文读取。
-  assert.doesNotMatch(cli + legacyApp + core, /WeChatCaptureProbe|captureChatRegion/);
+  assert.doesNotMatch(cli + core, /WeChatCaptureProbe|captureChatRegion/);
   return spawnSync(executable, arguments_, { encoding: 'utf8', timeout: 2000 });
 }
 
@@ -86,9 +85,4 @@ test('Worker 先完成合成图预热，再发送 ready', { timeout: 60_000 }, a
     clearTimeout(timer);
     if (child.exitCode === null) child.kill('SIGKILL');
   }
-});
-
-test('历史菜单栏入口无 App 初始化或采集调用', () => {
-  assert.doesNotMatch(legacyApp, /NSApplication|CGPreflight|CGRequest|LocalOcr|Timer/);
-  assert.match(legacyApp, /exit\(EXIT_FAILURE\)/);
 });

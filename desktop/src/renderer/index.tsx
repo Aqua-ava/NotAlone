@@ -154,11 +154,6 @@ export function App() {
         {page === 'sync' && <>
           <WechatSetupPanel bridge={window.notalone.wechatSetup} selectionOnly={consent.selectionOnly === true} onSelectContacts={selectWechatContacts}><SyncControlPanel bridge={window.notalone.syncControl} contacts={contactSession.state.contacts} currentContactId={contactSession.state.selectedContactId} onOpenContact={contactId => void showContactSync(contactId)} onOpenDiagnostics={showSyncDiagnostics} /></WechatSetupPanel>
         </>}
-        {page !== 'config' && page !== 'contacts' && page !== 'memory' && page !== 'sync' && page !== 'skillLearning' && <section className="empty-panel" aria-label={currentPage.title}>
-          <div className="empty-symbol"><Icon name={currentPage.icon} size={32} /></div>
-          <h2>{currentPage.emptyTitle}</h2><p>{currentPage.emptyDescription}</p>
-          <button className="button" disabled>{currentPage.action}</button>
-        </section>}
         {error && <p className="operation-error" role="alert">{error}</p>}
       </main>
       <footer className="admin-footer">每次回复都对应已确认的联系人。关闭窗口后，可从“窗口”菜单重新打开。</footer>
