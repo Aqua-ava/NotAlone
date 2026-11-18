@@ -14,8 +14,14 @@ const generation = (value: unknown): bigint => typeof value === 'string' && /^(0
 const boundedText = (value: unknown, max = 512): string => typeof value === 'string' && value.length > 0 && value.length <= max && !/[\u0000-\u001f\u007f]/.test(value) ? value : fail('history_clear_request_invalid');
 const row = (value: StorageRow | undefined, code: string): StorageRow => value ?? fail(code);
 /** 旧结构升级夹具可能只安装到本票之前的迁移；缺表时按“尚未具备该能力”拒绝，不把升级测试变成SQL错误。 */
+// 结构只在打开库时迁移，一个动作的事务内不会变化；逐条记录判定时每张表只探测一次，结果不跨动作保留。
+const tableProbes = new WeakMap<StorageTransaction, Map<string, boolean>>();
 function hasTable(tx: StorageTransaction, name: string): boolean {
-  return Boolean(tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name=?", [name]));
+  let known = tableProbes.get(tx);
+  if (!known) { known = new Map(); tableProbes.set(tx, known); }
+  let present = known.get(name);
+  if (present === undefined) { present = Boolean(tx.get("SELECT 1 FROM sqlite_schema WHERE type='table' AND name=?", [name])); known.set(name, present); }
+  return present;
 }
 
 function clearOperation(tx: StorageTransaction, ownerId: string, operationId: string, contactId: string): StorageRow {
