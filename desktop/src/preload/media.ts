@@ -1,8 +1,8 @@
-import type { PageTransport } from './transport';
+import { pageInvokers, type PageTransport } from './transport';
 import type { MessageMediaBridge, MessageMediaSelection } from '../shared/media-bridge';
 
 export function createMessageMediaBridge(transport: PageTransport): MessageMediaBridge {
-  const single = (channel: string, args: unknown[]) => args.length === 1 ? transport.invoke(channel,args[0]) : Promise.reject(new Error('媒体操作不可用。'));
+  const { single } = pageInvokers(transport, '媒体操作不可用。');
   return Object.freeze({
     openHistoryImagePreview: (...args:[MessageMediaSelection & {fileId:string;mimeType:string}]) => single('media:open-history-image-preview',args),
     releasePreview: (...args:[string]) => single('media:release-preview',args),

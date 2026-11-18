@@ -1,12 +1,11 @@
-import { subscribePageState, type PageTransport } from './transport';
+import { pageInvokers, subscribePageState, type PageTransport } from './transport';
 import type { ContactDraft, ContactSelection, ContactSessionBridge, ContactSessionUpdate } from '../shared/contact-session-bridge';
 
 export function createContactSessionBridge(ipcRenderer: PageTransport): ContactSessionBridge {
-  const withoutArguments = (channel: string, args: unknown[]) => args.length === 0
-    ? ipcRenderer.invoke(channel) : Promise.reject(new Error('联系人操作不可用。'));
+  const { empty } = pageInvokers(ipcRenderer, '联系人操作不可用。');
   return Object.freeze({
-    getState: (...args: unknown[]) => withoutArguments('contacts:get-state', args),
-    refreshContacts: (...args: unknown[]) => withoutArguments('contacts:refresh', args),
+    getState: (...args: unknown[]) => empty('contacts:get-state', args),
+    refreshContacts: (...args: unknown[]) => empty('contacts:refresh', args),
     selectContact: (selection: ContactSelection) => ipcRenderer.invoke('contacts:select', selection&&typeof selection==='object'?{...selection,traceId:selection.traceId??globalThis.crypto.randomUUID()}:selection),
     readAvatar: (selection: ContactSelection) => ipcRenderer.invoke('contacts:read-avatar', selection),
     confirmManualContact: (selection: ContactSelection) => ipcRenderer.invoke('contacts:confirm-manual', selection),

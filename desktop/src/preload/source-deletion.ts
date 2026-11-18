@@ -1,11 +1,12 @@
-import { subscribePageState, type PageTransport } from './transport';
+import { pageInvokers, subscribePageState, type PageTransport } from './transport';
 import type { SourceDeletionBridge, SourceDeletionRequest, SourceDeletionState } from '../shared/source-deletion-bridge';
 import type { ContactSelection } from '../shared/contact-session-bridge';
 export function createSourceDeletionBridge(transport: PageTransport): SourceDeletionBridge {
+  const { empty, single } = pageInvokers(transport, '来源操作不可用。');
   return Object.freeze({
-    getState: (...args: unknown[]) => args.length === 0 ? transport.invoke('sources:get-state') : Promise.reject(new Error('来源操作不可用。')),
-    refresh: (...args: [ContactSelection]) => args.length === 1 ? transport.invoke('sources:refresh', args[0]) : Promise.reject(new Error('来源操作不可用。')),
-    delete: (...args: [SourceDeletionRequest]) => args.length === 1 ? transport.invoke('sources:delete', args[0]) : Promise.reject(new Error('来源操作不可用。')),
+    getState: (...args: unknown[]) => empty('sources:get-state', args),
+    refresh: (...args: [ContactSelection]) => single('sources:refresh', args),
+    delete: (...args: [SourceDeletionRequest]) => single('sources:delete', args),
     onStateChanged: (listener: (state: SourceDeletionState) => void) =>
       subscribePageState(transport, 'sources:state-changed', listener, '来源操作不可用。'),
   });
