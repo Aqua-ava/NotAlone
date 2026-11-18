@@ -1,0 +1,724 @@
+/** 微信原生历史客户端的协议类型与响应校验器：纯函数，不启动进程、不读写文件、不接触数据库句柄。 */
+import { sha256 } from '../../platform/sha256.ts';
+import { StorageFailure } from '../../storage/sqlite/contracts.ts';
+import { readWechatQuotePayload } from './quote-payload.ts';
+import type { HistoryPage, HistoryQuoteErrorCode, HistoryRecord, HistorySupportReport, HistoryTarget, HistoryTailPage } from '../sqlite/contracts.ts';
+import { boundaryProtocol, maxBoundaryMembers, membersManifestSha256, sourceLocalKey, type HistoryBoundaryCandidate } from '../sqlite/boundary.ts';
+import { WECHAT_METADATA_SUPPORT } from './support-profile.ts';
+
+export interface ResolvedWechatScope {
+  accountKey: string; conversationKey: string; displayName: string; sourceGeneration: string;
+}
+export interface WechatSchemaColumn { name: string; type: string; notNull: boolean; primaryKey: number; hidden: number }
+export interface WechatIndexColumn { sequence: number; name: string; descending: boolean; collation: string; key: boolean }
+export interface WechatSchemaIndex { id: string; unique: boolean; origin: 'c' | 'u' | 'pk'; partial: boolean; columns: WechatIndexColumn[] }
+export interface WechatTableSchema {
+  target: string; partition: string; role: 'private_message'; columns: WechatSchemaColumn[];
+  indexes: WechatSchemaIndex[]; declaredPrimaryKey: string[]; autoIncrement: boolean;
+  sqlFingerprint: string; triggerFingerprints: string[]; schemaVersion: string; rootPage: string;
+}
+export interface WechatSchemaInspection {
+  format: 'wechat-message-schema-v1'; status: 'unverified'; scopeDigest: string;
+  sourceGeneration: string; schemaFingerprint: string; tables: WechatTableSchema[]; checkedPartitions: string[];
+}
+export interface WechatAccountSchema {
+  format: 'wechat-account-schema-v1'; status: 'unverified'; accountKey: string; sourceGeneration: string;
+  schemaFingerprint: string; tables: (Omit<WechatTableSchema, 'role'> & {role: 'contact' | 'session'})[]; normalHistory: false;
+}
+/** 一次已经关闭的固定快照核验记录，不授予后续快照或正文读取资格。 */
+export interface WechatFixedSnapshotProof {
+  format: 'wechat-history-fixed-snapshot-proof-v1'; status: 'verified';
+  scopeDigest: string; sourceGeneration: string; schemaFingerprint: string;
+  expectedPartitionCount: number; completedPartitionCount: number;
+  namespaceContinuity: true; instanceContinuity: true; snapshotBarrier: true;
+  scope: 'single-fixed-snapshot'; authorizesSubsequentRead: false;
+  partitions: {partition:string;tablePresent:boolean;instance:string|null;preSample:string;postSample:string;readerPinned:true;sourceInstanceHeld:true}[];
+}
+export interface WechatAccountMetadata {
+  format: 'wechat-account-metadata-v1'; status: 'verified' | 'unverified'; reason: string | null;
+  accountKey: string; identityScheme: 'wechat.account.v1'; sourceGeneration: string; supportProfile: string;
+  programVersion: string; build: string; artifactSha256: string; wcdbSha256: string;
+  configuredAccount: 'verified' | 'unverified'; continuity: 'held-contact-session-instances'; normalHistory: false;
+}
+export interface WechatPrivateSessionMetadata {
+  format: 'wechat-private-session-metadata-v1'; account: WechatAccountMetadata;
+  sessions: {username: string; displayName: string; kind: 'private'; identityAssurance: 'verified'}[];
+}
+export interface WechatContactAvatarMetadata {
+  format: 'wechat-contact-avatar-local-v1'; account: WechatAccountMetadata;
+  username: string; avatar: {mimeType: 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'; dataBase64: string} | null;
+}
+export interface WechatMessageMetadataRecord {
+  partition: string; table: string; localId: string | null; serverId: string | null;
+  originalType: string | null; status: string | null;
+  // 原始秒字段仅作元数据观察，不转换或认证为消息发送时间。
+  createTime: string | null; sender: 'owner' | 'contact' | 'unknown';
+  statusSemantics: 'unverified'; normalHistory: false; observationScope: 'single-fixed-snapshot';
+}
+export interface WechatMessageMetadataObservation {
+  format: 'wechat-message-metadata-observation-v1'; status: 'unverified'; scopeDigest: string;
+  sourceGeneration: string; schemaFingerprint: string; kind: HistoryRecord['kind'];
+  checkedPartitions: string[]; record: WechatMessageMetadataRecord | null;
+}
+export type WechatTestMetadataAction = 'arm' | 'next' | 'current';
+export interface WechatTestMetadataObservation {
+  format: 'wechat-test-metadata-observation-v1'; status: 'unverified'; scopeDigest: string;
+  sourceGeneration: string; schemaFingerprint: string; action: WechatTestMetadataAction;
+  checkedPartitions: string[]; lockedCount: number; records: (WechatMessageMetadataRecord | null)[];
+}
+export interface WechatReceivedTestMetadataObservation {
+  format: 'wechat-received-test-metadata-observation-v1'; status: 'unverified'; scopeDigest: string;
+  sourceGeneration: string; schemaFingerprint: string; action: WechatTestMetadataAction;
+  checkedPartitions: string[]; lockedCount: number; records: (WechatMessageMetadataRecord | null)[];
+}
+export interface NarrowWechatClientOptions {
+  executable: string; expectedCliSha256: string; expectedWcdbSha256: string;
+  environment?: Record<string, string | undefined>;
+  imageKeyChannel?: true;
+  inlineQuotes?:true;
+  /** 仅当制品清单声明已审查的单图失败隔离协议时启用；旧制品不能因 TS 升级获得该资格。 */
+  imageOpenIsolation?:true;
+}
+export interface WechatImageSourceIdentity {
+  partition: string; table: string; localId: string; serverId: string; sentAt: string;
+}
+export interface WechatImageRuntimeKey { accountKey:string; rootSha256:string; aesKey:Uint8Array; xorKey:number }
+export interface WechatImageQualityProofV1 {
+  kind: 'wechat-cdn-big-hd-exact-content-v1'; messageMd5: string; hdLength: number; hdWidth: number; hdHeight: number;
+  bigImageUrlPresent: true; resourceSize: number; verifiedBytes: number; verifiedSha256: string;
+}
+export interface WechatImageQualityProofV2 {
+  kind: 'wechat-cdn-big-hd-exact-content-v2'; messageMd5: string; hdLength: number; hdWidth: number | null; hdHeight: number | null;
+  bigImageUrlPresent: true; resourceSize: number; verifiedBytes: number; verifiedSha256: string;
+  contentWidth: number; contentHeight: number;
+}
+export interface WechatImageQualityProofV3 {
+  kind: 'wechat-cdn-big-hd-exact-content-v3'; messageMd5: string; hdLength: number; hdWidth: number | null; hdHeight: number | null;
+  bigImageUrlPresent: true; resourceSize: number; verifiedBytes: number; verifiedSha256: string;
+  contentWidth: number; contentHeight: number; resourceInfoId: string; matchingResourceIds: string[];
+}
+export interface WechatImageQualityProofV4 {
+  kind: 'wechat-cdn-big-hd-exact-content-v4'; messageMd5: string; hdLength: number; hdWidth: number | null; hdHeight: number | null;
+  bigImageUrlPresent: true; resourceSize: number; verifiedBytes: number; verifiedSha256: string;
+  contentWidth: number; contentHeight: number; resourceInfoId: string; matchingResourceIds: string[];
+  sourceSha256: string; conversion: 'none' | 'wxgf-to-png-v1';
+}
+export interface WechatImageContentProof {
+  kind: 'wechat-message-image-content-v1'; resourceInfoId: string; matchingResourceIds: string[];
+  resourceSize: number; verifiedBytes: number; verifiedSha256: string; sourceSha256: string;
+  conversion: 'none' | 'wxgf-to-png-v1'; contentWidth: number; contentHeight: number;
+}
+export interface WechatImageContentProofV2 extends Omit<WechatImageContentProof,'kind'> {
+  kind:'wechat-message-image-content-v2';
+  sourceVariant:'main'|'thumbnail';
+  matchingResources:{resourceId:string;resourceTypeRaw:number}[];
+  originalProof:WechatImageQualityProofV4|null;
+}
+export type WechatImageQualityProof = WechatImageQualityProofV1 | WechatImageQualityProofV2 | WechatImageQualityProofV3 | WechatImageQualityProofV4 | WechatImageContentProof | WechatImageContentProofV2;
+export interface WechatImageOpenResult {
+  protocol: 'wechat-original-image-v1'; resourceToken: string; sourceGeneration: string; resourceSourceGeneration: string;
+  target: string; partition: string; table: string; localId: string; serverId: string; sentAt: string;
+  resourceTable: 'wechat-message-resource-v1'; resourceId: string;
+  resourceTypeRaw: number; variantCode: number; complete: true; quality: 'original' | 'thumbnail' | 'unknown'; qualityProof: WechatImageQualityProof;
+  expectedBytes: number; expectedSha256: string; mimeType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/bmp';
+  envelope: 'plain'; sourceEnvelope: 'plain' | 'wechat_dat';
+}
+export interface WechatImageReadResult {
+  resourceToken: string; sourceGeneration: string; offset: number; bytesRead: number; totalBytes: number;
+  chunkBase64: string; eof: boolean; verifiedSha256?: string;
+}
+export const responseLimit = 2 * 1024 * 1024;
+export const pageResponseLimit = 8 * 1024 * 1024;
+export const boundaryResponseLimit = 32 * 1024 * 1024;
+// 16×65536×最坏6倍JSON转义为6MiB，为有界元数据及游标保留2MiB。
+const pageRecordLimit = 16;
+export const stderrLimit = 64 * 1024;
+export const recoverableQuoteErrors = new Set([
+  'history_quote_unavailable', 'history_quote_metadata_invalid', 'history_quote_too_large',
+  'history_quote_state_unverified', 'history_quote_association_unverified', 'history_quote_read_failed',
+]);
+/**
+ * 单图 image-open 的封闭可恢复集合：只含读取程序在“本张图片的关联、文件、内容或解码”环节返回、
+ * 且已逐个核对不影响账号、会话、来源守卫与固定快照的错误。不得按 history_image_ 前缀放行；
+ * source_changed、read_failed、request_invalid、token/offset、resource_invalid、too_large 等资源或来源状态错误不在其中。
+ */
+export const recoverableImageOpenErrors = new Set([
+  'history_image_association_unverified', 'history_image_local_file_missing', 'history_image_quality_unverified',
+  'history_image_format_unsupported', 'history_image_decoder_unavailable',
+]);
+export const fail = (code = 'history_protocol_invalid'): never => { throw new StorageFailure(code); };
+export const hashPattern = /^[a-f0-9]{64}$/;
+export const absentPrivateTargetProfile = 'wechat-4.0.6-29387-absent-private-target-v1';
+// 系统会话不代表用户的真实关系对象，也不能成为单联系人读取目标。
+export const systemConversations = new Set(['filehelper', 'notifymessage']);
+export const allowedErrors = new Set([
+  'history_target_growth_required',
+  'history_checkpoint_invalid', 'history_checkpoint_too_large', 'history_checkpoint_unavailable',
+  'history_delta_btree_cell_invalid', 'history_delta_btree_cells_invalid', 'history_delta_btree_child_invalid',
+  'history_delta_btree_child_missing', 'history_delta_btree_cycle', 'history_delta_btree_duplicate_rowid',
+  'history_delta_btree_header_invalid', 'history_delta_btree_kind_invalid', 'history_delta_btree_page_invalid',
+  'history_delta_btree_payload_invalid', 'history_delta_btree_reserve_invalid', 'history_delta_btree_rightmost_invalid',
+  'history_delta_checkpoint_invalid', 'history_delta_cipher_hmac_invalid', 'history_delta_cipher_layout_invalid',
+  'history_delta_cipher_page_invalid', 'history_delta_cipher_salt_mismatch', 'history_delta_cipher_unavailable',
+  'history_delta_key_unavailable', 'history_delta_new_child_frame_missing', 'history_delta_new_child_kind_invalid',
+  'history_delta_new_overflow_frame_missing', 'history_delta_overflow_cycle', 'history_delta_overflow_header_invalid',
+  'history_delta_overflow_leaf_missing', 'history_delta_overflow_length_mismatch', 'history_delta_overflow_link_invalid',
+  'history_delta_overflow_owner_missing', 'history_delta_overflow_page_missing', 'history_delta_overflow_pointer_invalid',
+  'history_delta_overflow_shared', 'history_delta_page_count_invalid', 'history_delta_page_invalid',
+  'history_delta_page_missing', 'history_delta_plain_header_invalid', 'history_delta_plain_reserve_invalid',
+  'history_delta_read_invalid', 'history_delta_request_invalid', 'history_delta_root_missing',
+  'history_delta_salt_invalid', 'history_delta_short_read', 'history_delta_source_limit',
+  'history_delta_source_unavailable', 'history_delta_tree_empty', 'history_delta_tree_page_kind_invalid',
+  'history_delta_varint_bounds', 'history_delta_varint_truncated', 'history_delta_wal_checksum_length',
+  'history_delta_wal_database_size_invalid', 'history_delta_wal_frame_checksum_invalid', 'history_delta_wal_frame_header_invalid',
+  'history_delta_wal_frame_limit', 'history_delta_wal_frame_missing', 'history_delta_wal_header_checksum_invalid',
+  'history_delta_wal_header_invalid', 'history_delta_wal_magic_invalid', 'history_delta_wal_page_size_invalid',
+  'history_delta_wal_version_invalid',
+  'history_delta_wal_index_invalid',
+  'history_metadata_profile_unverified', 'history_program_version_uncertified',
+  'history_request_invalid', 'history_operation_unsupported', 'history_scope_unverified',
+  'history_image_association_unverified', 'history_image_original_unavailable', 'history_image_source_changed',
+  'history_image_resource_invalid', 'history_image_token_invalid', 'history_image_offset_invalid',
+  'history_image_too_large', 'history_image_read_failed', 'history_image_request_invalid',
+  'history_image_metadata_invalid', 'history_image_local_file_missing', 'history_image_key_unavailable', 'history_image_quality_unverified',
+  'history_image_thumbnail_only', 'history_image_format_unsupported', 'history_image_decoder_unavailable',
+  'history_quote_unavailable','history_quote_metadata_invalid','history_quote_too_large','history_quote_state_unverified',
+  'history_quote_association_unverified','history_quote_source_changed','history_quote_read_failed','history_quote_request_invalid',
+  'history_account_unavailable', 'history_account_changed', 'history_native_unavailable',
+  'history_metadata_unavailable', 'history_identity_unverified', 'history_identity_ambiguous',
+  'history_source_changed', 'history_source_unverified','history_source_temporarily_unavailable', 'history_shards_unavailable',
+  'history_shard_unavailable', 'history_schema_unavailable', 'history_schema_missing',
+  'history_target_table_missing', 'history_target_ambiguous', 'history_target_not_private',
+  'history_target_unverified', 'history_index_unavailable', 'history_trigger_unavailable',
+  'history_schema_changed', 'history_scope_changed', 'history_native_timeout', 'history_native_cancelled',
+  'history_native_closed', 'history_artifact_unverified', 'history_protocol_invalid',
+  'history_response_too_large', 'history_stderr_limit', 'history_support_unverified',
+  'history_support_unsupported', 'history_support_changed', 'history_target_invalid',
+  'history_program_version_changed', 'history_program_version_invalid', 'history_program_version_unavailable',
+  'history_cursor_invalid', 'history_message_state_unverified', 'history_nonce_unavailable',
+  'history_page_budget_exhausted', 'history_page_read_failed', 'history_shards_changed',
+  'history_snapshot_cancelled', 'history_snapshot_closed', 'history_snapshot_unavailable',
+  'history_snapshot_window_changed', 'history_snapshot_proof_incomplete', 'history_text_unknown', 'history_text_invalid',
+  'history_test_sender_unverified', 'history_test_sender_ambiguous', 'history_test_new_rows_ambiguous',
+  'history_test_type_unverified', 'history_test_key_unverified',
+  'history_tail_unsupported', 'history_tail_baseline_too_large', 'history_boundary_unsupported', 'history_boundary_candidate_too_large',
+  'history_boundary_scope_invalid', 'history_boundary_support_unverified', 'history_boundary_candidate_incomplete',
+  'history_boundary_member_limit', 'history_boundary_member_invalid', 'history_boundary_read_failed',
+  'history_boundary_instance_changed', 'history_snapshot_close_failed',
+]);
+export function object(value: unknown, keys: readonly string[]): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return fail();
+  const row = value as Record<string, unknown>;
+  if (Object.keys(row).length !== keys.length || keys.some(key => !Object.hasOwn(row, key))) return fail();
+  return row;
+}
+function text(value: unknown, maximum = 255, empty = false): string {
+  if (typeof value !== 'string' || !value.isWellFormed() || (!empty && !value.length) || Buffer.byteLength(value, 'utf8') > maximum || /[\u0000-\u001f\u007f]/.test(value)) return fail();
+  return value;
+}
+export function hash(value: unknown): string { return typeof value === 'string' && hashPattern.test(value) ? value : fail(); }
+export function exactInteger(value: unknown, nonnegative = false): string {
+  if (typeof value !== 'string' || !/^(0|-?[1-9][0-9]{0,18})$/.test(value)) return fail();
+  const parsed = BigInt(value);
+  return parsed >= (nonnegative ? 0n : -9223372036854775808n) && parsed <= 9223372036854775807n ? value : fail();
+}
+function bool(value: unknown): boolean { return typeof value === 'boolean' ? value : fail(); }
+export function integer(value: unknown, maximum: number): number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= maximum ? value : fail();
+}
+export function imageToken(value: unknown): string {
+  const parsed=text(value,128);
+  return /^[A-Za-z0-9_.:-]{16,128}$/.test(parsed)?parsed:fail('history_image_token_invalid');
+}
+export function imageIdentity(value: WechatImageSourceIdentity): WechatImageSourceIdentity {
+  if(!value||typeof value!=='object'||Object.keys(value).length!==5||!['partition','table','localId','serverId','sentAt'].every(key=>Object.hasOwn(value,key)))return fail('history_image_request_invalid');
+  const partition=hash(value.partition),table=hash(value.table),localId=exactInteger(value.localId),serverId=exactInteger(value.serverId),sentAt=unsigned(value.sentAt);
+  return {partition,table,localId,serverId,sentAt};
+}
+function imageResourceId(value: unknown): string {
+  const id=unsigned(value);
+  return BigInt(id)>0n?id:fail('history_image_quality_unverified');
+}
+function imageQualityProof(value: unknown, expectedBytes: number, expectedSha256: string, representativeId:string): WechatImageQualityProof {
+  try{
+    if(!value||typeof value!=='object'||Array.isArray(value))return fail('history_image_quality_unverified');
+    const kind=(value as Record<string,unknown>).kind;
+    if(kind==='wechat-message-image-content-v1'||kind==='wechat-message-image-content-v2') {
+      const fields=['kind','resourceInfoId','matchingResourceIds','resourceSize','verifiedBytes','verifiedSha256','sourceSha256','conversion','contentWidth','contentHeight'];
+      const row=object(value,kind==='wechat-message-image-content-v2'?[...fields,'sourceVariant','matchingResources','originalProof']:fields);
+      const resourceInfoId=imageResourceId(row.resourceInfoId),matchingResourceIds=list(row.matchingResourceIds,32,imageResourceId,1);
+      const resourceSize=integer(row.resourceSize,64*1024*1024),verifiedBytes=integer(row.verifiedBytes,32*1024*1024);
+      const verifiedSha256=hash(row.verifiedSha256),sourceSha256=hash(row.sourceSha256);
+      const contentWidth=integer(row.contentWidth,100_000),contentHeight=integer(row.contentHeight,100_000),conversion=row.conversion;
+      if(!resourceSize||!verifiedBytes||verifiedBytes!==expectedBytes||verifiedSha256!==expectedSha256
+        ||!contentWidth||!contentHeight||contentWidth*contentHeight>100_000_000
+        ||conversion!=='none'&&conversion!=='wxgf-to-png-v1'||conversion==='none'&&sourceSha256!==verifiedSha256
+        ||matchingResourceIds[0]!==representativeId
+        ||matchingResourceIds.some((id,index)=>index>0&&BigInt(matchingResourceIds[index-1])>=BigInt(id)))return fail('history_image_resource_invalid');
+      const content={resourceInfoId,matchingResourceIds,resourceSize,verifiedBytes,verifiedSha256,sourceSha256,
+        conversion:conversion as 'none'|'wxgf-to-png-v1',contentWidth,contentHeight};
+      if(kind==='wechat-message-image-content-v1')return {kind,...content};
+      const sourceVariant=row.sourceVariant;
+      if(sourceVariant!=='main'&&sourceVariant!=='thumbnail')return fail('history_image_quality_unverified');
+      const matchingResources=list(row.matchingResources,32,item=>{
+        const entry=object(item,['resourceId','resourceTypeRaw']);
+        const resourceTypeRaw=integer(entry.resourceTypeRaw,0x7fffffff);
+        if((resourceTypeRaw&0xffff)!==1)return fail('history_image_quality_unverified');
+        return {resourceId:imageResourceId(entry.resourceId),resourceTypeRaw};
+      },1);
+      if(matchingResources.length!==matchingResourceIds.length||matchingResources.some((r,i)=>r.resourceId!==matchingResourceIds[i]))return fail('history_image_quality_unverified');
+      let originalProof:WechatImageQualityProofV4|null=null;
+      if(row.originalProof!==null){
+        if(!row.originalProof||typeof row.originalProof!=='object'||Array.isArray(row.originalProof)
+          ||(row.originalProof as Record<string,unknown>).kind!=='wechat-cdn-big-hd-exact-content-v4')return fail('history_image_quality_unverified');
+        const original=imageQualityProof(row.originalProof,expectedBytes,expectedSha256,representativeId);
+        if(sourceVariant!=='main'||original.kind!=='wechat-cdn-big-hd-exact-content-v4'
+          ||original.resourceInfoId!==resourceInfoId||JSON.stringify(original.matchingResourceIds)!==JSON.stringify(matchingResourceIds)
+          ||original.sourceSha256!==sourceSha256||original.conversion!==conversion
+          ||original.contentWidth!==contentWidth||original.contentHeight!==contentHeight)return fail('history_image_quality_unverified');
+        originalProof=original;
+      }
+      return {kind,...content,sourceVariant,matchingResources,originalProof};
+    }
+    const proofRow=kind==='wechat-cdn-big-hd-exact-content-v1'
+      ?object(value,['kind','messageMd5','hdLength','hdWidth','hdHeight','bigImageUrlPresent','resourceSize','verifiedBytes','verifiedSha256'])
+      :kind==='wechat-cdn-big-hd-exact-content-v2'
+        ?object(value,['kind','messageMd5','hdLength','hdWidth','hdHeight','bigImageUrlPresent','resourceSize','verifiedBytes','verifiedSha256','contentWidth','contentHeight'])
+        :kind==='wechat-cdn-big-hd-exact-content-v3'
+          ?object(value,['kind','messageMd5','hdLength','hdWidth','hdHeight','bigImageUrlPresent','resourceSize','verifiedBytes','verifiedSha256','contentWidth','contentHeight','resourceInfoId','matchingResourceIds'])
+        :kind==='wechat-cdn-big-hd-exact-content-v4'
+          ?object(value,['kind','messageMd5','hdLength','hdWidth','hdHeight','bigImageUrlPresent','resourceSize','verifiedBytes','verifiedSha256','contentWidth','contentHeight','resourceInfoId','matchingResourceIds','sourceSha256','conversion'])
+          :fail('history_image_quality_unverified');
+    const messageMd5=text(proofRow.messageMd5,32),hdLength=integer(proofRow.hdLength,32*1024*1024);
+    const resourceSize=integer(proofRow.resourceSize,kind==='wechat-cdn-big-hd-exact-content-v3'||kind==='wechat-cdn-big-hd-exact-content-v4'?64*1024*1024:32*1024*1024);
+    const verifiedBytes=integer(proofRow.verifiedBytes,32*1024*1024),verifiedSha256=hash(proofRow.verifiedSha256);
+    const conversion=kind==='wechat-cdn-big-hd-exact-content-v4'?proofRow.conversion:null;
+    const sourceSha256=kind==='wechat-cdn-big-hd-exact-content-v4'?hash(proofRow.sourceSha256):null;
+    if(!/^[a-f0-9]{32}$/.test(messageMd5)||!hdLength||kind!=='wechat-cdn-big-hd-exact-content-v4'&&hdLength!==expectedBytes
+      ||kind==='wechat-cdn-big-hd-exact-content-v4'&&conversion!=='none'&&conversion!=='wxgf-to-png-v1'
+      ||kind==='wechat-cdn-big-hd-exact-content-v4'&&conversion==='none'&&(hdLength!==expectedBytes||sourceSha256!==verifiedSha256)
+      ||proofRow.bigImageUrlPresent!==true||!resourceSize
+      ||kind!=='wechat-cdn-big-hd-exact-content-v3'&&kind!=='wechat-cdn-big-hd-exact-content-v4'&&resourceSize!==expectedBytes
+      ||verifiedBytes!==expectedBytes||verifiedSha256!==expectedSha256)return fail('history_image_quality_unverified');
+    if(kind==='wechat-cdn-big-hd-exact-content-v1'){
+      const hdWidth=integer(proofRow.hdWidth,1_000_000),hdHeight=integer(proofRow.hdHeight,1_000_000);
+      if(!hdWidth||!hdHeight)return fail('history_image_quality_unverified');
+      return {kind:'wechat-cdn-big-hd-exact-content-v1',messageMd5,hdLength,hdWidth,hdHeight,bigImageUrlPresent:true,resourceSize,verifiedBytes,verifiedSha256};
+    }
+    const dimension=(input:unknown):number|null=>input===null?null:integer(input,100_000);
+    const hdWidth=dimension(proofRow.hdWidth),hdHeight=dimension(proofRow.hdHeight);
+    const contentWidth=integer(proofRow.contentWidth,100_000),contentHeight=integer(proofRow.contentHeight,100_000);
+    if(!contentWidth||!contentHeight||contentWidth*contentHeight>100_000_000
+      ||(hdWidth===null)!==(hdHeight===null)
+      ||hdWidth!==null&&(!hdWidth||!hdHeight||hdWidth!==contentWidth||hdHeight!==contentHeight))return fail('history_image_quality_unverified');
+    if(kind==='wechat-cdn-big-hd-exact-content-v2')
+      return {kind:'wechat-cdn-big-hd-exact-content-v2',messageMd5,hdLength,hdWidth,hdHeight,bigImageUrlPresent:true,resourceSize,verifiedBytes,verifiedSha256,contentWidth,contentHeight};
+    const resourceInfoId=imageResourceId(proofRow.resourceInfoId),matchingResourceIds=list(proofRow.matchingResourceIds,32,imageResourceId,1);
+    if(matchingResourceIds.some((id,index)=>index>0&&BigInt(matchingResourceIds[index-1])>=BigInt(id))||matchingResourceIds[0]!==representativeId)
+      return fail('history_image_quality_unverified');
+    if(kind==='wechat-cdn-big-hd-exact-content-v4')
+      return {kind:'wechat-cdn-big-hd-exact-content-v4',messageMd5,hdLength,hdWidth,hdHeight,bigImageUrlPresent:true,resourceSize,verifiedBytes,verifiedSha256,contentWidth,contentHeight,
+        resourceInfoId,matchingResourceIds,sourceSha256:sourceSha256!,conversion:conversion as 'none'|'wxgf-to-png-v1'};
+    return {kind:'wechat-cdn-big-hd-exact-content-v3',messageMd5,hdLength,hdWidth,hdHeight,bigImageUrlPresent:true,resourceSize,verifiedBytes,verifiedSha256,contentWidth,contentHeight,
+      resourceInfoId,matchingResourceIds};
+  }catch{return fail('history_image_quality_unverified');}
+}
+export function imageOpen(value: unknown, scope: ResolvedWechatScope, target: HistoryTarget, source: WechatImageSourceIdentity, expectedBytesMaximum:number): WechatImageOpenResult {
+  const row=object(value,['protocol','resourceToken','sourceGeneration','resourceSourceGeneration','target','partition','table','localId','serverId','sentAt',
+    'resourceTable','resourceId','resourceTypeRaw','variantCode','complete','quality','qualityProof','expectedBytes','expectedSha256','mimeType','envelope','sourceEnvelope']);
+  const expectedBytes=integer(row.expectedBytes,Number.MAX_SAFE_INTEGER),expectedSha256=hash(row.expectedSha256);
+  if(expectedBytes>expectedBytesMaximum)return fail('history_image_too_large');
+  if(expectedBytes<1)return fail('history_image_resource_invalid');
+  const mimeType=row.mimeType;
+  if(row.protocol!=='wechat-original-image-v1'||scope.sourceGeneration!==target.sourceGeneration)return fail('history_image_association_unverified');
+  if(row.sourceGeneration!==scope.sourceGeneration)return fail('history_image_source_changed');
+  if(row.target!==target.descriptor||row.partition!==source.partition||row.table!==source.table||row.localId!==source.localId||row.serverId!==source.serverId||row.sentAt!==source.sentAt
+    ||!target.tables.some(item=>item.partition===source.partition&&item.instance===source.table))return fail('history_image_association_unverified');
+  if(row.complete!==true||!['original','thumbnail','unknown'].includes(String(row.quality)))return fail('history_image_resource_invalid');
+  if(row.resourceTable!=='wechat-message-resource-v1'
+    ||row.envelope!=='plain'||row.sourceEnvelope!=='plain'&&row.sourceEnvelope!=='wechat_dat'
+    ||typeof mimeType!=='string'||!['image/jpeg','image/png','image/gif','image/bmp'].includes(mimeType))return fail('history_image_resource_invalid');
+  const resourceId=unsigned(row.resourceId),qualityProof=imageQualityProof(row.qualityProof,expectedBytes,expectedSha256,resourceId);
+  const resourceTypeRaw=integer(row.resourceTypeRaw,0x7fffffff),variantCode=integer(row.variantCode,0x7fffffff);
+  const expectedQuality=qualityProof.kind==='wechat-message-image-content-v2'
+    ?qualityProof.sourceVariant==='thumbnail'?'thumbnail':qualityProof.originalProof?'original':'unknown'
+    :qualityProof.kind==='wechat-message-image-content-v1'?'unknown':'original';
+  if(expectedQuality!==row.quality)return fail('history_image_resource_invalid');
+  if(qualityProof.kind==='wechat-message-image-content-v2'
+    &&(qualityProof.matchingResources[0].resourceTypeRaw!==resourceTypeRaw||variantCode!==(resourceTypeRaw>>>16)))return fail('history_image_resource_invalid');
+  return {protocol:'wechat-original-image-v1',resourceToken:imageToken(row.resourceToken),sourceGeneration:scope.sourceGeneration,
+    resourceSourceGeneration:hash(row.resourceSourceGeneration),target:target.descriptor,partition:source.partition,table:source.table,
+    localId:source.localId,serverId:source.serverId,sentAt:source.sentAt,resourceTable:row.resourceTable as WechatImageOpenResult['resourceTable'],
+    resourceId,resourceTypeRaw,variantCode,
+    complete:true,quality:expectedQuality,qualityProof,expectedBytes,expectedSha256,mimeType:mimeType as WechatImageOpenResult['mimeType'],
+    envelope:'plain',sourceEnvelope:row.sourceEnvelope as WechatImageOpenResult['sourceEnvelope']};
+}
+export function imageRead(value: unknown, active:{token:string;sourceGeneration:string;expectedBytes:number;expectedSha256:string;nextOffset:number}, requestedOffset:number):WechatImageReadResult {
+  const hasHash=!!value&&typeof value==='object'&&!Array.isArray(value)&&Object.hasOwn(value,'verifiedSha256');
+  const row=object(value,['resourceToken','sourceGeneration','offset','bytesRead','totalBytes','chunkBase64','eof',...(hasHash?['verifiedSha256']:[])]);
+  const offset=integer(row.offset,active.expectedBytes),bytesRead=integer(row.bytesRead,65536),totalBytes=integer(row.totalBytes,32*1024*1024);
+  const chunkBase64=text(row.chunkBase64,90_000),eof=bool(row.eof);
+  if(row.resourceToken!==active.token)return fail('history_image_token_invalid');
+  if(row.sourceGeneration!==active.sourceGeneration||totalBytes!==active.expectedBytes)return fail('history_image_source_changed');
+  if(offset!==requestedOffset||offset!==active.nextOffset)return fail('history_image_offset_invalid');
+  if(bytesRead<1||!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(chunkBase64))return fail('history_image_read_failed');
+  const chunk=Buffer.from(chunkBase64,'base64');
+  if(chunk.toString('base64')!==chunkBase64||chunk.length!==bytesRead||offset+bytesRead>totalBytes
+    ||eof!==(offset+bytesRead===totalBytes)||hasHash!==eof||hasHash&&hash(row.verifiedSha256)!==active.expectedSha256)return fail('history_image_read_failed');
+  active.nextOffset+=bytesRead;
+  return {resourceToken:active.token,sourceGeneration:active.sourceGeneration,offset,bytesRead,totalBytes,chunkBase64,eof,...(hasHash?{verifiedSha256:active.expectedSha256}:{})};
+}
+export function list<T>(value: unknown, maximum: number, parse: (value: unknown) => T, minimum = 0): T[] {
+  if (!Array.isArray(value) || value.length < minimum || value.length > maximum) return fail();
+  return value.map(parse);
+}
+export function unique(values: readonly string[]): void { if (new Set(values).size !== values.length) fail(); }
+export function resolved(value: unknown): ResolvedWechatScope {
+  const row = object(value, ['accountKey', 'conversationKey', 'displayName', 'sourceGeneration']);
+  const accountKey = text(row.accountKey), conversationKey = text(row.conversationKey);
+  if (![accountKey, conversationKey].every(key => /^[A-Za-z0-9_.@-]{1,255}$/.test(key))) return fail();
+  if (systemConversations.has(conversationKey)) return fail('history_target_not_private');
+  return { accountKey, conversationKey, displayName: metadataDisplayName(row.displayName, conversationKey), sourceGeneration: hash(row.sourceGeneration) };
+}
+function table(value: unknown): WechatTableSchema {
+  const row = object(value, ['target', 'partition', 'role', 'columns', 'indexes', 'declaredPrimaryKey', 'autoIncrement', 'sqlFingerprint', 'triggerFingerprints', 'schemaVersion', 'rootPage']);
+  if (row.role !== 'private_message') return fail();
+  const columns = list(row.columns, 128, value => {
+    const column = object(value, ['name', 'type', 'notNull', 'primaryKey', 'hidden']);
+    return { name: text(column.name), type: text(column.type, 255, true), notNull: bool(column.notNull), primaryKey: integer(column.primaryKey, 128), hidden: integer(column.hidden, 3) };
+  }, 1);
+  unique(columns.map(column => column.name));
+  const declaredPrimaryKey = list(row.declaredPrimaryKey, 128, value => text(value));
+  const primary = columns.filter(column => column.primaryKey > 0).sort((a, b) => a.primaryKey - b.primaryKey);
+  if (primary.some((column, index) => column.primaryKey !== index + 1) || JSON.stringify(declaredPrimaryKey) !== JSON.stringify(primary.map(column => column.name))) return fail();
+  const indexes = list(row.indexes, 128, value => {
+    const index = object(value, ['id', 'unique', 'origin', 'partial', 'columns']);
+    if (index.origin !== 'c' && index.origin !== 'u' && index.origin !== 'pk') return fail();
+    const columns = list(index.columns, 128, value => {
+      const column = object(value, ['sequence', 'name', 'descending', 'collation', 'key']);
+      return { sequence: integer(column.sequence, 127), name: text(column.name, 255, true), descending: bool(column.descending), collation: text(column.collation, 255, true), key: bool(column.key) };
+    });
+    if (columns.some((column, position) => column.sequence !== position)) return fail();
+    return { id: hash(index.id), unique: bool(index.unique), origin: index.origin as 'c' | 'u' | 'pk', partial: bool(index.partial), columns };
+  });
+  unique(indexes.map(index => index.id));
+  const triggerFingerprints = list(row.triggerFingerprints, 128, hash); unique(triggerFingerprints);
+  return { target: hash(row.target), partition: hash(row.partition), role: 'private_message', columns, indexes, declaredPrimaryKey,
+    autoIncrement: bool(row.autoIncrement), sqlFingerprint: hash(row.sqlFingerprint), triggerFingerprints, schemaVersion: exactInteger(row.schemaVersion), rootPage: exactInteger(row.rootPage, true) };
+}
+export function inspection(value: unknown, scope: ResolvedWechatScope): WechatSchemaInspection {
+  const row = object(value, ['format', 'status', 'scopeDigest', 'sourceGeneration', 'schemaFingerprint', 'tables', 'checkedPartitions']);
+  if (row.format !== 'wechat-message-schema-v1' || row.status !== 'unverified') return fail();
+  if (hash(row.scopeDigest) !== sha256(`${scope.accountKey}\0${scope.conversationKey}`) || hash(row.sourceGeneration) !== scope.sourceGeneration) return fail();
+  const checkedPartitions = list(row.checkedPartitions, 128, hash, 1); unique(checkedPartitions);
+  const tables = list(row.tables, 128, table); unique(tables.map(item => item.target));
+  if (tables.some(item => !checkedPartitions.includes(item.partition))) return fail();
+  return { format: 'wechat-message-schema-v1', status: 'unverified', scopeDigest: row.scopeDigest as string,
+    sourceGeneration: scope.sourceGeneration, schemaFingerprint: hash(row.schemaFingerprint), tables, checkedPartitions };
+}
+export function accountIdentity(value: unknown): string {
+  const parsed = text(value);
+  return /^[A-Za-z0-9_.@-]{1,255}$/.test(parsed) ? parsed : fail();
+}
+export function accountSchema(value: unknown): WechatAccountSchema {
+  const row = object(value, ['format', 'status', 'accountKey', 'sourceGeneration', 'schemaFingerprint', 'tables', 'normalHistory']);
+  if (row.format !== 'wechat-account-schema-v1' || row.status !== 'unverified' || row.normalHistory !== false) return fail();
+  const tables = list(row.tables, 2, value => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return fail();
+    const role = (value as Record<string, unknown>).role;
+    if (role !== 'contact' && role !== 'session') return fail();
+    return { ...table({ ...value, role: 'private_message' }), role: role as 'contact' | 'session' };
+  }, 2);
+  unique(tables.map(item => item.role)); unique(tables.map(item => item.target));
+  return { format: 'wechat-account-schema-v1', status: 'unverified', accountKey: accountIdentity(row.accountKey), sourceGeneration: hash(row.sourceGeneration), schemaFingerprint: hash(row.schemaFingerprint), tables, normalHistory: false };
+}
+export function accountMetadata(value: unknown, options: NarrowWechatClientOptions): WechatAccountMetadata {
+  const row = object(value, ['format', 'status', 'reason', 'accountKey', 'identityScheme', 'sourceGeneration', 'supportProfile', 'programVersion', 'build', 'artifactSha256', 'wcdbSha256', 'configuredAccount', 'continuity', 'normalHistory']);
+  if (row.format !== 'wechat-account-metadata-v1' || row.identityScheme !== 'wechat.account.v1'
+    || row.supportProfile !== WECHAT_METADATA_SUPPORT.profileId
+    || row.continuity !== 'held-contact-session-instances' || row.normalHistory !== false
+    || hash(row.artifactSha256) !== options.expectedCliSha256 || hash(row.wcdbSha256) !== options.expectedWcdbSha256
+    || typeof row.programVersion !== 'string' || !/^[0-9]{1,3}(\.[0-9]{1,3}){1,3}$/.test(row.programVersion)
+    || typeof row.build !== 'string' || !/^[0-9]{1,12}$/.test(row.build)) return fail();
+  if (row.status === 'verified') {
+    if (row.configuredAccount !== 'verified' || row.reason !== null || row.programVersion !== WECHAT_METADATA_SUPPORT.programVersion || row.build !== WECHAT_METADATA_SUPPORT.build) return fail();
+  } else if (row.status !== 'unverified' || row.configuredAccount !== 'unverified'
+    || !['history_metadata_profile_unverified', 'history_program_version_uncertified'].includes(row.reason as string)) return fail();
+  return { format: 'wechat-account-metadata-v1', status: row.status as WechatAccountMetadata['status'], reason: row.reason as string | null,
+    accountKey: accountIdentity(row.accountKey), identityScheme: 'wechat.account.v1', sourceGeneration: hash(row.sourceGeneration), supportProfile: row.supportProfile as string,
+    programVersion: row.programVersion, build: row.build, artifactSha256: row.artifactSha256 as string, wcdbSha256: row.wcdbSha256 as string,
+    configuredAccount: row.configuredAccount as WechatAccountMetadata['configuredAccount'], continuity: 'held-contact-session-instances', normalHistory: false };
+}
+export function metadataDisplayName(value: unknown, username: string): string {
+  if (typeof value !== 'string' || !value.isWellFormed() || !value.length || Buffer.byteLength(value, 'utf8') > 255 || /[\0\r\n]/.test(value)) return fail();
+  // 名称只作展示；规整渠道标签中的控制字符，稳定身份仍严格取 username。
+  return text(value.replace(/[\u0001-\u001f\u007f-\u009f]/g, ' ').trim() || username);
+}
+export function privateSessionMetadata(value: unknown, expected: WechatAccountMetadata, options: NarrowWechatClientOptions): WechatPrivateSessionMetadata {
+  const row = object(value, ['format', 'account', 'sessions']);
+  const account = accountMetadata(row.account, options);
+  if (row.format !== 'wechat-private-session-metadata-v1' || account.status !== 'verified' || JSON.stringify(account) !== JSON.stringify(expected)) return fail();
+  const sessions = list(row.sessions, 5000, value => {
+    const item = object(value, ['username', 'displayName', 'kind', 'identityAssurance']);
+    const username = accountIdentity(item.username);
+    if (item.kind !== 'private' || item.identityAssurance !== 'verified' || username.startsWith('@') || username.startsWith('gh_') || username.startsWith('biz_')
+      || ['@chatroom', '@weclaw', '@openim', '@stranger'].some(suffix => username.endsWith(suffix))
+      || ['brandsessionholder', 'brandservicesessionholder'].includes(username)) return fail();
+    return {username, displayName: metadataDisplayName(item.displayName, username), kind: 'private' as const, identityAssurance: 'verified' as const};
+  });
+  unique(sessions.map(item => item.username));
+  return {format: 'wechat-private-session-metadata-v1', account, sessions: sessions.filter(item => !systemConversations.has(item.username))};
+}
+export function opaque(value: unknown): string { return text(value, 64_000); }
+export function unsigned(value: unknown): string {
+  return typeof value === 'string' && /^(0|[1-9][0-9]{0,19})$/.test(value) && BigInt(value) <= 18446744073709551615n ? value : fail();
+}
+export function supportReport(value: unknown, scope: ResolvedWechatScope, artifact: string): HistorySupportReport {
+  const hasCapabilities = !!value && typeof value === 'object' && !Array.isArray(value) && Object.hasOwn(value, 'capabilities');
+  const row = object(value, ['protocol', 'profileId', 'adapterVersion', 'status', 'reason', 'accountKey', 'conversationKey', 'sourceGeneration',
+    'programVersion', 'build', 'artifactSha256', 'schemaFingerprint', 'declaredPrimaryKey', 'serverAliasSemantics', 'identity', 'statusSemantics', 'continuity', ...(hasCapabilities ? ['capabilities'] : [])]);
+  if (row.protocol !== 'private-history-v1' || row.identity !== 'source-table-local-v1' || row.serverAliasSemantics !== 'unverified'
+    || !['supported', 'unsupported', 'unverified'].includes(row.status as string)
+    || row.accountKey !== scope.accountKey || row.conversationKey !== scope.conversationKey || row.sourceGeneration !== scope.sourceGeneration || row.artifactSha256 !== artifact) return fail();
+  const reason = row.reason === null ? null : text(row.reason, 128);
+  if (reason !== null && !/^[a-z][a-z0-9_]*$/.test(reason)) return fail();
+  const declaredPrimaryKey = list(row.declaredPrimaryKey, 128, value => text(value)); unique(declaredPrimaryKey);
+  const statusSemantics = text(row.statusSemantics, 512, row.status !== 'supported');
+  const continuity = text(row.continuity, 512, row.status !== 'supported');
+  const absentTarget = row.profileId === absentPrivateTargetProfile && row.programVersion === WECHAT_METADATA_SUPPORT.programVersion && row.build === WECHAT_METADATA_SUPPORT.build
+    && row.statusSemantics === 'no-message-table-v1' && row.continuity === 'same-source-instances-normal-use-v1';
+  if (row.status === 'supported' && (reason !== null || !declaredPrimaryKey.length && !absentTarget
+    || row.profileId === absentPrivateTargetProfile && (!absentTarget || declaredPrimaryKey.length > 0))) return fail();
+  let capabilities: Record<string, 'supported' | 'unsupported' | 'unverified'> | undefined;
+  if (hasCapabilities) {
+    const extras = ['incrementalTail', 'durableIncremental', 'durableHistory', 'partitionGrowth', 'recoverFromLocalIds', boundaryProtocol].filter(key => Object.hasOwn(row.capabilities as object, key));
+    const keys = ['programVersion', 'exactSchema', 'declaredLocalKey', 'automaticAllocation', 'serverIdUniqueConstraint', 'statusColumn', 'statusSemantics', 'sourceLifecycle', 'restartContinuity', 'recoveryMapping', 'snapshotBarrier', 'partitionCoverage', 'normalHistory', ...extras];
+    const reported = object(row.capabilities, keys);
+    capabilities = Object.fromEntries(keys.map(key => {
+      const value = reported[key];
+      if (value !== 'supported' && value !== 'unsupported' && value !== 'unverified') return fail();
+      return [key, value];
+    }));
+  }
+  if (row.status === 'supported' && absentTarget && (!capabilities
+    || ['programVersion', 'exactSchema', 'statusSemantics', 'sourceLifecycle', 'restartContinuity', 'recoveryMapping', 'snapshotBarrier', 'partitionCoverage', 'normalHistory'].some(key => capabilities[key] !== 'supported')
+    || ['declaredLocalKey', 'automaticAllocation', 'serverIdUniqueConstraint', 'statusColumn', 'incrementalTail'].some(key => capabilities[key] !== 'unsupported'))) return fail();
+
+  return { protocol: 'private-history-v1', profileId: text(row.profileId), adapterVersion: text(row.adapterVersion),
+    status: row.status as HistorySupportReport['status'], reason, accountKey: scope.accountKey, conversationKey: scope.conversationKey,
+    sourceGeneration: scope.sourceGeneration, programVersion: text(row.programVersion), build: text(row.build), artifactSha256: hash(row.artifactSha256),
+    schemaFingerprint: hash(row.schemaFingerprint), declaredPrimaryKey, serverAliasSemantics: 'unverified', identity: 'source-table-local-v1', statusSemantics, continuity, ...(capabilities ? { capabilities } : {}) };
+}
+export function historyTarget(value: unknown, scope: ResolvedWechatScope, schema?: WechatSchemaInspection): HistoryTarget {
+  const hasChecked=!!value&&typeof value==='object'&&Object.hasOwn(value,'checkedPartitions');
+  const row = object(value, ['protocol', 'descriptor', 'partitions', 'tables', 'sourceGeneration',...(hasChecked?['checkedPartitions']:[])]);
+  if (row.protocol !== 'private-history-v1' || row.sourceGeneration !== scope.sourceGeneration) return fail();
+  const partitions = list(row.partitions, 128, hash, 1); unique(partitions);
+  const tables = list(row.tables, 128, value => {
+    const table = object(value, ['partition', 'instance']);
+    return { partition: hash(table.partition), instance: hash(table.instance) };
+  });
+  unique(tables.map(table => table.instance));
+  const checkedPartitions=hasChecked?list(row.checkedPartitions,128,hash,1):undefined;
+  if(checkedPartitions){unique(checkedPartitions);if(partitions.some(partition=>!checkedPartitions.includes(partition)))return fail();}
+  if (tables.some(table => !partitions.includes(table.partition))) return fail();
+  if (!tables.length && (!schema || schema.tables.length > 0)) return fail();
+  if (schema && (JSON.stringify([...partitions].sort()) !== JSON.stringify([...(schema.tables.length ? new Set(schema.tables.map(table => table.partition)) : schema.checkedPartitions)].sort())
+    || JSON.stringify(tables.map(table => `${table.partition}:${table.instance}`).sort()) !== JSON.stringify(schema.tables.map(table => `${table.partition}:${table.target}`).sort()))) return fail();
+  if(schema&&checkedPartitions&&JSON.stringify([...checkedPartitions].sort())!==JSON.stringify([...schema.checkedPartitions].sort()))return fail();
+  return { protocol: 'private-history-v1', descriptor: opaque(row.descriptor), partitions, tables, sourceGeneration: scope.sourceGeneration,...(checkedPartitions?{checkedPartitions}:{}) };
+}
+const inlineQuoteErrorCodes:readonly HistoryQuoteErrorCode[]=['history_quote_unavailable','history_quote_metadata_invalid','history_quote_too_large',
+  'history_quote_state_unverified','history_quote_association_unverified','history_quote_read_failed'];
+const quoteRawType='244813135921';
+type InlineQuoteScope={accountKey:string;conversationKey:string;sourceGeneration:string};
+export function historyRecord(value: unknown, target: HistoryTarget, inlineQuoteScope?:InlineQuoteScope): HistoryRecord {
+  const hasMessageState=!!value&&typeof value==='object'&&Object.hasOwn(value,'messageState');
+  const hasMetadataOnly=!!value&&typeof value==='object'&&Object.hasOwn(value,'metadataOnly');
+  const hasInlineQuote=!!value&&typeof value==='object'&&Object.hasOwn(value,'quote');
+  const hasInlineQuoteError=!!value&&typeof value==='object'&&Object.hasOwn(value,'quoteErrorCode');
+  const inlineKeys=inlineQuoteScope?[...(hasInlineQuote?['quote']:[]),...(hasInlineQuoteError?['quoteErrorCode']:[])]:[];
+  const row = object(value, ['partition', 'table', 'localId', 'serverId', 'sender', 'kind', 'text', 'originalType', 'sentAt', 'timePrecision', 'orderScheme', 'orderKey', 'status', 'stateAssurance',...(hasMessageState?['messageState']:[]),...(hasMetadataOnly?['metadataOnly']:[]),...inlineKeys]);
+  const partition = hash(row.partition), table = hash(row.table);
+  if (!target.tables.some(candidate => candidate.partition === partition && candidate.instance === table)
+    || !['owner', 'contact', 'unknown'].includes(row.sender as string)
+    || !['text', 'image', 'voice', 'video', 'file', 'sticker', 'other'].includes(row.kind as string)
+    || !['verified', 'unverified'].includes(row.stateAssurance as string)
+    || row.stateAssurance === 'unverified' && row.text !== null) return fail();
+  if(hasMessageState&&(row.stateAssurance!=='verified'||!['sent','received','recalled','absent'].includes(row.messageState as string)
+    ||row.messageState==='sent'&&row.sender!=='owner'||row.messageState==='received'&&row.sender!=='contact'
+    ||['recalled','absent'].includes(row.messageState as string)&&(row.kind!=='other'||row.text!==null||row.localId===null)))return fail();
+  let body: string | null = null;
+  if (row.kind === 'text') {
+    if (row.text !== null) {
+      if (typeof row.text !== 'string' || !row.text.isWellFormed() || Buffer.byteLength(row.text, 'utf8') > 65536) return fail();
+      body = row.text;
+    }
+  } else if (row.text !== null) return fail();
+  const sentAt = row.sentAt === null ? null : unsigned(row.sentAt);
+  if ((sentAt === null) !== (row.timePrecision === null) || sentAt !== null && BigInt(sentAt) > 253402300799999n
+    || row.timePrecision !== null && row.timePrecision !== 'second' && row.timePrecision !== 'millisecond') return fail();
+  const orderScheme = row.orderScheme === null ? null : text(row.orderScheme, 512);
+  const orderKey = row.orderKey === null ? null : exactInteger(row.orderKey);
+  if ((orderScheme === null) !== (orderKey === null)) return fail();
+  const originalType = row.originalType === 'unknown' && row.kind === 'other' ? 'unknown' : exactInteger(row.originalType);
+  if(hasMetadataOnly&&(row.metadataOnly!==true||row.kind==='text'||row.text!==null||row.stateAssurance!=='unverified'||hasMessageState
+    ||originalType==='unknown'||BigInt(originalType)<0n||(BigInt(originalType)&0xffffffffn)===1n||row.kind!==historyMetadataKind(originalType)))return fail();
+  const localId=row.localId===null?null:exactInteger(row.localId),serverId=row.serverId===null?null:exactInteger(row.serverId);
+  const inlineQuoteCarrier=inlineQuoteScope!==undefined&&originalType===quoteRawType&&row.kind==='other'&&body===null
+    &&hasMetadataOnly&&row.metadataOnly===true&&row.stateAssurance==='unverified'&&!hasMessageState;
+  let parsedQuote:HistoryRecord['quote'];
+  let quoteErrorCode:HistoryQuoteErrorCode|undefined;
+  if(hasInlineQuote||hasInlineQuoteError){
+    if(!inlineQuoteCarrier||hasInlineQuote===hasInlineQuoteError)return fail();
+    if(hasInlineQuote){
+      if(localId===null||serverId===null)return fail();
+      const validated=readWechatQuotePayload(row.quote,inlineQuoteScope!,{partition,table,localId,serverId,sentAt});
+      parsedQuote={replyText:validated.replyText,referencedText:validated.referencedText,referencedSender:validated.referencedSender,
+        referencedSenderRole:validated.referencedSenderRole,referencedType:validated.referencedType,referencedServerId:validated.referencedServerId,proofDigest:validated.contentSha256};
+    }else{
+      if(typeof row.quoteErrorCode!=='string'||!inlineQuoteErrorCodes.includes(row.quoteErrorCode as HistoryQuoteErrorCode))return fail();
+      quoteErrorCode=row.quoteErrorCode as HistoryQuoteErrorCode;
+    }
+  }
+  if(inlineQuoteScope&&originalType===quoteRawType&&!hasInlineQuote&&!hasInlineQuoteError)return fail();
+  return { partition, table, localId, serverId,
+    sender: row.sender as HistoryRecord['sender'], kind: row.kind as HistoryRecord['kind'], text: body, originalType,
+    sentAt, timePrecision: row.timePrecision as HistoryRecord['timePrecision'], orderScheme, orderKey, status: row.status === null ? null : exactInteger(row.status), stateAssurance: row.stateAssurance as HistoryRecord['stateAssurance'],...(hasMetadataOnly?{metadataOnly:true as const}:{}),...(hasMessageState?{messageState:row.messageState as HistoryRecord['messageState']}:{}) ,
+    ...(parsedQuote?{quote:parsedQuote}:{}),...(quoteErrorCode?{quoteErrorCode}:{}) };
+}
+function historyMetadataKind(originalType:string):HistoryRecord['kind'] {
+  return (BigInt(originalType)&0xffffffffn)===49n ? BigInt(originalType)>>32n===6n?'file':'other' : metadataKind(originalType);
+}
+export function historyPage(value: unknown, target: HistoryTarget, cursor: string | null, inlineQuoteScope?:InlineQuoteScope,checkpointRequested=false): HistoryPage {
+  const hasResume = !!value && typeof value === 'object' && Object.hasOwn(value, 'resumeCursor');
+  const hasCheckpoint=!!value&&typeof value==='object'&&Object.hasOwn(value,'checkpointCursor');
+  const row = object(value, ['target', 'cursorIn', 'cursorOut', 'records', 'completedPartitions', 'exhausted', ...(hasResume ? ['resumeCursor'] : []),...(hasCheckpoint?['checkpointCursor']:[])]);
+  if (row.target !== target.descriptor || row.cursorIn !== cursor) return fail();
+  const cursorOut = row.cursorOut === null ? null : opaque(row.cursorOut), exhausted = bool(row.exhausted);
+  if (exhausted ? cursorOut !== null : cursorOut === null || cursorOut === cursor) return fail();
+  const completedPartitions = list(row.completedPartitions, 128, hash); unique(completedPartitions);
+  if (completedPartitions.some(partition => !target.partitions.includes(partition))) return fail();
+  if (hasResume && (!exhausted || row.resumeCursor === null)) return fail();
+  if(hasCheckpoint&&(exhausted||!checkpointRequested)||checkpointRequested&&!exhausted&&!hasCheckpoint)return fail();
+  return { target: target.descriptor, cursorIn: cursor, cursorOut, records: list(row.records, pageRecordLimit, value => historyRecord(value, target, inlineQuoteScope)), completedPartitions, exhausted,
+    ...(hasResume ? { resumeCursor: opaque(row.resumeCursor) } : {}),...(hasCheckpoint?{checkpointCursor:opaque(row.checkpointCursor)}:{}) };
+}
+export function historyTailPage(value: unknown, target: HistoryTarget, cursor: string,inlineQuoteScope?:InlineQuoteScope): HistoryTailPage {
+  const row = object(value, ['target', 'cursorIn', 'cursorOut', 'records', 'caughtUp']);
+  const cursorOut = opaque(row.cursorOut);
+  if (row.target !== target.descriptor || row.cursorIn !== cursor || cursorOut === cursor) return fail();
+  return { target: target.descriptor, cursorIn: cursor, cursorOut, records: list(row.records, pageRecordLimit, value => historyRecord(value, target, inlineQuoteScope)), caughtUp: bool(row.caughtUp) };
+}
+export function historyBoundary(value: unknown, scope: ResolvedWechatScope, schema: WechatSchemaInspection, support: HistorySupportReport): HistoryBoundaryCandidate {
+  const row = object(value, ['format', 'scopeDigest', 'sourceGeneration', 'schemaFingerprint', 'target', 'boundaryToken', 'members', 'partitions', 'namespaceContinuity', 'instanceContinuity', 'observedAt']);
+  if (row.format !== 'wechat-history-boundary-v1' || row.scopeDigest !== schema.scopeDigest || row.sourceGeneration !== scope.sourceGeneration
+    || row.schemaFingerprint !== schema.schemaFingerprint || row.namespaceContinuity !== true || row.instanceContinuity !== true) return fail();
+  const target = historyTarget(row.target, scope, schema);
+  const members = list(row.members, maxBoundaryMembers, value => {
+    const member = object(value, ['partition', 'table', 'localId']);
+    const partition = hash(member.partition), table = hash(member.table), localId = exactInteger(member.localId, true);
+    if (!target.tables.some(item => item.partition === partition && item.instance === table)) return fail();
+    return { partition, table, localId };
+  });
+  const keys = members.map(member => sourceLocalKey(scope.sourceGeneration, member.partition, member.table, member.localId)); unique(keys);
+  const counts = new Map<string, number>();
+  for (const member of members) counts.set(member.partition, (counts.get(member.partition) ?? 0) + 1);
+  const partitions = list(row.partitions, 128, value => {
+    const entry = object(value, ['partition', 'instance', 'preSample', 'postSample', 'readerCompleted', 'memberCount']);
+    const partition = hash(entry.partition), instance = hash(entry.instance), preSample = opaque(entry.preSample), postSample = opaque(entry.postSample), memberCount = integer(entry.memberCount, maxBoundaryMembers);
+    if (preSample !== postSample || entry.readerCompleted !== true || !target.tables.some(item => item.partition === partition && item.instance === instance)
+      || (counts.get(partition) ?? 0) !== memberCount) return fail();
+    return { partition, instance, preSample, postSample, readerCompleted: true, memberCount };
+  });
+  unique(partitions.map(entry => entry.partition));
+  if (partitions.length !== target.partitions.length) return fail();
+  const observedAt = text(row.observedAt, 64); if (!Number.isFinite(Date.parse(observedAt))) return fail();
+  const normalized = members.map(member => ({ partition: member.partition, tableInstance: member.table, localKey: sourceLocalKey(scope.sourceGeneration, member.partition, member.table, member.localId) })).sort((a, b) => a.localKey.localeCompare(b.localKey));
+  return { protocol: boundaryProtocol, target, support, accountKey: scope.accountKey, conversationKey: scope.conversationKey, sourceGeneration: scope.sourceGeneration,
+    boundaryToken: opaque(row.boundaryToken), manifestSha256: membersManifestSha256(target.descriptor, normalized), members, partitions, namespaceContinuity: true, instanceContinuity: true, observedAt };
+}
+export function metadataKind(originalType: string | null): HistoryRecord['kind'] {
+  switch (originalType === null ? null : BigInt(originalType) & 0xffffffffn) {
+    case 1n: return 'text';
+    case 3n: return 'image';
+    case 34n: return 'voice';
+    case 43n: case 62n: return 'video';
+    case 49n: return 'file';
+    case 47n: return 'sticker';
+    default: return 'other';
+  }
+}
+export function fixedSnapshotProof(value:unknown,scope:ResolvedWechatScope,schema:WechatSchemaInspection):WechatFixedSnapshotProof{
+  const row=object(value,['format','status','scopeDigest','sourceGeneration','schemaFingerprint','expectedPartitionCount','completedPartitionCount',
+    'namespaceContinuity','instanceContinuity','snapshotBarrier','scope','authorizesSubsequentRead','partitions']);
+  if(row.format!=='wechat-history-fixed-snapshot-proof-v1'||row.status!=='verified'||row.scope!=='single-fixed-snapshot'
+    ||row.authorizesSubsequentRead!==false||row.namespaceContinuity!==true||row.instanceContinuity!==true||row.snapshotBarrier!==true
+    ||hash(row.scopeDigest)!==schema.scopeDigest||row.sourceGeneration!==scope.sourceGeneration||row.schemaFingerprint!==schema.schemaFingerprint)return fail();
+  const partitions=list(row.partitions,128,value=>{
+    const part=object(value,['partition','tablePresent','instance','preSample','postSample','readerPinned','sourceInstanceHeld']);
+    const partition=hash(part.partition),expected=schema.tables.find(table=>table.partition===partition);
+    const preSample=unsigned(part.preSample),postSample=unsigned(part.postSample);
+    if(!schema.checkedPartitions.includes(partition)||part.tablePresent!==Boolean(expected)
+      ||part.instance!==(expected?.target??null)||preSample!==postSample||part.readerPinned!==true||part.sourceInstanceHeld!==true)return fail();
+    return {partition,tablePresent:Boolean(expected),instance:expected?.target??null,preSample,postSample,readerPinned:true as const,sourceInstanceHeld:true as const};
+  },1);
+  unique(partitions.map(part=>part.partition));
+  const expectedPartitionCount=integer(row.expectedPartitionCount,128),completedPartitionCount=integer(row.completedPartitionCount,128);
+  if(expectedPartitionCount!==schema.checkedPartitions.length||completedPartitionCount!==expectedPartitionCount||partitions.length!==expectedPartitionCount)return fail();
+  return {format:'wechat-history-fixed-snapshot-proof-v1',status:'verified',scopeDigest:schema.scopeDigest,sourceGeneration:scope.sourceGeneration,
+    schemaFingerprint:schema.schemaFingerprint,expectedPartitionCount,completedPartitionCount,namespaceContinuity:true,instanceContinuity:true,snapshotBarrier:true,
+    scope:'single-fixed-snapshot',authorizesSubsequentRead:false,partitions};
+}
+function metadataRecord(value: unknown, schema: WechatSchemaInspection): WechatMessageMetadataRecord {
+  const item = object(value, ['partition', 'table', 'localId', 'serverId', 'originalType', 'status', 'createTime', 'sender', 'statusSemantics', 'normalHistory', 'observationScope']);
+  const partition = hash(item.partition), table = hash(item.table);
+  if (!schema.tables.some(candidate => candidate.partition === partition && candidate.target === table)
+    || !['owner', 'contact', 'unknown'].includes(item.sender as string)
+    || item.statusSemantics !== 'unverified' || item.normalHistory !== false || item.observationScope !== 'single-fixed-snapshot') return fail();
+  const nullableInteger = (value: unknown) => value === null ? null : exactInteger(value);
+  return { partition, table, localId: nullableInteger(item.localId), serverId: nullableInteger(item.serverId),
+    originalType: nullableInteger(item.originalType), status: nullableInteger(item.status), createTime: nullableInteger(item.createTime),
+    sender: item.sender as WechatMessageMetadataRecord['sender'], statusSemantics: 'unverified', normalHistory: false, observationScope: 'single-fixed-snapshot' };
+}
+export function metadataObservation(value: unknown, scope: ResolvedWechatScope, schema: WechatSchemaInspection, kind: HistoryRecord['kind']): WechatMessageMetadataObservation {
+  const row = object(value, ['format', 'status', 'scopeDigest', 'sourceGeneration', 'schemaFingerprint', 'kind', 'checkedPartitions', 'record']);
+  if (row.format !== 'wechat-message-metadata-observation-v1' || row.status !== 'unverified' || row.kind !== kind
+    || hash(row.scopeDigest) !== sha256(`${scope.accountKey}\0${scope.conversationKey}`)
+    || row.sourceGeneration !== scope.sourceGeneration || row.schemaFingerprint !== schema.schemaFingerprint) return fail();
+  const checkedPartitions = list(row.checkedPartitions, 128, hash, 1); unique(checkedPartitions);
+  if (JSON.stringify([...checkedPartitions].sort()) !== JSON.stringify([...schema.checkedPartitions].sort())) return fail();
+  const record = row.record === null ? null : metadataRecord(row.record, schema);
+  if (record !== null && metadataKind(record.originalType) !== kind) return fail();
+  return { format: 'wechat-message-metadata-observation-v1', status: 'unverified', scopeDigest: schema.scopeDigest,
+    sourceGeneration: scope.sourceGeneration, schemaFingerprint: schema.schemaFingerprint, kind, checkedPartitions, record };
+}
+export function testMetadataObservation(value: unknown, scope: ResolvedWechatScope, schema: WechatSchemaInspection, action: WechatTestMetadataAction): WechatTestMetadataObservation {
+  const row = object(value, ['format', 'status', 'scopeDigest', 'sourceGeneration', 'schemaFingerprint', 'action', 'checkedPartitions', 'lockedCount', 'records']);
+  if (row.format !== 'wechat-test-metadata-observation-v1' || row.status !== 'unverified' || row.action !== action) return fail();
+  if (hash(row.scopeDigest) !== sha256(`${scope.accountKey}\0${scope.conversationKey}`) || hash(row.sourceGeneration) !== scope.sourceGeneration) return fail('history_source_changed');
+  if (hash(row.schemaFingerprint) !== schema.schemaFingerprint) return fail('history_schema_changed');
+  const checkedPartitions = list(row.checkedPartitions, 128, hash, 1); unique(checkedPartitions);
+  if (JSON.stringify([...checkedPartitions].sort()) !== JSON.stringify([...schema.checkedPartitions].sort())) return fail('history_source_changed');
+  const lockedCount = integer(row.lockedCount, 2), records = list(row.records, 2, value => value === null ? null : metadataRecord(value, schema));
+  if (records.length !== lockedCount) return fail();
+  return { format: 'wechat-test-metadata-observation-v1', status: 'unverified', scopeDigest: schema.scopeDigest,
+    sourceGeneration: scope.sourceGeneration, schemaFingerprint: schema.schemaFingerprint, action, checkedPartitions, lockedCount, records };
+}
+export function receivedTestMetadataObservation(value: unknown, scope: ResolvedWechatScope, schema: WechatSchemaInspection, action: WechatTestMetadataAction): WechatReceivedTestMetadataObservation {
+  const row = object(value, ['format', 'status', 'scopeDigest', 'sourceGeneration', 'schemaFingerprint', 'action', 'checkedPartitions', 'lockedCount', 'records']);
+  if (row.format !== 'wechat-received-test-metadata-observation-v1' || row.status !== 'unverified' || row.action !== action) return fail();
+  if (hash(row.scopeDigest) !== sha256(`${scope.accountKey}\0${scope.conversationKey}`) || hash(row.sourceGeneration) !== scope.sourceGeneration) return fail();
+  if (hash(row.schemaFingerprint) !== schema.schemaFingerprint) return fail();
+  const checkedPartitions = list(row.checkedPartitions, 128, hash, 1); unique(checkedPartitions);
+  if (JSON.stringify([...checkedPartitions].sort()) !== JSON.stringify([...schema.checkedPartitions].sort())) return fail();
+  const lockedCount = integer(row.lockedCount, 2), records = list(row.records, 2, value => value === null ? null : metadataRecord(value, schema));
+  if (records.length !== lockedCount) return fail();
+  return { format: 'wechat-received-test-metadata-observation-v1', status: 'unverified', scopeDigest: schema.scopeDigest,
+    sourceGeneration: scope.sourceGeneration, schemaFingerprint: schema.schemaFingerprint, action, checkedPartitions, lockedCount, records };
+}
+export interface TestMetadataState { scopeDigest: string; sourceGeneration: string; schemaFingerprint: string; identities: string[] }
+export function metadataIdentity(record: WechatMessageMetadataRecord): string { return JSON.stringify([record.partition, record.table, record.localId]); }
+export function signalValid(signal?: AbortSignal): void {
+  if (signal !== undefined && !(signal instanceof AbortSignal)) fail('history_request_invalid');
+}
