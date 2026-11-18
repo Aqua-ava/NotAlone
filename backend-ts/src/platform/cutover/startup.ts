@@ -1,4 +1,4 @@
-/** 默认 SQLite 启动编排：识别旧目标、维护态停写核验、创建/复用同一实例、原子切换启动配置。 */
+/** 默认 SQLite 启动编排：未识别存储阻断、自身运行产物停写核验与清理、创建/复用同一实例、原子写入启动配置。 */
 import { lstatSync, readdirSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
@@ -9,19 +9,15 @@ import { controlledFiles } from '../../storage/sqlite/files.ts';
 import type { CutoverCheckRecord, CutoverCode, CutoverManifest, CutoverReady, CutoverResult, CutoverStorage, CutoverStorageFactory,
   LegacyTarget, LegacyTargetKind, WriterCheckRecord } from './contracts.ts';
 import { CUTOVER_FORMAT_VERSION, CUTOVER_STARTUP_CONFIG } from './contracts.ts';
-import { authorizationDigest, cutoverDirectory, CutoverControlError, databaseFile, loadAuthorization, loadManifest, loadStartupConfiguration,
-  saveManifest, saveStartupConfiguration, type StartupConfiguration } from './control.ts';
-import { cleanLegacyTarget, CutoverCleanupError, ensureSkillRoot } from './cleanup.ts';
-import { assertPrivateUserData, checkLegacyWriters, discoverLegacyTargets, unrecognizedManagedTargets } from './targets.ts';
+import { CutoverControlError, databaseFile, loadManifest, loadStartupConfiguration, saveManifest, saveStartupConfiguration,
+  type StartupConfiguration } from './control.ts';
+import { cleanRuntimeTarget, CutoverCleanupError, ensureSkillRoot } from './cleanup.ts';
+import { assertPrivateUserData, checkRuntimeWriters, discoverRuntimeTargets, unrecognizedManagedTargets } from './targets.ts';
 
 const DEFAULT_CAPABILITIES: SqliteCapabilitiesConfiguration['capabilities'] = ['contacts', 'skills', 'history', 'discussions', 'memory'];
-const BUSINESS_TARGETS: readonly LegacyTargetKind[] = ['legacy_update_backup',
-  'legacy_assistant_runtime', 'legacy_import_pending'];
-const RUNTIME_TARGETS: readonly LegacyTargetKind[] = ['legacy_writer_handshake', 'legacy_launch_lock', 'runtime_handshake', 'runtime_launch_lock'];
-// 本 App 自己启动的 SQLite 宿主留下的握手与启动锁属于当前运行时，不是旧写入者。
+// 本 App 自己启动的 SQLite 宿主留下的握手与启动锁，是启动阶段唯一会清理的对象。
 // 单实例由启动器的互斥与握手核验负责；预检不打开数据库，因此宿主存活不构成冲突。
-const CURRENT_RUNTIME_WRITERS: readonly WriterCheckRecord['name'][] = ['runtime_launch_lock', 'new_host_handshake'];
-const currentRuntime = (record: WriterCheckRecord): boolean => CURRENT_RUNTIME_WRITERS.includes(record.name);
+const RUNTIME_TARGETS: readonly LegacyTargetKind[] = ['runtime_handshake', 'runtime_launch_lock'];
 const REQUIRED_DELETION_SCOPES = ['source', 'contact', 'contact_history', 'account', 'media_result_clear', 'media_result_replace', 'discussion'] as const;
 const REQUIRED_EMPTY_MEDIA = (snapshot: CutoverSnapshot) => snapshot.media.message_media === 0 && snapshot.media.current_files === 0
   && snapshot.media.staged_files === 0 && snapshot.media.cleanup_pending === 0 && snapshot.media.attempts_running === 0;
@@ -39,15 +35,7 @@ export interface DefaultDatabaseOptions {
   /** 新建实例的默认能力；已有启动配置时一律沿用原配置。 */
   capabilities?: SqliteCapabilitiesConfiguration['capabilities'];
   skillPackageRoot?: string;
-  /** 仅隔离合成根允许 synthetic 授权清理；真实 userData 必须使用 confirmed_local。 */
-  allowSyntheticAuthorization?: boolean;
 }
-export interface DefaultDatabaseInternals {
-  manifest?: CutoverManifest;
-  legacyTargets: LegacyTarget[];
-  authorizationDigest?: string;
-}
-
 class Blocked extends Error {
   readonly code: CutoverCode;
   readonly detail: string;
@@ -62,15 +50,14 @@ function initialManifest(now: number): CutoverManifest {
   return { formatVersion: CUTOVER_FORMAT_VERSION, revision: 0, phase: 'identified', createdAt: now, updatedAt: now,
     legacyTargets: [], writerChecks: [], checks: [], configPath: CUTOVER_STARTUP_CONFIG };
 }
-function business(target: LegacyTarget): boolean { return BUSINESS_TARGETS.includes(target.kind); }
 function runtimeArtifact(target: LegacyTarget): boolean { return RUNTIME_TARGETS.includes(target.kind); }
 function check(name: CutoverCheckRecord['name'], state: CutoverCheckRecord['state'], detail?: string): CutoverCheckRecord {
   return detail === undefined ? { name, state } : { name, state, detail };
 }
 
-/** 主要入口：返回 ready 或 maintenance；仅使用 SQLite，不清理未授权对象，不创建第二个空库。 */
+/** 完成态重开：打开数据库核验本人身份并返回 ready；首次创建走同一入口。仅使用 SQLite，不创建第二个空库。 */
 export async function runDefaultDatabaseStartup(options: DefaultDatabaseOptions): Promise<CutoverResult> {
-  return runDatabaseStartup(options, 'reopen', reopenCompleted);
+  return runDatabaseStartup(options, 'reopen');
 }
 
 export interface PreparedDatabaseStartup {
@@ -78,18 +65,10 @@ export interface PreparedDatabaseStartup {
   configuration: SqliteCapabilitiesConfiguration; manifestRevision: number;
 }
 
-/** 仅尚未完成初始化的旧目标维护入口；正常完成态由 database-startup 准备。 */
-export async function prepareLegacyDatabaseStartup(options: DefaultDatabaseOptions): Promise<PreparedDatabaseStartup | CutoverResult> {
-  return runDatabaseStartup(options, 'prepare', async (userData, manifest) => {
-    const configuration = completedConfiguration(userData, manifest, 'prepare');
-    controlledFiles(userData, false).verify();
-    return {phase: 'prepared', code: 'sqlite_prepared', databaseId: configuration.expectedDatabaseId,
-      ownerId: manifest.target!.ownerId, configuration: configuredCapabilities(configuration), manifestRevision: manifest.revision};
-  });
-}
-
-async function runDatabaseStartup<T extends CutoverReady | PreparedDatabaseStartup>(options: DefaultDatabaseOptions, mode: StartupMode,
-  completed: (userData: string, manifest: CutoverManifest, options: DefaultDatabaseOptions) => Promise<T>): Promise<T | CutoverResult> {
+/** 'prepare' 不打开数据库：完成态只核验实例配置并返回 prepared，由桌面宿主随后正式打开；未完成时才创建目标实例。 */
+export async function runDatabaseStartup(options: DefaultDatabaseOptions, mode: 'reopen'): Promise<CutoverResult>;
+export async function runDatabaseStartup(options: DefaultDatabaseOptions, mode: 'prepare'): Promise<PreparedDatabaseStartup | CutoverResult>;
+export async function runDatabaseStartup(options: DefaultDatabaseOptions, mode: StartupMode): Promise<PreparedDatabaseStartup | CutoverResult> {
   const userData = path.resolve(options.userData);
   const now = () => options.now?.() ?? Date.now();
   let manifest: CutoverManifest | undefined;
@@ -101,16 +80,13 @@ async function runDatabaseStartup<T extends CutoverReady | PreparedDatabaseStart
     if (unrecognizedManagedTargets(userData).length) {
       throw new Blocked('cutover_legacy_target_unclassified', 'unsupported_managed_entry', manifest ?? initialManifest(now()));
     }
-    if (manifest?.phase === 'completed') {
-      return await completed(userData, manifest, options);
-    }
+    if (manifest?.phase === 'completed') return await completeStartup(userData, manifest, options, mode);
     // 旧缺陷曾把存活宿主自己的运行锁写成阻断；宿主仍存活时只准备原目标，宿主退出后再走切换自愈。
-    if (mode === 'prepare' && manifest && blockedByOwnRuntime(userData, manifest)) return await completed(userData, manifest, options);
+    if (mode === 'prepare' && manifest && blockedByOwnRuntime(userData, manifest)) return await completeStartup(userData, manifest, options, mode);
     return await switchDatabase(userData, manifest ?? initialManifest(now()), options);
   } catch (error) {
     if (error instanceof Blocked) return { phase: 'maintenance', code: error.code, detail: error.detail, manifestRevision: error.manifest.revision };
-    const code = error instanceof CutoverControlError ? error.code : error instanceof CutoverCleanupError ? 'cutover_cleanup_failed'
-      : (error as { code?: unknown })?.code === 'storage_missing' ? 'cutover_storage_failed' : 'cutover_storage_failed';
+    const code = error instanceof CutoverControlError ? error.code : error instanceof CutoverCleanupError ? 'cutover_cleanup_failed' : 'cutover_storage_failed';
     const safeManifest = manifest ?? loadManifest(userData) ?? initialManifest(now());
     const detail = error instanceof CutoverCleanupError ? error.detail : String((error as { code?: unknown })?.code ?? 'startup_failed');
     try { manifest = saveManifest(userData, { ...safeManifest, phase: 'blocked', blockedCode: code }); }
@@ -124,30 +100,32 @@ function completedConfiguration(userData: string, manifest: CutoverManifest, mod
   const configuration = loadStartupConfiguration(userData);
   if (!configuration) throw new Blocked('cutover_configuration_conflict', 'startup_configuration_missing', manifest);
   if (!manifest.target || configuration.expectedDatabaseId !== manifest.target.databaseId) throw new Blocked('cutover_configuration_conflict', 'startup_configuration_identity_mismatch', manifest);
-  const running = checkLegacyWriters(userData).filter(record => record.state !== 'stopped');
-  const describe = (records: WriterCheckRecord[]) => records.map(record => `${record.name}:${record.state}`).join(',');
-  const legacy = running.filter(record => !currentRuntime(record));
-  if (legacy.length) {
-    const saved = saveManifest(userData, { ...manifest, phase: 'blocked', blockedCode: 'cutover_legacy_writer_running' });
-    throw new Blocked('cutover_legacy_writer_running', describe(legacy), saved);
-  }
   // 重开会打开数据库并推进实例租约，不能与存活宿主并行；这是暂时占用，不改写已完成的切换清单。
-  const live = running.filter(currentRuntime);
-  if (live.length && mode === 'reopen') throw new Blocked('cutover_legacy_writer_running', describe(live), manifest);
+  const live = checkRuntimeWriters(userData).filter(record => record.state !== 'stopped');
+  if (live.length && mode === 'reopen') throw new Blocked('cutover_legacy_writer_running', describeWriters(live), manifest);
   return configuration;
 }
+const describeWriters = (records: WriterCheckRecord[]): string => records.map(record => `${record.name}:${record.state}`).join(',');
 /** 清单曾因自有运行锁被写成阻断，且身份与启动配置仍一致：宿主存活时不应再走会打开数据库的切换。 */
 function blockedByOwnRuntime(userData: string, manifest: CutoverManifest): boolean {
   if (manifest.phase !== 'blocked' || manifest.blockedCode !== 'cutover_legacy_writer_running' || !manifest.target?.ownerId) return false;
   try {
     const configuration = loadStartupConfiguration(userData);
     if (!configuration || configuration.expectedDatabaseId !== manifest.target.databaseId) return false;
-    const running = checkLegacyWriters(userData).filter(record => record.state !== 'stopped');
-    return running.some(currentRuntime) && !running.some(record => !currentRuntime(record));
+    return checkRuntimeWriters(userData).some(record => record.state !== 'stopped');
   } catch { return false; }
 }
 function configuredCapabilities(configuration: StartupConfiguration): SqliteCapabilitiesConfiguration {
   return {capabilities: configuration.capabilities, ...(configuration.skillPackageRoot ? {skillPackageRoot: configuration.skillPackageRoot} : {})};
+}
+async function completeStartup(userData: string, manifest: CutoverManifest, options: DefaultDatabaseOptions, mode: StartupMode): Promise<CutoverReady | PreparedDatabaseStartup> {
+  return mode === 'reopen' ? await reopenCompleted(userData, manifest, options) : prepareCompleted(userData, manifest);
+}
+function prepareCompleted(userData: string, manifest: CutoverManifest): PreparedDatabaseStartup {
+  const configuration = completedConfiguration(userData, manifest, 'prepare');
+  controlledFiles(userData, false).verify();
+  return {phase: 'prepared', code: 'sqlite_prepared', databaseId: configuration.expectedDatabaseId,
+    ownerId: manifest.target!.ownerId, configuration: configuredCapabilities(configuration), manifestRevision: manifest.revision};
 }
 async function reopenCompleted(userData: string, manifest: CutoverManifest, options: DefaultDatabaseOptions): Promise<CutoverReady> {
   const configuration = completedConfiguration(userData, manifest, 'reopen');
@@ -159,75 +137,35 @@ async function reopenCompleted(userData: string, manifest: CutoverManifest, opti
     if (ownerId !== manifest.target!.ownerId) throw new Blocked('cutover_checks_failed', 'target_owner_mismatch', manifest);
     return { phase: 'ready', code: 'sqlite_reopened', databaseId: storage.status.databaseId, ownerId, schemaVersion: storage.status.schemaVersion,
       sqliteVersion: storage.status.sqliteVersion, created: false, configuration: configuredCapabilities(configuration), manifestRevision: manifest.revision };
-  } catch (error) {
-    if (error instanceof Blocked) throw error;
-    throw error;
   } finally { await storage?.close().catch(() => {}); }
 }
 
 async function switchDatabase(userData: string, manifest: CutoverManifest, options: DefaultDatabaseOptions): Promise<CutoverResult> {
   const factory = options.storageFactory ?? defaultFactory;
   const recorded = new Map(manifest.legacyTargets.map(target => [target.id, target]));
-  // 已按同一操作清理的目标不再重新识别；保留其清理记录用于审计和重试幂等。
-  const legacyTargets = discoverLegacyTargets(userData).filter(target => {
-    const prior = recorded.get(target.id);
-    return !prior || (prior.state !== 'cleaned' && prior.state !== 'retained');
-  });
-  const writerChecks = checkLegacyWriters(userData);
-  const authorization = loadAuthorization(userData);
-  const digest = authorization ? authorizationDigest(authorization) : undefined;
-  const runtime = legacyTargets.filter(runtimeArtifact);
-  const businessTargets = legacyTargets.filter(business);
-  const conflicting = legacyTargets.filter(target => !runtimeArtifact(target) && !business(target));
-  manifest = saveManifest(userData, { ...manifest, legacyTargets: mergeTargets(manifest.legacyTargets.filter(target => target.kind !== 'legacy_unrecognized_managed'),
-    legacyTargets.filter(target => target.kind !== 'legacy_unrecognized_managed')), writerChecks,
-    ...(digest ? { authorizationDigest: digest } : {}) });
+  // 已清理过的运行产物不再重新识别；保留其清理记录用于审计和重试幂等。
+  const runtimeTargets = discoverRuntimeTargets(userData).filter(target => recorded.get(target.id)?.state !== 'cleaned');
+  const writerChecks = checkRuntimeWriters(userData);
+  manifest = saveManifest(userData, { ...manifest, legacyTargets: mergeTargets(manifest.legacyTargets, runtimeTargets), writerChecks });
 
-  // 运行产物（旧/新关闭握手与锁）不承载业务资料，停写核验后可直接回收。
+  // 运行产物不承载业务资料，停写核验后可直接回收；仍存活或无法确认时停止并保留现场。
   const runningWriters = writerChecks.filter(record => record.state !== 'stopped');
   if (runningWriters.length) {
     manifest = saveManifest(userData, { ...manifest, phase: 'blocked', blockedCode: 'cutover_legacy_writer_running',
       checks: [check('writer_fence', 'failed', 'legacy_writer_running')] });
-    throw new Blocked('cutover_legacy_writer_running', runningWriters.map(record => `${record.name}:${record.state}`).join(','), manifest);
+    throw new Blocked('cutover_legacy_writer_running', describeWriters(runningWriters), manifest);
   }
 
-  if (conflicting.length) {
-    manifest = saveManifest(userData, { ...manifest, phase: 'blocked', blockedCode: 'cutover_legacy_target_unclassified' });
-    throw new Blocked('cutover_legacy_target_unclassified', conflicting.map(target => target.kind).join(','), manifest);
-  }
-  if (businessTargets.some(target => target.ownership !== 'confirmed')) {
-    manifest = saveManifest(userData, { ...manifest, phase: 'blocked', blockedCode: 'cutover_legacy_target_unclassified' });
-    throw new Blocked('cutover_legacy_target_unclassified', 'legacy_ownership_unconfirmed', manifest);
-  }
-  if (businessTargets.length) {
-    if (!authorization) {
-      manifest = saveManifest(userData, { ...manifest, phase: 'blocked', blockedCode: 'cutover_authorization_required' });
-      throw new Blocked('cutover_authorization_required', 'legacy_cleanup_authorization_required', manifest);
-    }
-    const covered = new Map(authorization.targets.map(entry => [entry.id, entry]));
-    const missing = businessTargets.filter(target => !covered.has(target.id) || covered.get(target.id)!.disposition !== 'clean');
-    if (missing.length) {
-      manifest = saveManifest(userData, { ...manifest, phase: 'blocked', blockedCode: 'cutover_authorization_invalid' });
-      throw new Blocked('cutover_authorization_invalid', 'authorization_scope_incomplete', manifest);
-    }
-    // synthetic 授权只用于隔离合成根；真实 userData 必须由本地确认授权覆盖，避免一份合成文件删真实对象。
-    if (authorization.scope === 'synthetic' && options.allowSyntheticAuthorization !== true) {
-      manifest = saveManifest(userData, { ...manifest, phase: 'blocked', blockedCode: 'cutover_authorization_invalid' });
-      throw new Blocked('cutover_authorization_invalid', 'synthetic_authorization_requires_isolated_root', manifest);
-    }
-  }
-
-  // 逐目标清理：已清理的跳过，失败保留现场并由同操作重试；授权对象变化后重新识别。
+  // 逐目标清理：已清理的跳过，失败保留现场并由同操作重试。
   manifest = saveManifest(userData, { ...manifest, phase: 'fenced' });
-  const cleanOrder = [...runtime, ...businessTargets];
-  for (const discovered of cleanOrder) {
-    let current = manifest.legacyTargets.find(target => target.id === discovered.id);
+  for (const discovered of runtimeTargets) {
+    const current = manifest.legacyTargets.find(target => target.id === discovered.id);
     if (!current) throw new Blocked('cutover_checks_failed', 'target_record_missing', manifest);
-    if (current.state === 'cleaned' || current.state === 'retained') continue;
+    if (current.state === 'cleaned') continue;
     const next: LegacyTarget = { ...current, attempts: current.attempts + 1, state: 'pending' };
     manifest = saveManifest(userData, { ...manifest, legacyTargets: replaceTarget(manifest.legacyTargets, next) });
     try {
-      const detail = cleanLegacyTarget(userData, discovered);
+      const detail = cleanRuntimeTarget(userData, discovered);
       manifest = saveManifest(userData, { ...manifest, legacyTargets: replaceTarget(manifest.legacyTargets, { ...next, state: 'cleaned', detail, lastErrorCode: undefined }) });
     } catch (error) {
       const code = error instanceof CutoverCleanupError ? error.detail : 'cleanup_failed';
@@ -236,8 +174,6 @@ async function switchDatabase(userData: string, manifest: CutoverManifest, optio
       throw new Blocked('cutover_cleanup_failed', `${discovered.kind}:${code}`, manifest);
     }
   }
-  const pendingBusiness = manifest.legacyTargets.filter(target => business(target) && target.state !== 'cleaned');
-  if (pendingBusiness.length) throw new Blocked('cutover_cleanup_failed', 'business_cleanup_incomplete', manifest);
   manifest = saveManifest(userData, { ...manifest, phase: 'cleaned' });
 
   // 目标实例：已有控制面身份只允许按 database_id 打开，绝不重建；无身份时排他创建并立即记账。
@@ -253,11 +189,11 @@ async function switchDatabase(userData: string, manifest: CutoverManifest, optio
       ...(expectedOwnerId ? {expectedOwnerId} : {}), at: Date.now() });
     manifest = saveManifest(userData, { ...manifest, phase: 'target_ready', target: { ...manifest.target!, ownerId } });
     manifest = await verifyTarget(userData, manifest, storage, ownerId);
-    // 清理完成到配置切换之间再次核验旧写入者，防止清理后重新出现的旧进程被新配置掩盖。
-    const lateWriters = checkLegacyWriters(userData).filter(record => record.state !== 'stopped');
+    // 清理完成到配置切换之间再次核验宿主未重新出现，防止清理后重新出现的进程被新配置掩盖。
+    const lateWriters = checkRuntimeWriters(userData).filter(record => record.state !== 'stopped');
     if (lateWriters.length) {
       manifest = saveManifest(userData, { ...manifest, phase: 'blocked', blockedCode: 'cutover_legacy_writer_running' });
-      throw new Blocked('cutover_legacy_writer_running', lateWriters.map(record => `${record.name}:${record.state}`).join(','), manifest);
+      throw new Blocked('cutover_legacy_writer_running', describeWriters(lateWriters), manifest);
     }
     const configuration = ensured.configuration;
     if (created || !loadStartupConfiguration(userData)) saveStartupConfiguration(userData, configuration);
@@ -356,7 +292,7 @@ async function verifyTarget(userData: string, manifest: CutoverManifest, storage
   checks.push(check('deletion_registration', missingScopes.length === 0 ? 'passed' : 'failed',
     missingScopes.length ? `missing_scopes:${missingScopes.join(',')}` : 'media_and_source_scopes_registered'));
   checks.push(check('writer_fence', manifest.writerChecks.every(record => record.state === 'stopped') ? 'passed' : 'failed'));
-  checks.push(check('legacy_cleanup', manifest.legacyTargets.every(target => target.state === 'cleaned' || target.state === 'retained') ? 'passed' : 'failed'));
+  checks.push(check('legacy_cleanup', manifest.legacyTargets.filter(runtimeArtifact).every(target => target.state === 'cleaned') ? 'passed' : 'failed'));
   const failed = checks.filter(record => record.state === 'failed');
   manifest = saveManifest(userData, { ...manifest, checks });
   if (failed.length) {
@@ -373,9 +309,3 @@ function legacyMediaAreaOccupied(userData: string): boolean {
 function exists(location: string): boolean {
   try { lstatSync(location); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; }
 }
-/** 只读检查：不创建、不清理，供诊断和验收查看控制面状态。 */
-export function inspectCutover(userData: string): { manifest?: CutoverManifest; directory: string; legacyTargets: LegacyTarget[] } {
-  const manifest = loadManifest(userData);
-  return { manifest, directory: cutoverDirectory(userData), legacyTargets: discoverLegacyTargets(userData) };
-}
-export { BUSINESS_TARGETS, RUNTIME_TARGETS, DEFAULT_CAPABILITIES };

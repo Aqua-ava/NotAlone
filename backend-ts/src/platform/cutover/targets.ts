@@ -1,4 +1,4 @@
-/** 旧目标识别：只把结构可证明归属的 userData 内对象标为 confirmed；其余保持 unknown 并阻断切换。 */
+/** 受管目录边界与自身运行产物识别：只把固定位置的 SQLite 宿主握手与启动锁标为 confirmed；未识别的受管条目保持 unknown 并阻断启动。 */
 import { constants } from 'node:fs';
 import { lstatSync, openSync, closeSync, readSync, readdirSync } from 'node:fs';
 import { sha256 } from '../../platform/sha256.ts';
@@ -48,76 +48,6 @@ export function targetId(kind: LegacyTargetKind, locator: string): string {
 function target(kind: LegacyTargetKind, locator: string, ownership: Ownership, evidence: string): LegacyTarget {
   return { id: targetId(kind, locator), kind, locator, ownership, evidence, state: 'pending', attempts: 0 };
 }
-function relative(userData: string, location: string): string | undefined {
-  const value = path.relative(userData, location);
-  if (!value || value.startsWith('..') || path.isAbsolute(value)) return undefined;
-  return value.split(path.sep).join('/');
-}
-
-function updateBackups(userData: string): LegacyTarget[] {
-  const root = path.join(userData, 'managed/updates');
-  const entry = privateStat(root, 'directory');
-  if (!entry) return [];
-  const result: LegacyTarget[] = [];
-  if (entry === 'unsafe') return [target('legacy_update_backup', 'managed/updates', 'unknown', 'unsafe_directory_state')];
-  const names = readdirSync(root).sort();
-  if (names.length > 1024) return [target('legacy_update_backup', 'managed/updates', 'unknown', 'unexpected_entry_count')];
-  for (const name of names) {
-    if (name === '恢复说明.txt') continue;
-    if (!UUID.test(name)) return [target('legacy_update_backup', 'managed/updates', 'unknown', 'unexpected_entry_name')];
-    const directory = path.join(root, name);
-    if (privateStat(directory, 'directory') !== undefined && privateStat(directory, 'directory') !== 'unsafe') {
-      const files = readdirSync(directory).sort();
-      if (files.some(file => !['checkpoint.json', 'database.dump', 'legacy-launch.json', 'retired-launch.json', 'verification.json'].includes(file))) {
-        result.push(target('legacy_update_backup', `managed/updates/${name}`, 'unknown', 'unexpected_archive_files'));
-        continue;
-      }
-      const ownership: Ownership = ['database.dump', 'legacy-launch.json', 'retired-launch.json'].some(file => files.includes(file)) ? 'confirmed' : 'unknown';
-      for (const file of files) {
-        if (!['database.dump', 'legacy-launch.json', 'retired-launch.json'].includes(file)) continue;
-        const locator = relative(userData, path.join(directory, file));
-        if (locator) result.push(target('legacy_update_backup', locator, ownership, 'managed_update_archive'));
-      }
-    } else {
-      const locator = relative(userData, directory);
-      if (locator) result.push(target('legacy_update_backup', locator, 'unknown', 'unsafe_archive_directory'));
-    }
-  }
-  return result;
-}
-function assistantRuntime(userData: string): LegacyTarget[] {
-  const root = path.join(userData, 'assistant-runtime');
-  const entry = privateStat(root, 'directory');
-  if (!entry) return [];
-  if (entry === 'unsafe') return [target('legacy_assistant_runtime', 'assistant-runtime', 'unknown', 'unsafe_directory_state')];
-  const names = readdirSync(root).sort();
-  if (names.length > 4096) return [target('legacy_assistant_runtime', 'assistant-runtime', 'unknown', 'unexpected_entry_count')];
-  for (const owner of names) {
-    if (!UUID.test(owner)) return [target('legacy_assistant_runtime', 'assistant-runtime', 'unknown', 'unexpected_owner_entry')];
-    const ownerDirectory = path.join(root, owner);
-    if (privateStat(ownerDirectory, 'directory') !== undefined && privateStat(ownerDirectory, 'directory') !== 'unsafe') {
-      for (const contact of readdirSync(ownerDirectory)) {
-        if (!UUID.test(contact)) return [target('legacy_assistant_runtime', 'assistant-runtime', 'unknown', 'unexpected_contact_entry')];
-        const contactDirectory = path.join(ownerDirectory, contact);
-        if (privateStat(contactDirectory, 'directory') !== undefined && privateStat(contactDirectory, 'directory') !== 'unsafe') {
-          for (const session of readdirSync(contactDirectory)) {
-            if (!UUID.test(session)) return [target('legacy_assistant_runtime', 'assistant-runtime', 'unknown', 'unexpected_session_entry')];
-          }
-        }
-      }
-    }
-  }
-  return [target('legacy_assistant_runtime', 'assistant-runtime', 'confirmed', 'managed_session_tree')];
-}
-function importPending(userData: string): LegacyTarget[] {
-  const location = path.join(userData, 'managed/import-pending.json');
-  const entry = privateStat(location, 'file');
-  if (!entry) return [];
-  if (entry === 'unsafe') return [target('legacy_import_pending', 'managed/import-pending.json', 'unknown', 'unsafe_file_state')];
-  let shape: unknown;
-  try { shape = JSON.parse(privateText(location, 256) ?? ''); } catch { shape = undefined; }
-  return [target('legacy_import_pending', 'managed/import-pending.json', shape && typeof shape === 'object' ? 'confirmed' : 'unknown', 'legacy_import_marker')];
-}
 /** 只识别固定私有维护意图的归属；真实性与授权仍由宿主读取器及认证事务核验。 */
 function ownedHistoryMaintenance(userData:string):boolean {
  try{
@@ -156,6 +86,7 @@ export function unrecognizedManagedTargets(userData: string): LegacyTarget[] {
   if (entry === 'unsafe') return [target('legacy_unrecognized_managed', 'managed', 'unknown', 'unsafe_directory_state')];
   const names = readdirSync(directory).sort();
   if (names.length > 1024) return [target('legacy_unrecognized_managed', 'managed', 'unknown', 'unexpected_entry_count')];
+  // updates、import-pending.json、backend.info* 是已退役写入器与更新备份留下的名称：只容忍其存在，不解析、不清理、不授予删除权限。
   const supported = new Set(['sqlite', 'media', 'runtime-copies', 'cache', 'updates', 'import-pending.json', 'backend.info', 'backend.info.dsh-lock',
     'sqlite-backend.info', 'sqlite-backend.info.dsh-lock',
     // 启动失败时由后台写入的固定诊断记录（见 startup-diagnostics.ts）；不认识它会让一次失败的启动永久阻断之后的启动。
@@ -164,33 +95,21 @@ export function unrecognizedManagedTargets(userData: string): LegacyTarget[] {
   return names.filter(name => !supported.has(name)).map(name =>
     target('legacy_unrecognized_managed', `managed/${name}`, 'unknown', 'unsupported_managed_entry'));
 }
-function handshakeTargets(userData: string): LegacyTarget[] {
-  const result: LegacyTarget[] = [];
-  for (const locator of ['managed/backend.info', 'backend.info', 'managed/sqlite-backend.info']) {
-    const location = path.join(userData, locator);
-    const entry = privateStat(location, 'file');
-    if (!entry) continue;
-    if (entry === 'unsafe') { result.push(target('legacy_writer_handshake', locator, 'unknown', 'unsafe_file_state')); continue; }
-    const kind: LegacyTargetKind = locator.includes('sqlite') ? 'runtime_handshake' : 'legacy_writer_handshake';
-    result.push(target(kind, locator, 'confirmed', 'writer_handshake'));
-  }
-  for (const locator of ['managed/backend.info.dsh-lock', 'backend.info.dsh-lock', 'managed/sqlite-backend.info.dsh-lock']) {
-    const location = path.join(userData, locator);
-    const entry = privateStat(location, 'file');
-    if (!entry) continue;
-    if (entry === 'unsafe') { result.push(target('legacy_launch_lock', locator, 'unknown', 'unsafe_file_state')); continue; }
-    const kind: LegacyTargetKind = locator.includes('sqlite') ? 'runtime_launch_lock' : 'legacy_launch_lock';
-    result.push(target(kind, locator, 'confirmed', 'launcher_lock'));
-  }
-  return result;
-}
+/** 本应用自身 SQLite 宿主的握手与启动锁；只有这两个固定位置属于可清理的运行产物。 */
+const RUNTIME_ARTIFACTS: ReadonlyArray<readonly [string, LegacyTargetKind, string]> = [
+  ['managed/sqlite-backend.info', 'runtime_handshake', 'writer_handshake'],
+  ['managed/sqlite-backend.info.dsh-lock', 'runtime_launch_lock', 'launcher_lock'],
+];
 
-/** 发现全部 userData 内可证明归属的旧对象；不读取正文，不跟随符号链接，不删除任何对象。 */
-export function discoverLegacyTargets(userData: string): LegacyTarget[] {
-  const found: LegacyTarget[] = [];
-  found.push(...unrecognizedManagedTargets(userData), ...updateBackups(userData), ...assistantRuntime(userData),
-    ...importPending(userData), ...handshakeTargets(userData));
-  return found.sort((a, b) => a.id.localeCompare(b.id));
+/** 发现自身运行产物；不读取正文，不跟随符号链接，不删除任何对象。 */
+export function discoverRuntimeTargets(userData: string): LegacyTarget[] {
+  const result: LegacyTarget[] = [];
+  for (const [locator, kind, evidence] of RUNTIME_ARTIFACTS) {
+    const entry = privateStat(path.join(userData, locator), 'file');
+    if (!entry) continue;
+    result.push(entry === 'unsafe' ? target(kind, locator, 'unknown', 'unsafe_file_state') : target(kind, locator, 'confirmed', evidence));
+  }
+  return result.sort((a, b) => a.id.localeCompare(b.id));
 }
 
 function pidAlive(pid: number): boolean {
@@ -218,24 +137,19 @@ function lockPids(userData: string, locator: string): { parentPid?: number; chil
     return { parentPid, childPid };
   } catch { return undefined; }
 }
-/** 只读取并判断旧写入者是否仍存活；绝不终止未知进程。 */
-export function checkLegacyWriters(userData: string): WriterCheckRecord[] {
+/** 只读取并判断自身运行产物对应的进程是否仍存活；绝不终止未知进程。 */
+export function checkRuntimeWriters(userData: string): WriterCheckRecord[] {
   const records: WriterCheckRecord[] = [];
-  for (const locator of ['managed/backend.info', 'backend.info']) {
-    if (item(path.join(userData, locator)) === undefined) continue;
-    const pid = handshakePid(userData, locator);
-    records.push({ name: 'legacy_app_handshake', locator, state: pid === undefined ? 'unknown' : pidAlive(pid) ? 'running' : 'stopped' });
-  }
-  for (const locator of ['managed/backend.info.dsh-lock', 'backend.info.dsh-lock', 'managed/sqlite-backend.info.dsh-lock']) {
-    if (item(path.join(userData, locator)) === undefined) continue;
-    const pids = lockPids(userData, locator);
+  const lock = 'managed/sqlite-backend.info.dsh-lock';
+  if (item(path.join(userData, lock)) !== undefined) {
+    const pids = lockPids(userData, lock);
     const state = pids === undefined ? 'unknown' : (pids.parentPid !== undefined && pidAlive(pids.parentPid)) || (pids.childPid !== undefined && pidAlive(pids.childPid)) ? 'running' : 'stopped';
-    records.push({ name: locator.includes('sqlite') ? 'runtime_launch_lock' : 'legacy_launch_lock', locator, state });
+    records.push({ name: 'runtime_launch_lock', locator: lock, state });
   }
-  const hostHandshake = path.join(userData, 'managed/sqlite-backend.info');
-  if (item(hostHandshake) !== undefined) {
-    const pid = (() => { try { const text = privateText(hostHandshake, 4096); const match = text === undefined ? null : /^pid=([1-9][0-9]{0,9})$/m.exec(text); return match ? Number(match[1]) : undefined; } catch { return undefined; } })();
-    records.push({ name: 'new_host_handshake', locator: 'managed/sqlite-backend.info', state: pid === undefined ? 'unknown' : pidAlive(pid) ? 'running' : 'stopped' });
+  const handshake = 'managed/sqlite-backend.info';
+  if (item(path.join(userData, handshake)) !== undefined) {
+    const pid = handshakePid(userData, handshake);
+    records.push({ name: 'new_host_handshake', locator: handshake, state: pid === undefined ? 'unknown' : pidAlive(pid) ? 'running' : 'stopped' });
   }
   return records;
 }
@@ -246,4 +160,3 @@ export function assertPrivateUserData(userData: string): void {
   const entry = item(userData);
   if (!entry || entry.isSymbolicLink() || !entry.isDirectory() || entry.uid !== BigInt(process.getuid!()) || (entry.mode & 0o022n) !== 0n) throw new LegacyTargetError('user_data_not_private');
 }
-export const targetChecksums = { identifiers, uuid: UUID };

@@ -85,7 +85,7 @@ React／CSS 保存后热更新，main、preload、共享代码与后台源码变
 | `configuration_invalid`、路径不可用 | 按[启动配置说明](../../desktop/README.md#非秘密启动配置与退出)核对非秘密绝对路径。当前 SQLite 页面只展示诊断；修改配置前正常退出并确认停读，再沿开发入口重新检查，不读取或回显密钥。 |
 | `cli_unavailable`、`probe_unavailable` | 核对当前配置指向的可执行组件；各自影响微信读取或前台定位，不把缺工具等同于系统权限缺失。 |
 | `sqlite_storage_failed`、`cutover_storage_failed` | 保留数据库和控制面，核对固定诊断、目标身份与路径权限；缺失或损坏不能自动换空库。 |
-| `database_cutover_required`、`database_maintenance`、`cutover_*` | 按具体维护态核对授权、对象归属、停写与原操作进度；未确认时不清理未知对象、不切回旧库、不并行双写。 |
+| `database_cutover_required`、`database_maintenance`、`cutover_*` | 按具体维护态核对对象归属、停写与原操作进度；未确认时不清理未知对象、不切回旧库、不并行双写。`cutover_authorization_*` 已随授权清单退役，不再产生。 |
 | `backend_handshake_invalid`、`backend_connection_failed` | 核对当前实例及启动阶段，使用公开重试；不要手工删除握手或复制其他实例的连接信息。 |
 | `backend_shutdown_unconfirmed`／停读未获确认 | 使用“重试停读并退出”，等待原后台与渠道实际停读；不得手动强杀、移除文件或新开一份冒充停读成功。后台挂住超过等待窗口时，本 App 会自行回收自有后台进程并确认其退出，无需手动干预。 |
 | `screen_capture_permission_missing` | 按上方录屏流程检查当前运行链路；不将录屏授权当作正文权限。 |
