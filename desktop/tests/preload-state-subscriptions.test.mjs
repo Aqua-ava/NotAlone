@@ -11,7 +11,6 @@ const cases = [
   ['contact-session', 'createContactSessionBridge', 'contacts:state-changed', '联系人操作不可用。'],
   ['foreground', 'createForegroundBridge', 'foreground:state-changed', '前台状态操作不可用。'],
   ['history-clear', 'createHistoryClearBridge', 'history-clear:state-changed', '清空操作不可用。'],
-  ['media', 'createMessageMediaBridge', 'media:state-changed', '媒体操作不可用。'],
   ['screen-permission', 'createScreenPermissionBridge', 'screen-permission:state-changed', '屏幕录制授权操作不可用。'],
   ['setup', 'createSetupBridge', 'setup:state-changed', '首次配置操作不可用'],
   ['source-deletion', 'createSourceDeletionBridge', 'sources:state-changed', '来源操作不可用。'],

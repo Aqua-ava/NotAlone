@@ -41,7 +41,7 @@ test('输入小窗只读同步状态，所有同步变更仍仅限管理窗口',
  assert.deepEqual(f.roles.get('sync-control:get-state'),['manager','helper']);
  assert.deepEqual(f.roles.get('sync-control:refresh'),['manager','helper']);
  for(const name of ['sync-control:set-scope','sync-control:set-history-authorization','sync-control:enable',
-  'sync-control:disable','sync-control:pause','sync-control:retry'])assert.equal(f.roles.get(name),'manager');
+  'sync-control:disable'])assert.equal(f.roles.get(name),'manager');
 });
 
 test('同步范围只在明确操作后写入全部私聊模式，保持总开关并兼容旧状态',async t=>{

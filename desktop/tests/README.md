@@ -15,7 +15,7 @@
 
 [默认 runner](../scripts/test-safe.mjs)只传递核准的 `safe-node` 文件；需要编译的 TypeScript 测试使用本轮临时目录并清理。`test:polling` 是窄回归，不代表全部页面覆盖。
 
-[test:pages](../scripts/test-pages.mjs)当前仅保留 `--status`、合成租约探针和旧页面指引，旧 `--case` 组合不会在当前树执行。当前页面测试按 inventory 运行；产品历史候选功能的测试名称不等于退役后台测试。
+[test:pages](../scripts/test-pages.mjs)当前仅保留 `--status` 与合成租约探针；其他参数一律拒绝，页面测试不经此入口运行。当前页面测试按 inventory 运行；产品历史候选功能的测试名称不等于退役后台测试。
 
 记忆页面回归由 `memory-processing-entry`、`memory-page-fixed-processing` 与 `sqlite-memory-management-view` 覆盖连接核验、资料展示、编辑与范围失效；旧 `LegacyMemoryPage` 专用夹具随入口删除，主进程控制器和事件用例仍保留。旧条件编辑及全局本人页面不计作当前 SQLite 功能覆盖。
 

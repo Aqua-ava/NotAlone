@@ -45,11 +45,6 @@ export function installStartupBridge(windows: AppWindows, diagnostics: StartupDi
     windows.validateCaller(event, args);
     return backend.connect();
   });
-  ipcMain.handle('startup:prepare-configuration', (event, ...args: unknown[]) => {
-    const caller = windows.validateCaller(event, args);
-    if (!caller.webContents.getURL().endsWith('#manager')) throw new Error('启动配置不可用');
-    return backend.prepareConfiguration();
-  });
   diagnostics.onStateChanged((state) => windows.publish('startup:state-changed', state));
   const manager = (event: Parameters<AppWindows['validateCaller']>[0], args: unknown[]) => {
     const caller = windows.validateCaller(event, args);

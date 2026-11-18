@@ -45,7 +45,6 @@ export interface StartupBridge {
   getState(): Promise<StartupState>;
   getPaths(): Promise<StartupPaths>;
   savePaths(paths: StartupPaths): Promise<void>;
-  prepareConfiguration(): Promise<boolean>;
   revealUpdateBackup(): Promise<void>;
   retry(): Promise<void>;
   onStateChanged(listener: (state: StartupState) => void): () => void;

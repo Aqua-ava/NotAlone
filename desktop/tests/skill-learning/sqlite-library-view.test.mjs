@@ -25,7 +25,7 @@ test('Skill页自动核验更新并管理启停，不提供手动核验或添加
  const controller=new SkillLibraryController(backend),browser=await chromium.launch({headless:true,channel:'chrome'});t.after(()=>browser.close());
  const page=await browser.newPage({viewport:{width:1100,height:850}});await page.exposeFunction('libraryCommand',(method,...args)=>controller[method](...args));
  const compiled=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{SkillLearningPage}from'./src/renderer/SkillLearningPage';
- const methods={readLibrary:'read',verifyLibrary:'verify',changeLibraryEnabled:'changeEnabled'};
+ const methods={readLibrary:'read',changeLibraryEnabled:'changeEnabled'};
  window.failedLibraryCommands=0;window.notalone={backend:{onStateChanged:listener=>{window.libraryConnectionChanged=listener;return()=>{};}},skillLearning:new Proxy({},{get:(_,key)=>(...args)=>window.libraryCommand(methods[key]??key,...args).catch(error=>{window.failedLibraryCommands++;throw error;})})};
  createRoot(document.getElementById('root')).render(<SkillLearningPage session={{state:{selectedContactId:null,scopeRevision:0}}}/>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',loader:{'.css':'empty'},write:false});
  await page.route('http://127.0.0.1/skill-minimal',route=>route.fulfill({contentType:'text/html',body:'<div id="root"></div>'}));await page.goto('http://127.0.0.1/skill-minimal');await page.addScriptTag({content:compiled.outputFiles[0].text});

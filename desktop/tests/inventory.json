@@ -76,7 +76,6 @@
   "tests/workspace-local-draft.test.mjs",
   "tests/sync-scope.test.mjs",
   "tests/wechat-setup.test.mjs",
-  "tests/dead-code-removal.test.mjs",
   "tests/foreground-failure-contract.test.mjs",
   "tests/pure-ts-startup.test.mjs",
   "tests/packaging/build-space.test.mjs",

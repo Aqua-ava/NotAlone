@@ -72,7 +72,7 @@ async function withEntry(t, command, inspect, controller = false, withBrowser = 
         const render = () => root.render(<MemoryProcessingEntry bridge={bridge} backend={backend} contactId={contactId} scopeKey={scopeKey}><MemoryBody/></MemoryProcessingEntry>);
         window.emitBackend = phase => {
           for (const listener of listeners) listener({phase, revision: ++revision, reused: false,
-            canRetryConnection: false, canRetryShutdown: false, canSaveStartupPaths: false, canPrepareConfiguration: false});
+            canRetryConnection: false, canRetryShutdown: false, canSaveStartupPaths: false});
         };
         window.invalidate = () => { for (const listener of invalidations) listener(); };
         window.changeScope = value => { scopeKey = value; render(); };

@@ -42,7 +42,5 @@ export function installSyncControlBridge(commands: PageCommands, backend: Backen
   commands.handle('sync-control:set-history-authorization', (...args: unknown[]) => sync.setHistoryAuthorization(historyAuthorizationRequest(args)), 'manager');
   commands.handle('sync-control:enable', (...args: unknown[]) => sync.enable(controlRequest(args)), 'manager');
   commands.handle('sync-control:disable', (...args: unknown[]) => sync.disable(controlRequest(args)), 'manager');
-  commands.handle('sync-control:pause', (...args: unknown[]) => sync.pause(controlRequest(args)), 'manager');
-  commands.handle('sync-control:retry', (...args: unknown[]) => sync.retry(controlRequest(args)), 'manager');
   return sync;
 }

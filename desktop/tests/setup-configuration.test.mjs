@@ -35,7 +35,7 @@ function fixture(mode = 'managed') {
 test('受控宿主保存凭据后重启并确认新快照，公开状态从不包含密钥', async () => {
   const f = fixture();
   await f.controller.refresh();
-  await f.controller.saveDeepSeekKey('synthetic-secret-canary');
+  await f.controller.saveDeepSeekConfiguration({ baseUrl: 'https://api.deepseek.com', apiKey: 'synthetic-secret-canary' });
   assert.equal(f.controller.getState().phase, 'ready');
   assert.equal(f.controller.getState().configurationPending, false);
   assert.equal(f.restarts, 1);
@@ -46,7 +46,7 @@ test('受控宿主保存凭据后重启并确认新快照，公开状态从不�
 test('external 重连同一快照不能声称已生效，替换进程后安全重试不重发保存', async () => {
   const f = fixture('external');
   await f.controller.refresh();
-  await f.controller.saveOfficialDeepSeekKey('synthetic-official-canary');
+  await f.controller.saveDeepSeekConfiguration({ baseUrl: 'https://api.deepseek.com', apiKey: 'synthetic-official-canary' });
   assert.equal(f.controller.getState().phase, 'restart-failed');
   assert.equal(f.controller.getState().configurationPending, true);
   await f.controller.refresh();
@@ -64,7 +64,7 @@ test('重载失败保留已保存待加载事实，重试只加载配置', async
   const f = fixture();
   await f.controller.refresh();
   f.setFail(true);
-  await f.controller.saveDeepSeekKey('synthetic-retry-canary');
+  await f.controller.saveDeepSeekConfiguration({ baseUrl: 'https://api.deepseek.com', apiKey: 'synthetic-retry-canary' });
   assert.equal(f.controller.getState().phase, 'restart-failed');
   assert.equal(f.controller.getState().configurationPending, true);
   f.setFail(false);
@@ -78,7 +78,7 @@ test('重载失败保留已保存待加载事实，重试只加载配置', async
   const f = fixture();
   await f.controller.refresh();
   f.setReject(true);
-  await f.controller.saveDeepSeekKey('synthetic-private-key');
+  await f.controller.saveDeepSeekConfiguration({ baseUrl: 'https://api.deepseek.com', apiKey: 'synthetic-private-key' });
   assert.equal(f.controller.getState().phase, 'restart-failed');
   assert.equal(f.controller.getState().errorCode, 'reload-failed');
   assert.equal(f.controller.getState().configurationPending, true);
@@ -94,7 +94,7 @@ test('启动环境拒绝保存时显示固定原因，不重启、不公开密�
   const f = fixture();
   await f.controller.refresh();
   f.setSaveReject(true);
-  await f.controller.saveDeepSeekKey('synthetic-environment-private-key');
+  await f.controller.saveDeepSeekConfiguration({ baseUrl: 'https://api.deepseek.com', apiKey: 'synthetic-environment-private-key' });
   const state = f.controller.getState();
   assert.equal(state.phase, 'ready');
   assert.equal(state.errorCode, 'configuration-environment-override');

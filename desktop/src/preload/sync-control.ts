@@ -13,8 +13,6 @@ export function createSyncControlBridge(transport: PageTransport): SyncControlBr
     setHistoryAuthorization: (...args: [HistoryAuthorizationRequest]) => single('sync-control:set-history-authorization', args),
     enable: (...args: [SyncControlRequest]) => single('sync-control:enable', args),
     disable: (...args: [SyncControlRequest]) => single('sync-control:disable', args),
-    pause: (...args: [SyncControlRequest]) => single('sync-control:pause', args),
-    retry: (...args: [SyncControlRequest]) => single('sync-control:retry', args),
     onStateChanged: (listener: (state: SyncControlState) => void) =>
       subscribePageState(transport, 'sync-control:state-changed', listener, '同步操作不可用。'),
   });

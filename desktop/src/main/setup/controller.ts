@@ -1,6 +1,5 @@
 import { isAiServiceBaseUrl, isDeepSeekConfiguration, type DeepSeekConfiguration } from '../../shared/ai-service-configuration';
 import { DEFAULT_MODEL_PARAMETERS, equalModelParameters, isModelParameters, modelParametersFromApi, modelParametersToApi, type ModelParameters } from '../../shared/model-parameters';
-import { isUuid } from '../uuid';
 import { BackendRequestFailure } from '../backend/json-client';
 import type { SetupState } from '../../shared/setup-bridge';
 import type { BackendHost } from '../backend/host';
@@ -8,12 +7,12 @@ import type { BackendHost } from '../backend/host';
 type Operation = { generation: number; epoch: number };
 
 export class SetupController {
-  private state: SetupState = { phase: 'offline', ownerReady: false, credentialsConfigured: false, revision: 0 };
+  private state: SetupState = { phase: 'offline', credentialsConfigured: false, revision: 0 };
   private generation: number | undefined;
   private epoch = 0;
   private busy = false;
   private savedConfigPending = false;
-  private savedExpectation: 'owner' | 'credentials' | 'official' | 'parameters' = 'owner';
+  private savedExpectation: 'credentials' | 'parameters' = 'credentials';
   private savedModelParameters: ModelParameters | undefined;
   private readonly listeners = new Set<(state: SetupState) => void>();
 
@@ -25,7 +24,7 @@ export class SetupController {
       ++this.epoch;
       // 主动重启期间保留进度；普通保存遇到失联时仍立即失效旧界面。
       if (this.busy && this.state.phase === 'restarting') return;
-      if (generation === undefined) this.publish({ phase: 'offline', ownerReady: false, credentialsConfigured: false, baseUrl: undefined });
+      if (generation === undefined) this.publish({ phase: 'offline', credentialsConfigured: false, baseUrl: undefined });
       else void this.refresh();
     });
   }
@@ -38,16 +37,14 @@ export class SetupController {
     if (operation) await this.readStatus(operation);
   }
   private async readStatus(operation: Operation): Promise<void> {
-    this.publish({ phase: 'loading', ownerReady: false, credentialsConfigured: false, errorCode: undefined });
+    this.publish({ phase: 'loading', credentialsConfigured: false, errorCode: undefined });
     try {
       const { data } = await this.backend.requestJson({ method: 'GET', path: '/api/setup/status', maxResponseBytes: 4096 });
-      const status = data as { initialized?: unknown; owner_configured?: unknown; credentials_configured?: unknown; runtime_owner_configured?: unknown; official_deepseek_defaults?: unknown; recoverable_owner?: unknown; deepseek_base_url?: unknown; model_parameters?: unknown; runtime_configuration_pending?: unknown; semantic_model_ready?: unknown; runtime_configuration_environment_override?: unknown };
-      if (!status || typeof status.initialized !== 'boolean' || typeof status.owner_configured !== 'boolean'
-        || typeof status.credentials_configured !== 'boolean' || typeof status.runtime_owner_configured !== 'boolean'
+      const status = data as { credentials_configured?: unknown; runtime_owner_configured?: unknown; deepseek_base_url?: unknown; model_parameters?: unknown; runtime_configuration_pending?: unknown; semantic_model_ready?: unknown; runtime_configuration_environment_override?: unknown };
+      if (!status || typeof status.credentials_configured !== 'boolean' || typeof status.runtime_owner_configured !== 'boolean'
         || status.runtime_configuration_pending !== undefined && typeof status.runtime_configuration_pending !== 'boolean'
         || status.semantic_model_ready !== undefined && typeof status.semantic_model_ready !== 'boolean'
         || status.runtime_configuration_environment_override !== undefined && typeof status.runtime_configuration_environment_override !== 'boolean') throw new Error();
-      const ownerReady = status.runtime_owner_configured;
       const modelParametersInvalid = status.model_parameters === null;
       const modelParameters = status.model_parameters === undefined ? structuredClone(DEFAULT_MODEL_PARAMETERS) : modelParametersFromApi(status.model_parameters);
       if (!modelParameters && !modelParametersInvalid) throw new Error();
@@ -57,35 +54,14 @@ export class SetupController {
         if (!this.savedConfigPending) this.savedExpectation = 'credentials';
         this.savedConfigPending = true;
       }
-      this.publish({ phase: pending ? 'restart-failed' : ownerReady ? 'ready' : status.owner_configured ? 'identity-unbound' : 'needs-owner',
-        ownerReady, configurationPending: pending, errorCode: pending ? status.runtime_configuration_environment_override === true ? 'configuration-environment-override' : 'reload-failed' : undefined, recoverableOwner: !ownerReady && status.recoverable_owner === true, credentialsConfigured: status.credentials_configured,
+      this.publish({ phase: pending ? 'restart-failed' : status.runtime_owner_configured ? 'ready' : 'failed',
+        configurationPending: pending, errorCode: pending ? status.runtime_configuration_environment_override === true ? 'configuration-environment-override' : 'reload-failed' : undefined,
+        credentialsConfigured: status.credentials_configured,
         semanticModelReady: typeof status.semantic_model_ready === 'boolean' ? status.semantic_model_ready : undefined,
         modelParameters,
         modelParametersInvalid,
-        baseUrl: isAiServiceBaseUrl(status.deepseek_base_url) ? status.deepseek_base_url : undefined,
-        officialDefaults: typeof status.official_deepseek_defaults === 'boolean' ? status.official_deepseek_defaults : undefined });
-    } catch { if (this.isCurrent(operation)) this.publish({ phase: 'failed', ownerReady: false, credentialsConfigured: false }); }
-  }
-  async initializeOwner(displayName: string): Promise<void> {
-    if (this.state.phase !== 'needs-owner') return;
-    await this.writeConfiguration('owner', async () => {
-      // 全库状态只用于拒绝自动恢复，不能据此选择任何既有 owner。
-      const status = await this.backend.requestJson({ method: 'GET', path: '/api/setup/status', maxResponseBytes: 4096 });
-      if ((status.data as { owner_configured?: unknown })?.owner_configured !== false) throw new Error();
-      const result = await this.backend.requestJson({ method: 'POST', path: '/api/setup/initialize', body: { display_name: displayName, create_only: true }, maxResponseBytes: 4096 });
-      const value = result.data as { owner_id?: unknown; created?: unknown };
-      if (!isUuid(value?.owner_id)
-        || value.created !== true) throw new Error();
-    });
-  }
-  async recoverExistingOwner(): Promise<void> {
-    if (this.state.phase !== 'identity-unbound' || this.state.recoverableOwner !== true) return;
-    await this.writeConfiguration('owner', async () => {
-      const { data } = await this.backend.requestJson({ method: 'POST', path: '/api/setup/recover-owner',
-        body: { confirm_existing_owner: true }, maxResponseBytes: 4096 });
-      const value = data as { owner_id?: unknown; created?: unknown };
-      if (!isUuid(value?.owner_id) || value.created !== false) throw new Error();
-    });
+        baseUrl: isAiServiceBaseUrl(status.deepseek_base_url) ? status.deepseek_base_url : undefined });
+    } catch { if (this.isCurrent(operation)) this.publish({ phase: 'failed', credentialsConfigured: false }); }
   }
   async saveDeepSeekConfiguration(configuration: DeepSeekConfiguration): Promise<void> {
     if (!isDeepSeekConfiguration(configuration)) throw new Error('AI 服务配置无效');
@@ -93,15 +69,6 @@ export class SetupController {
     await this.writeConfiguration('credentials', async () => {
       const result = await this.backend.requestJson({ method: 'POST', path: '/api/setup/deepseek-configuration',
         body: { base_url: configuration.baseUrl, api_key: configuration.apiKey }, maxResponseBytes: 4096 });
-      const value = result.data as { provider?: unknown; configured?: unknown };
-      if (value?.provider !== 'deepseek' || value.configured !== true) throw new Error();
-    });
-  }
-  async saveDeepSeekKey(apiKey: string): Promise<void> {
-    if (this.state.phase !== 'ready') return;
-    await this.writeConfiguration('credentials', async () => {
-      const result = await this.backend.requestJson({ method: 'POST', path: '/api/setup/credentials',
-        body: { provider: 'deepseek', api_key: apiKey }, maxResponseBytes: 4096 });
       const value = result.data as { provider?: unknown; configured?: unknown };
       if (value?.provider !== 'deepseek' || value.configured !== true) throw new Error();
     });
@@ -121,16 +88,7 @@ export class SetupController {
     });
     if (!written) throw new Error('模型参数未能保存，请重试。');
   }
-  async saveOfficialDeepSeekKey(apiKey: string): Promise<void> {
-    if (this.state.phase !== 'ready') return;
-    await this.writeConfiguration('official', async () => {
-      const result = await this.backend.requestJson({ method: 'POST', path: '/api/setup/official-deepseek',
-        body: { api_key: apiKey, confirm_official_defaults: true }, maxResponseBytes: 4096 });
-      const value = result.data as { configured?: unknown; official_deepseek_defaults?: unknown; recoverable_owner?: unknown };
-      if (value.configured !== true || value.official_deepseek_defaults !== true) throw new Error();
-    });
-  }
-  private async writeConfiguration(kind: 'owner' | 'credentials' | 'official' | 'parameters', write: () => Promise<void>): Promise<void> {
+  private async writeConfiguration(kind: 'credentials' | 'parameters', write: () => Promise<void>): Promise<void> {
     if (this.busy) return;
     const operation = this.beginOperation();
     if (!operation) return;
@@ -150,7 +108,7 @@ export class SetupController {
       if (!recovery || recovery.generation !== operation.generation) return;
       await this.readStatus(recovery);
       // 自己的恢复查询返回也需复核；断线或较新查询不能被旧保存错误覆盖。
-      if (this.isCurrent(recovery)) this.publish({ errorCode: kind === 'owner' ? 'initialize-failed' : environmentOverride ? 'configuration-environment-override' : kind === 'parameters' ? 'parameters-failed' : 'credentials-failed' });
+      if (this.isCurrent(recovery)) this.publish({ errorCode: environmentOverride ? 'configuration-environment-override' : kind === 'parameters' ? 'parameters-failed' : 'credentials-failed' });
     } finally { this.busy = false; }
   }
   async retryRestart(): Promise<void> {
@@ -159,14 +117,8 @@ export class SetupController {
     try { await this.reloadConfiguration(); }
     finally { this.busy = false; }
   }
-  async reloadControlledConfiguration(): Promise<void> {
-    if (this.busy || this.state.phase !== 'identity-unbound' || this.backend.getConnectionGeneration() === undefined) return;
-    this.savedConfigPending = true;
-    this.savedExpectation = 'owner';
-    await this.retryRestart();
-  }
   private async reloadConfiguration(): Promise<void> {
-    this.publish({ phase: 'restarting', ownerReady: false, credentialsConfigured: false, errorCode: undefined });
+    this.publish({ phase: 'restarting', credentialsConfigured: false, errorCode: undefined });
     // 保存已经成功；重启异常只能报告待加载，不能回退成保存失败。
     const restarted = await this.backend.restart().catch(() => false);
     if (!restarted) {
@@ -177,8 +129,7 @@ export class SetupController {
     await this.readStatus(operation);
     if (!this.isCurrent(operation)) return;
     const parametersConfirmed = this.savedExpectation !== 'parameters' || equalModelParameters(this.state.modelParameters, this.savedModelParameters);
-    if (this.state.phase === 'ready' && parametersConfirmed && (this.savedExpectation === 'owner' || this.savedExpectation === 'parameters' || this.state.credentialsConfigured
-      && (this.savedExpectation !== 'official' || this.state.officialDefaults === true))) {
+    if (this.state.phase === 'ready' && parametersConfirmed && (this.savedExpectation === 'parameters' || this.state.credentialsConfigured)) {
       this.savedConfigPending = false;
       this.savedModelParameters = undefined;
     }

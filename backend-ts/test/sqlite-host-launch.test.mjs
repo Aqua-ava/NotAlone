@@ -229,7 +229,6 @@ test('SQLite正式宿主默认核验启用外置Skill，CAS停用再启用可重
    item=(await request(`/api/skills/${packageId}/enable`,{expected_head_revision:item.head_revision,confirmed:true})).body.skill;
    assert.equal(item.enabled_state,'enabled');assert.equal(item.verification_state,'verified');assert.equal(item.current_revision_no,'1');
   }else{assert.equal(view.skills[0].package_id,packageId);assert.equal(view.skills[0].enabled_state,'enabled');}
-  assert.equal((await request('/api/contacts/11111111-1111-4111-8111-111111111111/skill-learning',{})).status,503);
   assert.equal((await request('/api/reply/generate',{})).status,503);
   assert.equal(await readFile(path.join(skillPackageRoot,'gentle/SKILL.md'),'utf8'),document);
   await request('/api/runtime/shutdown',{});assert.equal(await host.waitForExit(15000),true);

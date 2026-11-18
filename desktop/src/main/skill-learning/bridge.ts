@@ -6,7 +6,6 @@ import { SkillLibraryController } from './library';
 export function installSkillLearningBridge(commands: PageCommands, backend: BackendHost, onLibraryChange?: () => void) {
   const library = new SkillLibraryController(backend);
   commands.handle('skill-library:read', (...args) => { noArguments(args); return library.read(); }, 'manager');
-  commands.handle('skill-library:verify', (...args) => { if (args.length !== 1) throw new Error('Skill 操作无效。'); onLibraryChange?.(); return library.verify(args[0]); }, 'manager');
   commands.handle('skill-library:enabled', (...args) => { if (args.length !== 1) throw new Error('Skill 操作无效。'); onLibraryChange?.(); return library.changeEnabled(args[0]); }, 'manager');
   commands.handle('skill-library:groups-read', (...args) => { noArguments(args); return library.readGroups(); }, 'manager');
   for (const [channel, method] of [['group-create', 'createGroup'], ['group-update', 'updateGroup'], ['group-delete', 'deleteGroup'], ['group-assign', 'assignContactGroup']] as const)

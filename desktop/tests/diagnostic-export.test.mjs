@@ -17,7 +17,7 @@ test('先预览后显式本机导出，白名单排除正文、身份、路径�
   const controller = new DiagnosticExportController(() => ({ phase: 'blocked', mode: 'external', code: 'sqlite_storage_failed',
     revision: 9, helperWarnings: ['cli_unavailable', canary], raw: canary, path: `/home/${canary}`, api_key: canary, owner_id: canary }),
   () => ({ phase: 'disconnected', errorCode: canary, reused: false, revision: 4, canRetryConnection: true,
-    canRetryShutdown: false, canSaveStartupPaths: true, canPrepareConfiguration: false, raw: canary }));
+    canRetryShutdown: false, canSaveStartupPaths: true, raw: canary }));
   const choose = async () => { choices++; return target; };
   await assert.rejects(controller.export('unpreviewed', choose), /请先预览/);
   assert.equal(choices, 0);

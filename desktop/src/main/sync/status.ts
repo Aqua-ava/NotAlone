@@ -163,11 +163,6 @@ export async function setSyncEnabled(backend: BackendHost, enabled: boolean, sig
     body: {}, timeoutMs: 12_000, maxResponseBytes: SYNC_REPORT_MAX_BYTES, signal });
   return { generation: response.generation, report: parseSyncReport(response.data) };
 }
-export async function controlBackfill(backend: BackendHost, operation: 'pause' | 'retry', signal: AbortSignal) {
-  const response = await backend.requestJson({ method: 'POST', path: operation === 'pause' ? '/api/sync/backfill/pause' : '/api/sync/backfill/retry',
-    body: {}, timeoutMs: 12_000, maxResponseBytes: SYNC_REPORT_MAX_BYTES, signal });
-  return { generation: response.generation, report: parseSyncReport(response.data) };
-}
 
 export async function setSyncScope(backend: BackendHost, mode: SyncScope, signal: AbortSignal) {
   const response = await backend.requestJson({ method: 'POST', path: '/api/sync/scope',

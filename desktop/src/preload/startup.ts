@@ -12,7 +12,6 @@ export function createStartupBridge(ipcRenderer: PageTransport): StartupBridge {
     getPaths: (...args: unknown[]) => invoke('startup:get-paths', args),
     savePaths: (...args: unknown[]) => args.length === 1 ? ipcRenderer.invoke('startup:save-paths', args[0]) : Promise.reject(new Error('启动路径无效')),
     retry: (...args: unknown[]) => invoke('startup:retry', args),
-    prepareConfiguration: (...args: unknown[]) => invoke('startup:prepare-configuration', args),
     revealUpdateBackup: (...args: unknown[]) => invoke('startup:reveal-update-backup', args),
     onStateChanged: (listener: (state: StartupState) => void) =>
       subscribePageState(ipcRenderer, 'startup:state-changed', listener, '启动诊断不可用'),

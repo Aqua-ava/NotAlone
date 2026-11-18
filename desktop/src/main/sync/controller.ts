@@ -3,10 +3,10 @@ import type { BackendHost } from '../backend/host';
 import { BackendRequestFailure } from '../backend/json-client';
 import { ContactDeletionQuiet } from '../contacts/deletion-quiet';
 import type { ContactSession } from '../contacts/session';
-import { readSyncStatus, setSyncEnabled, controlBackfill, setSyncScope, setHistoryAuthorization } from './status';
+import { readSyncStatus, setSyncEnabled, setSyncScope, setHistoryAuthorization } from './status';
 
 type Scope = { generation: number };
-type Operation = 'refresh' | 'enable' | 'disable' | 'pause' | 'retry' | 'scope' | 'history';
+type Operation = 'refresh' | 'enable' | 'disable' | 'scope' | 'history';
 
 export class SyncControlController {
   private state: SyncControlState = { revision: 0, scopeRevision: 0, phase: 'offline', report: null, busy: null, errorCode: null };
@@ -115,8 +115,6 @@ export class SyncControlController {
   };
   enable(request: SyncControlRequest): Promise<void> { return this.control(request, 'enable'); }
   disable(request: SyncControlRequest): Promise<void> { return this.control(request, 'disable'); }
-  pause(request: SyncControlRequest): Promise<void> { return this.control(request, 'pause'); }
-  retry(request: SyncControlRequest): Promise<void> { return this.control(request, 'retry'); }
   setScope(request: SyncScopeRequest): Promise<void> {
     if (request.confirmed !== true || !['selected', 'all_private'].includes(request.mode)) return Promise.reject(new Error('同步范围需要明确确认。'));
     return this.control(request, 'scope', request.mode);
@@ -136,12 +134,8 @@ export class SyncControlController {
     }
     if (this.disposed || !this.scope || this.pending || this.state.phase !== 'ready' || !this.state.report
       || request.scopeRevision !== this.state.scopeRevision) throw new Error('本次同步范围已失效，请刷新状态后重试。');
-    if (operation === 'pause' || operation === 'retry') {
-      const phases = operation === 'pause' ? ['gap_detected', 'backfilling', 'incomplete'] : ['paused', 'failed', 'incomplete'];
-      if (!this.state.report.enabled || !phases.includes(this.state.report.backfill.phase)) throw new Error('当前补齐状态不支持本次操作。');
-    }
     this.cancelRecovery(); this.cancelSnapshot();
-    const finish = ['enable', 'disable', 'pause', 'scope', 'history'].includes(operation) ? this.beginReadingScopeChange() : undefined;
+    const finish = ['enable', 'disable', 'scope', 'history'].includes(operation) ? this.beginReadingScopeChange() : undefined;
     try { await this.perform(operation, this.scope, false, mode, historyDecision); }
     finally { finish?.(); }
   }
@@ -164,11 +158,9 @@ export class SyncControlController {
       const result = operation === 'refresh' ? await readSyncStatus(this.backend, pending.signal)
         : operation === 'enable' || operation === 'disable' ? await setSyncEnabled(this.backend, operation === 'enable', pending.signal)
         : operation === 'scope' ? await setSyncScope(this.backend, mode!, pending.signal)
-        : operation === 'history' ? await setHistoryAuthorization(this.backend, historyDecision!, pending.signal)
-        : await controlBackfill(this.backend, operation, pending.signal);
+        : await setHistoryAuthorization(this.backend, historyDecision!, pending.signal);
       if (!current() || result.generation !== scope.generation) return;
       if ((operation === 'enable' || operation === 'disable') && result.report.enabled !== (operation === 'enable')) throw new Error('同步结果未确认。');
-      if ((operation === 'pause' || operation === 'retry') && result.report.enabled !== enabledBefore) throw new Error('同步结果未确认。');
       if (operation === 'scope' && (result.report.syncScope !== mode || result.report.enabled !== enabledBefore)) throw new Error('同步范围结果未确认。');
       if (operation === 'history') {
         // 已同意后迟到的拒绝不会降级；其余结果必须明确落库。

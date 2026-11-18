@@ -130,7 +130,6 @@ function DiagnosticExport() {
 function StartupPathSettings({ state, backend }: { state: StartupState; backend: BackendState }) {
   const [savedPaths, setSavedPaths] = useState<StartupPaths>();
   const [paths, setPaths, discardPaths, saving, saveDraft] = useSettingsDraft('startup-paths', savedPaths);
-  const [preparing, setPreparing] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [pathReadPhase, setPathReadPhase] = useState<'reading' | 'ready' | 'failed'>('reading');
@@ -144,7 +143,7 @@ function StartupPathSettings({ state, backend }: { state: StartupState; backend:
     return () => { active = false; };
   }, [saving, pathReadAttempt]);
   const checking = state.phase === 'checking' || backend.phase === 'connecting';
-  const editable = backend.canSaveStartupPaths && !checking && !saving && !preparing && pathReadPhase === 'ready';
+  const editable = backend.canSaveStartupPaths && !checking && !saving && pathReadPhase === 'ready';
   async function save() {
     if (!paths || !editable) return;
     setPathReadPhase('reading');

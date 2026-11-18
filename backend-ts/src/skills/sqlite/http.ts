@@ -53,14 +53,13 @@ export class SqliteSkillHttp {
  async handle(req: IncomingMessage,res: ServerResponse): Promise<boolean> {
   const raw=req.url??'';let url: URL;
   try {url=new URL(raw,'http://localhost');}catch{return false;}
-  const path=url.pathname,legacyLearning=/^\/api\/contacts\/[^/]+\/skill-learning(?:\/|$)/.test(path);
-  if(path!=='/api/skills' && !path.startsWith('/api/skills/') && !legacyLearning)return false;
+  const path=url.pathname;
+  if(path!=='/api/skills' && !path.startsWith('/api/skills/'))return false;
   if(!this.authorize(req)){respond(res,401,{error:'unauthorized'});return true;}
   const controller=new AbortController(),abort=()=>controller.abort(new SqliteSkillError('skill_operation_cancelled'));
   req.once('aborted',abort);res.once('close',abort);
   try {
    if(raw!==path)throw new SqliteSkillError('skill_request_invalid');
-   if(legacyLearning){respond(res,503,{error:'sqlite_skill_operation_unavailable'});return true;}
    const groupRoute=/^\/api\/skills\/groups(?:\/([a-f0-9-]{36})\/(update|delete))?$/.exec(path),contactRoute=/^\/api\/skills\/contacts\/([A-Za-z0-9_.:-]{1,128})\/group$/.exec(path);
    if(groupRoute || contactRoute){await this.handleGroups(req,res,controller.signal,path,groupRoute,contactRoute);return true;}
    const match=/^\/api\/skills\/([a-f0-9-]{36})\/(verify|enable|disable)$/.exec(path);

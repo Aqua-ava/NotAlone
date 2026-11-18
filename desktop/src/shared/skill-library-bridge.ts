@@ -18,7 +18,6 @@ export interface SkillGroupDeleteCommand extends SkillGroupCommandBase {groupId:
 export interface SkillGroupAssignCommand extends SkillGroupCommandBase {contactId: string; groupId: string | null; expectedGroupId: string | null}
 export interface SkillLibraryBridge {
  readLibrary(): Promise<SkillLibrarySnapshot>;
- verifyLibrary(command: SkillLibraryCommand): Promise<SqliteSkillLibrarySnapshot>;
  changeLibraryEnabled(command: SkillLibraryCommand & {enabled:boolean}): Promise<SqliteSkillLibrarySnapshot>;
  readGroups(): Promise<SkillGroupsSnapshot>;
  createGroup(command: SkillGroupCreateCommand): Promise<SkillGroupsSnapshot>;

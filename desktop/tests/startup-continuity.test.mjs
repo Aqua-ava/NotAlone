@@ -67,7 +67,7 @@ test('运行就绪后不再展示环境检查卡，工具缺失也不阻挡普�
 test('高级故障排查默认折叠，明确展开后才展示诊断与路径操作', () => {
   const props = {
     state: { mode: 'external', phase: 'ready', code: 'ready', revision: 1, helperWarnings: [] },
-    backend: { phase: 'connected', canPrepareConfiguration: true, canSaveStartupPaths: false, canRetryConnection: false },
+    backend: { phase: 'connected', canSaveStartupPaths: false, canRetryConnection: false },
   };
   const closed = renderToStaticMarkup(React.createElement(StartupSettings, props));
   assert.match(closed, /<summary>故障排查<\/summary>/);

@@ -90,7 +90,7 @@ test('联系人分组页：新建、选择回复场景、分配联系人与删�
  const page=await browser.newPage({viewport:{width:1100,height:900}});
  await page.exposeFunction('libraryCommand',(method,...args)=>controller[method](...args));
  const compiled=await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{SkillLearningPage}from'./src/renderer/SkillLearningPage';
- const methods={readLibrary:'read',verifyLibrary:'verify',changeLibraryEnabled:'changeEnabled'};
+ const methods={readLibrary:'read',changeLibraryEnabled:'changeEnabled'};
  window.notalone={backend:{onStateChanged:()=>()=>{}},skillLearning:new Proxy({},{get:(_,key)=>(...args)=>window.libraryCommand(methods[key]??key,...args)})};
  const contacts=[{contactId:'${contactA}',displayName:'小林',messageCount:0,sourceCount:0},{contactId:'${contactB}',displayName:'同事老王',messageCount:0,sourceCount:0}];
  createRoot(document.getElementById('root')).render(<SkillLearningPage session={{state:{selectedContactId:null,scopeRevision:0,contacts}}}/>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',jsx:'automatic',loader:{'.css':'empty'},write:false});

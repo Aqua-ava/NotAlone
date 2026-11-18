@@ -24,20 +24,9 @@ function parse(args) {
     if (!Number.isInteger(hold) || hold < 0 || hold > 30_000 || !Number.isInteger(timeout) || timeout < 1 || timeout > 60) throw new Error('page_test_arguments: 探针须有有限时段');
     return { mode: 'probe', id, hold, timeout, uncertain };
   }
-  const names = []; let timeout;
-  while (args.length) {
-    const key = args.shift();
-    if (key === '--case' && ['memory-processing', 'owner-layered-regressions', 'layered-reply', 'owner-layered-memory', 'layered-memory', 'memory-skill-evolution', 'skill-feedback', 'skill-lifecycle', 'skill-review', 'skill-learning', 'expression-preferences', 'overview-reply-retrieval', 'historical-reply-basis', 'memory-current-status', 'memory-correction-protection', 'assistant-session-combination', 'assistant-message-opt-in', 'reply-strategy-combination', 'assistant-session-full-history', 'assistant-input-budget-hard', 'assistant-candidate-carry', 'authentic-expression-typed', 'assistant-input-budget', 'authentic-expression-groups', 'reply-strategy-confirmed-lifecycle', 'reply-strategy-lifecycle', 'assistant-session-catalog', 'assistant-session-catalog-guards', 'assistant-session-deletion-recovered-copy', 'assistant-session-deletion-faults', 'assistant-session-deletion-lifecycle', 'assistant-session-deletion', 'understanding-direction', 'response-scene-entry', 'reply-strategy-skills', 'reply-strategy-skill-invalidation', 'reply-strategy-confirmed-clarification', 'reply-strategy-bounded-updates', 'reply-strategy-message-groups', 'reply-strategy-group-boundaries', 'reply-strategy-version-edit-guard', 'reply-strategy-transition', 'reply-strategy-options', 'reply-strategy-dialogue', 'reply-strategy-invalidation', 'authentic-expression-recovery', 'assistant-session-recovery', 'assistant-session-recovery-guards', 'fidelity-intent', 'fidelity-content', 'assistant-session-persistence', 'conversation-strategy-entry', 'memory-traces-record-deletion', 'memory-traces-full', 'memory-traces-lifecycle', 'memory-traces', 'memory-reading', 'memory-reading-full', 'memory-stale-full', 'draft-rewrite', 'draft-rewrite-acceptance', 'draft-rewrite-session', 'candidate-visibility', 'direction-generation-feedback', 'directed-reply', 'candidate-copy', 'message-events', 'foreground-visual-preview', 'foreground-paused', 'foreground-verified', 'foreground-manual', 'foreground-confirmation-safety', 'source-deletion-full', 'source-deletion-stale-request', 'source-deletion-multi-source', 'source-deletion-unrelated', 'source-deletion-evidence-failure', 'source-deletion-cross-contact', 'source-deletion-replies', 'source-deletion-basic', 'source-deletion-verification', 'source-deletion-unknown', 'source-deletion-arguments', 'import-submit-acceptance', 'import-stale-acceptance', 'import-bootstrap', 'import-bootstrap-prepare-failure', 'binding-consent', 'binding-stale', 'sync-switch', 'sync-backfill-retry', 'sync-arguments', 'sync-control-full', 'reply-evidence', 'memory-editing-owner', 'memory-editing-addition', 'memory-editing-contact-correction', 'memory-editing-removal', 'memory-editing-confirm', 'memory-editing-discard', 'memory-editing-failures', 'memory-editing-arguments', 'memory-editing-stale', 'memory-editing-full'].includes(args[0])) names.push(args.shift());
-    else if (key === '--timeout-seconds' && /^\d+$/.test(args[0] ?? '')) timeout = Number(args.shift());
-    else throw new Error('page_test_arguments: 需要明确页面范围与有限截止时间');
-  }
-  if (!names.length || names.length > 2 || new Set(names).size !== names.length || !Number.isInteger(timeout) || timeout < 1 || timeout > 300) {
-    throw new Error('page_test_arguments: 页面范围最多两组且不重复，时限为1至300秒');
-  }
-  return { names, timeout };
+  throw new Error('page_test_arguments: 当前仅支持 --status 与 --probe；页面测试按 inventory 登记运行');
 }
 async function run(options) {
-  if (options.mode !== 'probe' && options.mode !== 'status') throw new Error('page_test_historical: 旧Python页面夹具已移出当前树；当前Node页面与控制器覆盖按测试登记运行。');
   const until = Date.now() + options.timeout * 1000;
   const lease = await acquireLease({ mode: 'headless', id: options.id, until, desktop, coordinator: 'page-checks' });
   let child; let code = 0; let confirmed = false; let forceTimer; let runtimeAttempted = false;

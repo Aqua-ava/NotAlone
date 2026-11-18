@@ -6,7 +6,7 @@ import {chromium,expect} from '@playwright/test';
 async function fixture(t) {
  const built=await build({stdin:{contents:`
  import React,{useState}from'react';import{createRoot}from'react-dom/client';import{SetupPanel}from'./src/renderer/SetupPanel';
- let state={phase:'ready',ownerReady:true,credentialsConfigured:false,revision:1,modelParameters:{reply:{thinkingEffort:'off',temperature:0},memory:{thinkingEffort:'off',temperature:0}}};
+ let state={phase:'ready',credentialsConfigured:false,revision:1,modelParameters:{reply:{thinkingEffort:'off',temperature:0},memory:{thinkingEffort:'off',temperature:0}}};
  const listeners=new Set();window.calls=[];
  window.update=patch=>{state={...state,...patch,revision:state.revision+1};listeners.forEach(fn=>fn(state));};
  window.notalone={setup:{getState:async()=>state,onStateChanged:fn=>{listeners.add(fn);return()=>listeners.delete(fn);},

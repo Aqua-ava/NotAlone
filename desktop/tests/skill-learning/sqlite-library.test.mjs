@@ -22,9 +22,9 @@ test('最小DTO区分未知状态并保留精确head，明确启用带原CAS而�
 });
 test('重连后旧页面写入在出站前拒绝，renderer不能传owner/根路径/旧删除动作',async t=>{
  const {controller,item,calls,changeGeneration}=await fixture(t);changeGeneration();
- await assert.rejects(controller.verify({packageId:item.package_id,expectedHeadRevision:'1',connectionGeneration:1,confirmed:true}));assert.equal(calls.length,0);
+ await assert.rejects(controller.changeEnabled({packageId:item.package_id,expectedHeadRevision:'1',connectionGeneration:1,confirmed:true,enabled:true}));assert.equal(calls.length,0);
  assert.equal('discover' in controller,false);
- await assert.rejects(controller.verify({packageId:item.package_id,expectedHeadRevision:'1',connectionGeneration:2,confirmed:true,ownerId:'other'}));assert.equal(calls.length,0);
+ await assert.rejects(controller.changeEnabled({packageId:item.package_id,expectedHeadRevision:'1',connectionGeneration:2,confirmed:true,enabled:true,ownerId:'other'}));assert.equal(calls.length,0);
 });
 
 test('中文展示元数据必须合法，不把重复标签或无效标题交给页面',async t=>{
@@ -41,9 +41,9 @@ test('正式桥仅暴露八个库管理操作，沿管理窗口直接读取和�
   publish:()=>assert.fail('库管理不发布旧学习状态')},backend,()=>{invalidations++;});
  const bridge=ports.createSkillLearningBridge({invoke:(channel,...args)=>Promise.resolve().then(()=>handlers.get(channel)(...args)),
   on:()=>assert.fail('库管理不订阅旧学习状态'),removeListener:()=>assert.fail('库管理不订阅旧学习状态')});
- assert.deepEqual([...handlers.keys()].sort(),['skill-library:read','skill-library:verify','skill-library:enabled','skill-library:groups-read',
+ assert.deepEqual([...handlers.keys()].sort(),['skill-library:read','skill-library:enabled','skill-library:groups-read',
   'skill-library:group-create','skill-library:group-update','skill-library:group-delete','skill-library:group-assign'].sort());
- assert.deepEqual(Object.keys(bridge).sort(),['readLibrary','verifyLibrary','changeLibraryEnabled','readGroups','createGroup','updateGroup','deleteGroup','assignContactGroup'].sort());
+ assert.deepEqual(Object.keys(bridge).sort(),['readLibrary','changeLibraryEnabled','readGroups','createGroup','updateGroup','deleteGroup','assignContactGroup'].sort());
  assert.ok([...roles.values()].every(role=>role==='manager'));
  await assert.rejects(bridge.readLibrary({ownerId:'other'}));
  await assert.rejects(bridge.readGroups({ownerId:'other'}));

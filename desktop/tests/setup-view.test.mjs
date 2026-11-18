@@ -6,10 +6,10 @@ import {chromium,expect} from '@playwright/test';
 async function fixture(t,baseUrl='https://synthetic.example/anthropic'){
  const built=await build({stdin:{contents:`
  import React from 'react';import {createRoot} from 'react-dom/client';import {SetupPanel} from './src/renderer/SetupPanel';
- const listeners=new Set();window.calls=[];let state={phase:'ready',ownerReady:true,credentialsConfigured:true,officialDefaults:false,baseUrl:${JSON.stringify(baseUrl)},revision:1};
+ const listeners=new Set();window.calls=[];let state={phase:'ready',credentialsConfigured:true,baseUrl:${JSON.stringify(baseUrl)},revision:1};
  window.update=value=>{state={...state,...value,revision:state.revision+1};for(const fn of listeners)fn(state);};
  window.notalone={setup:{getState:async()=>state,onStateChanged:fn=>{listeners.add(fn);return()=>listeners.delete(fn);},
- saveDeepSeekConfiguration:async value=>{window.calls.push(value);window.update({phase:'restarting'});},saveDeepSeekKey:async()=>{throw new Error('不能调用旧密钥接口');}}};
+ saveDeepSeekConfiguration:async value=>{window.calls.push(value);window.update({phase:'restarting'});}}};
  createRoot(document.getElementById('root')).render(<SetupPanel/>);
  `,resolveDir:process.cwd(),loader:'tsx'},bundle:true,platform:'browser',format:'iife',write:false,loader:{'.css':'empty'}});
  const browser=await chromium.launch({channel:'chrome',headless:true});t.after(()=>browser.close());const page=await browser.newPage();page.setDefaultTimeout(4000);
@@ -50,7 +50,7 @@ async function draftFixture(t){
  import React,{useState} from 'react';import{createRoot}from'react-dom/client';
  import{DesktopControls}from'./src/renderer/DesktopControls';import{SetupPanel}from'./src/renderer/SetupPanel';import{StartupSettings}from'./src/renderer/StartupSettings';
  const setupListeners=new Set(),desktopListeners=new Set(),backendListeners=new Set();
- let setup={phase:'ready',ownerReady:true,credentialsConfigured:true,baseUrl:'https://saved.example',revision:1};
+ let setup={phase:'ready',credentialsConfigured:true,baseUrl:'https://saved.example',revision:1};
  let desktop={helperShortcut:'Command+Shift+K',shortcutRegistered:true,helperPinned:false};
  let paths={projectDirectory:'/synthetic/project',envFilePath:'/synthetic/config',backendInfoPath:'/synthetic/backend',wechatCliPath:'/synthetic/cli',syncProbePath:'/synthetic/probe'};
  let backend={phase:'connected',revision:1,canSaveStartupPaths:true,canRetryConnection:false};
@@ -60,7 +60,7 @@ async function draftFixture(t){
  window.updateConnection=phase=>{backend={...backend,phase,revision:backend.revision+1};backendListeners.forEach(fn=>fn(backend));};
  window.notalone={backend:{getState:async()=>backend,onStateChanged:fn=>{backendListeners.add(fn);return()=>backendListeners.delete(fn);}},
  getDesktopSettings:async()=>desktop,onDesktopSettingsChanged:fn=>{desktopListeners.add(fn);return()=>desktopListeners.delete(fn);},setHelperShortcut:async value=>{if(window.holdShortcutSave)await new Promise(resolve=>window.finishShortcut=resolve);if(window.rejectShortcutSave)throw new Error('synthetic_save_failed');window.updateDesktop({helperShortcut:value.replace('cmd','Command')});return{settings:desktop,error:null};},
- setup:{getState:async()=>setup,onStateChanged:fn=>{setupListeners.add(fn);return()=>setupListeners.delete(fn);},saveDeepSeekConfiguration:async value=>{if(window.holdAiSave)await new Promise(resolve=>window.finishAi=resolve);window.updateSetup({baseUrl:value.baseUrl});if(window.restartOnAiSave){window.updateConnection('disconnected');window.updateConnection('connected');}},initializeOwner:async()=>{if(window.holdNameSave)await new Promise(resolve=>window.finishName=resolve);window.updateSetup({phase:'ready',ownerReady:true});}},
+ setup:{getState:async()=>setup,onStateChanged:fn=>{setupListeners.add(fn);return()=>setupListeners.delete(fn);},saveDeepSeekConfiguration:async value=>{if(window.holdAiSave)await new Promise(resolve=>window.finishAi=resolve);window.updateSetup({baseUrl:value.baseUrl});if(window.restartOnAiSave){window.updateConnection('disconnected');window.updateConnection('connected');}}},
  startup:{getPaths:async()=>{const snapshot={...paths};if(window.holdPathsRead)await new Promise(resolve=>window.finishPathsRead=resolve);return snapshot;},savePaths:async value=>{if(window.holdPathsSave)await new Promise(resolve=>window.finishPaths=resolve);paths={...value,projectDirectory:value.projectDirectory.trim()};}}};
  function Harness(){const[visible,setVisible]=useState(true);return <><button onClick={()=>setVisible(!visible)}>切换设置页</button>{visible&&<><DesktopControls/><SetupPanel/><StartupSettings open state={{phase:'ready',revision:1,helperWarnings:[],code:'ready'}} backend={backend}/></>}</>;}
  createRoot(document.getElementById('root')).render(<Harness/>);
@@ -102,14 +102,6 @@ test('AI服务切页只保留地址草稿，密钥清空且地址改动仍清密
  await expect(url).toHaveValue('https://external.example');
 });
 
-test('本人名称草稿切页保留，初始化成功后不遗留旧名称',async t=>{
- const page=await draftFixture(t);
- await page.evaluate(()=>window.updateSetup({phase:'needs-owner',ownerReady:false}));
- const name=page.getByLabel('本人展示名称');await name.fill('合成本人');await revisit(page);await expect(name).toHaveValue('合成本人');
- await page.getByRole('button',{name:'初始化本人',exact:true}).click();await expect(name).toHaveCount(0);
- await page.evaluate(()=>window.updateSetup({phase:'needs-owner',ownerReady:false}));await expect(name).toHaveValue('');
-});
-
 test('隐藏设置期间重复连接状态保留草稿，真正断线重连则撤销旧草稿',async t=>{
  const page=await draftFixture(t),shortcut=page.getByLabel('小窗快捷键'),url=page.getByLabel('Base URL',{exact:true}),project=page.getByLabel('项目目录',{exact:true});
  await expect(url).toHaveValue('https://saved.example');await shortcut.fill('Command+Shift+J');await url.fill('https://draft.example');await project.fill('/synthetic/draft');
@@ -141,9 +133,6 @@ test('路径与AI配置在途切页保持忙碌，完成后直接显示最新保
  await page.getByRole('button',{name:'保存 AI 服务配置',exact:true}).click();await revisit(page);
  await expect(url).toBeDisabled();await expect(key).toBeDisabled();await expect(key).toHaveValue('');await expect(page.getByRole('button',{name:'正在保存配置…',exact:true})).toBeVisible();
  await page.evaluate(()=>window.finishAi());await expect(url).toBeEnabled();await expect(url).toHaveValue('https://submitted.example');
- await page.evaluate(()=>window.updateSetup({phase:'needs-owner',ownerReady:false}));const name=page.getByLabel('本人展示名称');
- await name.fill('合成名称');await page.evaluate(()=>window.holdNameSave=true);await page.getByRole('button',{name:'初始化本人',exact:true}).click();await revisit(page);
- await expect(name).toBeDisabled();await expect(page.getByRole('button',{name:'正在初始化…',exact:true})).toBeVisible();await page.evaluate(()=>window.finishName());await expect(name).toHaveCount(0);
 });
 
 test('AI配置保存触发正常重连不误报保存失败',async t=>{

@@ -21,7 +21,7 @@ function backendProcessHasExited(pid: number): boolean {
 
 export class BackendHost {
   private state: BackendState = { phase: 'disconnected', reused: false, revision: 0, canRetryConnection: true, canRetryShutdown: false,
-    canSaveStartupPaths: true, canPrepareConfiguration: false };
+    canSaveStartupPaths: true };
   private target: RuntimeClient | undefined;
   private ownedChild: OwnedProcess | undefined;
   private initialization: Promise<void> | undefined;
@@ -30,7 +30,6 @@ export class BackendHost {
   private quitting = false;
   private quitPreparationFailed = false;
   private restarting: Promise<boolean> | undefined;
-  private preparing: Promise<boolean> | undefined;
   private configurationSave: Promise<void> | undefined;
   private generation = 0;
   private pollTimer: NodeJS.Timeout | undefined;
@@ -69,9 +68,7 @@ export class BackendHost {
     private readonly options?: { shutdownTimeoutMs?: number }) {}
 
   getState(): BackendState {
-    return { ...this.state, canSaveStartupPaths: !this.configurationSave && this.configurationCanChange(),
-      canPrepareConfiguration: !this.quitting && !this.restarting && !this.preparing && !this.stopping && !this.initialization
-        && Boolean(this.target || this.ownedChild) && ['connected', 'disconnected', 'shutdown-failed'].includes(this.state.phase) };
+    return { ...this.state, canSaveStartupPaths: !this.configurationSave && this.configurationCanChange() };
   }
   saveStartupConfiguration(save: (canSave: () => boolean) => Promise<void>): Promise<void> {
     if (!this.getState().canSaveStartupPaths) return Promise.reject(new Error('启动配置暂时不可修改'));
@@ -203,16 +200,8 @@ export class BackendHost {
   restart(): Promise<boolean> {
     if (this.quitting) return Promise.resolve(false);
     if (this.restarting) return this.restarting;
-    if (this.preparing) return Promise.resolve(false);
     this.restarting = this.restartRuntime().finally(() => { this.restarting = undefined; this.publishEligibility(); });
     return this.restarting;
-  }
-
-  prepareConfiguration(): Promise<boolean> {
-    if (this.quitting || this.restarting) return Promise.resolve(false);
-    if (this.preparing) return this.preparing;
-    this.preparing = this.prepareRuntime().finally(() => { this.preparing = undefined; this.publishEligibility(); });
-    return this.preparing;
   }
 
   private async stopRuntime(): Promise<boolean> {
@@ -400,13 +389,12 @@ export class BackendHost {
 
   private configurationCanChange(): boolean {
     return this.state.phase === 'disconnected' && !this.target && !this.ownedChild && !this.initialization
-      && !this.closing && !this.quitting && !this.preparing && !this.restarting && !this.stopping;
+      && !this.closing && !this.quitting && !this.restarting && !this.stopping;
   }
 
   private publishEligibility(): void {
     const next = this.getState();
-    if (next.canSaveStartupPaths !== this.state.canSaveStartupPaths
-      || next.canPrepareConfiguration !== this.state.canPrepareConfiguration) this.publish({});
+    if (next.canSaveStartupPaths !== this.state.canSaveStartupPaths) this.publish({});
   }
 
   private schedulePoll(generation: number): void {
@@ -443,7 +431,7 @@ export class BackendHost {
   // 非自有进程、退出中、已有重启或预算用尽时不处理，保留“重新检查并连接”的明确入口。
   private restartForLostStorage(error: unknown): boolean {
     if (!(error instanceof BackendStorageUnavailable) || !this.ownedChild?.isRunning()) return false;
-    if (this.quitting || this.closing || this.restarting || this.preparing || this.configurationSave) return false;
+    if (this.quitting || this.closing || this.restarting || this.configurationSave) return false;
     const now = Date.now();
     this.storageRestarts = this.storageRestarts.filter((at) => now - at < this.storageRestartWindowMs);
     if (this.storageRestarts.length >= this.storageRestartLimit) return false;
@@ -466,7 +454,7 @@ export class BackendHost {
 
   private async recover(): Promise<void> {
     this.recoveryTimer = undefined;
-    const busy = () => this.quitting || this.closing || this.restarting || this.preparing || this.configurationSave
+    const busy = () => this.quitting || this.closing || this.restarting || this.configurationSave
       || this.initialization || this.state.phase !== 'disconnected';
     if (busy()) return;
     const alive = this.ownedChild ? this.ownedChild.isRunning() : await this.target?.isListening() === true;

@@ -106,7 +106,6 @@ test('复用服务必须匹配当前已定位的数据库和本人，失配只�
     {databaseId:'synthetic-db',ownerId:'synthetic-owner',available:false}]) {
     const f=await fixture(t,{expectedStorage:true,storageIdentity});
     assert.equal(f.host.getState().phase,'disconnected');
-    assert.equal(f.host.getState().canPrepareConfiguration,true);
     assert.equal(f.host.getConnectionGeneration(),undefined);
     f.release();assert.equal(await f.host.stop(),true);
   }

@@ -71,7 +71,7 @@ export interface SyncControlState {
   scopeRevision: number;
   phase: 'offline' | 'loading' | 'ready' | 'unavailable' | 'failed';
   report: SyncStatusReport | null;
-  busy: 'enable' | 'disable' | 'pause' | 'retry' | 'scope' | 'history' | null;
+  busy: 'enable' | 'disable' | 'scope' | 'history' | null;
   errorCode: 'status-unconfirmed' | 'operation-unconfirmed' | null;
 }
 export interface SyncControlRequest { scopeRevision: number; }
@@ -86,7 +86,5 @@ export interface SyncControlBridge {
   setHistoryAuthorization(request: HistoryAuthorizationRequest): Promise<void>;
   enable(request: SyncControlRequest): Promise<void>;
   disable(request: SyncControlRequest): Promise<void>;
-  pause(request: SyncControlRequest): Promise<void>;
-  retry(request: SyncControlRequest): Promise<void>;
   onStateChanged(listener: (state: SyncControlState) => void): () => void;
 }

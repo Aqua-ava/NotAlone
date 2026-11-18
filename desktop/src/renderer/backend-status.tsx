@@ -5,7 +5,7 @@ import { Icon } from './icons';
 import type { StartupState } from '../shared/startup-bridge';
 
 const initial: BackendState = { phase: 'disconnected', reused: false, revision: -1, canRetryConnection: false, canRetryShutdown: false,
-  canSaveStartupPaths: false, canPrepareConfiguration: false };
+  canSaveStartupPaths: false };
 export function useBackendState(): { state: BackendState; error: string; retry: () => void } {
   const [state, setState] = useState(initial);
   const [error, setError] = useState('');

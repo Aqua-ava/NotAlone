@@ -40,7 +40,6 @@ export class SkillLibraryController {
   const skills=data.skills.map(readItem);if(new Set(skills.map(i=>i.packageId)).size!==skills.length)throw invalid();
   return {mode:'sqlite',connectionGeneration:generation,skills};
  }
- async verify(input:unknown):Promise<SqliteSkillLibrarySnapshot>{const i=this.command(input);return this.write(i,`/api/skills/${i.packageId}/verify`,{expected_head_revision:i.expectedHeadRevision,confirmed:true});}
  async changeEnabled(input:unknown):Promise<SqliteSkillLibrarySnapshot>{
   const raw=row(input);exact(raw,['packageId','expectedHeadRevision','connectionGeneration','confirmed','enabled']);if(typeof raw.enabled!=='boolean')throw invalid();
   const {enabled,...rest}=raw;const i=this.command(rest);

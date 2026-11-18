@@ -12,7 +12,6 @@ export interface BackendState {
   canRetryConnection: boolean;
   canRetryShutdown: boolean;
   canSaveStartupPaths: boolean;
-  canPrepareConfiguration: boolean;
 }
 
 export interface BackendBridge {
