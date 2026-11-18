@@ -1,10 +1,12 @@
 # ADR-098：Skill 数据库只保留业务状态
 
-> 存储条款局部替代：[ADR-129](129-controlled-dsh-reply-skill-discovery.md)的原包只读规则及[现行 Skill 存储合同](../current/skill-library.md#21-当前存储合同)替代本文生成不可变版本根、`manifest.json` 和运行方法文件的要求。正常 SQLite 入口在库内保存修订、清单及摘要，直接核验授权原包；不复制已发布字节，也不承诺原目录提供文件历史或回滚。范围、完整性、来源撤销、预算及删除保护继续有效；下文保留旧存储及迁移方案供历史核对。
+已合并入[ADR-196：回复 Skill 的发现、启用与按需加载现行合并决定](../196-reply-skill-library-consolidated.md)（2026-11-18）：回复 Skill 的存储、发现、启用、数量与范围约束已收拢到该 ADR。下文保留为历史决定与原因，现行条款以该 ADR 为准。
+
+> 存储条款局部替代：[ADR-129](129-controlled-dsh-reply-skill-discovery.md)的原包只读规则及[现行 Skill 存储合同](../../current/skill-library.md#21-当前存储合同)替代本文生成不可变版本根、`manifest.json` 和运行方法文件的要求。正常 SQLite 入口在库内保存修订、清单及摘要，直接核验授权原包；不复制已发布字节，也不承诺原目录提供文件历史或回滚。范围、完整性、来源撤销、预算及删除保护继续有效；下文保留旧存储及迁移方案供历史核对。
 
 > 后续局部修订：[ADR-129](129-controlled-dsh-reply-skill-discovery.md)区分发现、技术核验与用户启用；新包不因放入目录自动可运行，已启用包由应用核验更新，停用与来源撤销不被扫描恢复。其余条款按原文及后续修订适用。
 
-> 状态：已采纳（2026-10-22）。用户明确要求按目录方案清理不必要的 Skill 表和字段。
+> 状态：已合并（ADR-196）。原记录：已采纳（2026-10-22）。用户明确要求按目录方案清理不必要的 Skill 表和字段。
 > 局部替代 ADR-096 中数据库保存描述、资源清单及旧内容兼容列的安排；目录唯一来源、范围、审核、版本、按需读取和删除要求继续有效。
 
 ## 决定
@@ -25,4 +27,4 @@
 
 删除继续覆盖工作目录、版本根清单、方法、正文、资源和暂存；停用、来源撤销与未完成文件任务不能被扫描恢复。完整性哈希不是授权，运行时仍核验 owner/contact、审核来源和停用政策。
 
-实施与验证见 [规格](../../.scratch/skill-database-cleanup/spec.md)和[验证记录](../../.scratch/skill-database-cleanup/validation.md)。
+实施与验证见 [规格](../../../.scratch/skill-database-cleanup/spec.md)和[验证记录](../../../.scratch/skill-database-cleanup/validation.md)。

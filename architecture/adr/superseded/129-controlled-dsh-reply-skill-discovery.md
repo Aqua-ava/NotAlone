@@ -1,8 +1,10 @@
 # ADR-129：DSH 回复 Skill 的受控发现与启用
 
+已合并入[ADR-196：回复 Skill 的发现、启用与按需加载现行合并决定](../196-reply-skill-library-consolidated.md)（2026-11-18）：回复 Skill 的存储、发现、启用、数量与范围约束已收拢到该 ADR。下文保留为历史决定与原因，现行条款以该 ADR 为准。
+
 > 2026-11-03 后续局部修订：[ADR-157](157-portable-skill-directory-identity.md) 允许在授权根中以最新历史完整双摘要核验后恢复物理定位；目录冲突不再永久阻断合法迁移。来源撤销、停用及原生安全读取边界保留。
 
-> 状态：已采纳（2026-10-31），根据 [DSH 回复 Skill 接入规格](../../.scratch/dsh-reply-skill-integration/spec.md)收敛用户已确认的决定。
+> 状态：已合并（ADR-196）。原记录：已采纳（2026-10-31），根据 [DSH 回复 Skill 接入规格](../../../.scratch/dsh-reply-skill-integration/spec.md)收敛用户已确认的决定。
 > 2026-10-31 用户后续修正：取消管理页的手动添加和目录名输入；由管理刷新及每轮回复前自动发现，不要求用户手动安装或填写导入路径。历史手动关联入口不再适用，明确启用/停用、技术核验和自动回复选择保持。
 > 局部修订 [ADR-096](096-directory-backed-reply-skills.md)、[ADR-098](098-skill-business-state-only.md)及 Skill Library 中“放入目录后直接发布并可运行”的条款。保留目录内容来源、版本完整性、来源撤销、自动学习审核、预算、原目录删除边界和人工发送约束。
 
@@ -24,4 +26,4 @@ DSH 继续使用正式 profile、官方 `dsh-skill` registry 和独占 scope。�
 
 `native/skill-read/build.sh` 在开发启动及默认测试前显式构建并按源码时间复用；业务运行时不临时编译。5 秒、12 MiB 输出、单文档/资源大小与整包资源数量/大小均有限额，取消后仍由业务资格和迟到结果检查拒绝返回。该实现当前仅覆盖 arm64 macOS 15 部署目标；跨平台和发布包接线尚未验收，不得以本决定解除发布门禁。
 
-源码依据与合成验证见 [Skill 只读器说明](../../native/skill-read/README.md)、[SQLite Skill 模块](../../backend-ts/src/skills/sqlite/README.md)及任务记录。自动选择、失败降级、资源加载、实际 App 和真实模型效果分别按任务验证，源码核验不构成端到端验收。
+源码依据与合成验证见 [Skill 只读器说明](../../../native/skill-read/README.md)、[SQLite Skill 模块](../../../backend-ts/src/skills/sqlite/README.md)及任务记录。自动选择、失败降级、资源加载、实际 App 和真实模型效果分别按任务验证，源码核验不构成端到端验收。

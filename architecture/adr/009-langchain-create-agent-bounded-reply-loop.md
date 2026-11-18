@@ -2,7 +2,7 @@
 
 > 状态：部分替代。下文保留历史决定与原因；当前回复要求见[核心流程](../current/core-flows.md)，实现及验收范围见[后台说明](../../backend-ts/README.md)。
 
-> 替代范围：[ADR-102](102-dsh-typescript-backend-migration.md)将 LangChain／LangGraph 实现选择替换为 TypeScript／DSH；[ADR-109](109-controlled-sqlite-storage-foundation.md)将 PostgreSQL 存储选择替换为受控 SQLite；[ADR-136](136-multi-skill-reply-composition.md)取消每轮最多使用一个 Skill 的限制。有界循环、确定性外壳、来源校验、预算与权限边界继续有效，最终消息仍由用户亲自发送。
+> 替代范围：[ADR-102](102-dsh-typescript-backend-migration.md)将 LangChain／LangGraph 实现选择替换为 TypeScript／DSH；[ADR-109](109-controlled-sqlite-storage-foundation.md)将 PostgreSQL 存储选择替换为受控 SQLite；[ADR-136](superseded/136-multi-skill-reply-composition.md)取消每轮最多使用一个 Skill 的限制。有界循环、确定性外壳、来源校验、预算与权限边界继续有效，最终消息仍由用户亲自发送。
 
 > 后续决定：[ADR-091](091-retire-runtime-todos-and-auto-summary.md)取消第 4 节的 Todo／自动过程摘要强制要求及相关 UI／测试要求；下文保留历史设计，不再作为待补功能。[ADR-092](092-defer-time-calendar-web-tools.md)已将时间／日历／网络工具改为未来可选方向，取消当前版本强制接入及相应验收要求。持续讨论不压缩按 ADR-042／045 保持。
 

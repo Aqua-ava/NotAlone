@@ -1,15 +1,17 @@
 # ADR-136：回复生成按需组合多个 Skill
 
+已合并入[ADR-196：回复 Skill 的发现、启用与按需加载现行合并决定](../196-reply-skill-library-consolidated.md)（2026-11-18）：回复 Skill 的存储、发现、启用、数量与范围约束已收拢到该 ADR。下文保留为历史决定与原因，现行条款以该 ADR 为准。
+
 > 后续局部替代（2026-11-17）：[ADR-193](193-retire-explicit-reply-skill-preload.md)退役无正常界面生产者的 `selectedPackageId` 新请求及显式单包预加载分支；下文显式单包兼容条款不再适用。自动目录、按需组合、预算、完整降级及历史已加载回执的读取和删除约束保持。
 
-> 2026-11-17 实现收敛：退役没有自动产品调用的批量正文预加载辅助入口与专用写事务。显式单包仍沿官方 provider 在首次模型请求前载入，与自动目录共用输入记录和资格复验；历史预加载回执保留只读、来源及删除路径。本次不改变下述按需组合、显式单包、预算或权限决定，现行入口见 [Skill Library](../current/skill-library.md)。
+> 2026-11-17 实现收敛：退役没有自动产品调用的批量正文预加载辅助入口与专用写事务。显式单包仍沿官方 provider 在首次模型请求前载入，与自动目录共用输入记录和资格复验；历史预加载回执保留只读、来源及删除路径。本次不改变下述按需组合、显式单包、预算或权限决定，现行入口见 [Skill Library](../../current/skill-library.md)。
 
 > 2026-11-11 局部修订：[ADR-178](178-contact-skill-groups.md) 引入按联系人分组限定可用 Skill：按需目录的范围收窄为该联系人所在分组绑定的可用 Skill，其余组合规则保留。
 
-> 后续修订（2026-11-04）：根据用户再次明确要求，正常 SQLite 候选入口恢复本 ADR 的按需组合方式，复用已安装的官方 `@deepseek-ai/dsh-tool-skill`：先提供名称与简介，模型需要哪个再读取哪个修订全文。同日先前追加的“首次调用前预加载全部正文并隐藏目录加载工具”约定不再适用；本 ADR 的多 Skill、单修订、资源上限、完整预算、整体回退及显式单包兼容约束继续有效。候选区不展示 Skill 清单或正文；当前合同以[Skill Library](../current/skill-library.md)和[候选回复规格](../current/reply-generation.md)为准。
+> 后续修订（2026-11-04）：根据用户再次明确要求，正常 SQLite 候选入口恢复本 ADR 的按需组合方式，复用已安装的官方 `@deepseek-ai/dsh-tool-skill`：先提供名称与简介，模型需要哪个再读取哪个修订全文。同日先前追加的“首次调用前预加载全部正文并隐藏目录加载工具”约定不再适用；本 ADR 的多 Skill、单修订、资源上限、完整预算、整体回退及显式单包兼容约束继续有效。候选区不展示 Skill 清单或正文；当前合同以[Skill Library](../../current/skill-library.md)和[候选回复规格](../../current/reply-generation.md)为准。
 
-> 状态：已采纳（2026-10-31），根据用户明确要求取消“每次回复最多使用一个 Skill”。本文记录目标约束，不单独证明实现或验收已经完成。
-> 局部替代：[ADR-006](006-agent-orchestration-and-retrieval-frameworks.md)、[ADR-009](009-langchain-create-agent-bounded-reply-loop.md)、[ADR-010](010-deep-agents-skills-middleware.md)、[ADR-019](019-controlled-reply-skill-resources.md)、[ADR-043](043-conversation-scenarios-and-direction-exploration.md)、[ADR-074](074-automatic-conversation-skill-loading.md)、[ADR-093](093-retain-current-skill-resource-budget.md)、[ADR-096](096-directory-backed-reply-skills.md) 中“每轮零或一个／最多一个 Skill”的选择数量约束。其他目录、权限、来源、预算与删除决定继续有效。
+> 状态：已合并（ADR-196）。原记录：已采纳（2026-10-31），根据用户明确要求取消“每次回复最多使用一个 Skill”。本文记录目标约束，不单独证明实现或验收已经完成。
+> 局部替代：[ADR-006](../006-agent-orchestration-and-retrieval-frameworks.md)、[ADR-009](../009-langchain-create-agent-bounded-reply-loop.md)、[ADR-010](../010-deep-agents-skills-middleware.md)、[ADR-019](019-controlled-reply-skill-resources.md)、[ADR-043](../043-conversation-scenarios-and-direction-exploration.md)、[ADR-074](074-automatic-conversation-skill-loading.md)、[ADR-093](093-retain-current-skill-resource-budget.md)、[ADR-096](096-directory-backed-reply-skills.md) 中“每轮零或一个／最多一个 Skill”的选择数量约束。其他目录、权限、来源、预算与删除决定继续有效。
 
 ## 背景
 

@@ -2,7 +2,7 @@
 
 # 聊天回复策略草图
 
-> 2026-10-31 后续决定：[ADR-136](../../adr/136-multi-skill-reply-composition.md)替代 Q20 的“每次至多一个 Skill”限制；按当前主要任务匹配仍有效，相关 Skill 可以按需组合。原 Q20 保留为第一版讨论记录。
+> 2026-10-31 后续决定：[ADR-136](../../adr/superseded/136-multi-skill-reply-composition.md)替代 Q20 的“每次至多一个 Skill”限制；按当前主要任务匹配仍有效，相关 Skill 可以按需组合。原 Q20 保留为第一版讨论记录。
 
 
 > 2026-10-21 设计审查：下文“待实现／尚未开工”是草案编写时状态，后续工程与验收分别见对应正式规格和任务索引；正常回复入口由 [ADR-079](../../adr/079-unified-expression-workspace.md)统一，主动收藏样本由 [ADR-082](../../adr/082-retire-explicit-style-samples.md)退役。旧交互和样本条款仅历史，持续讨论、真实表达、来源与人工发送边界保持。
@@ -62,7 +62,7 @@ Skill 讨论已恢复，当前认可的职责与粒度见下文 Q16、Q17；具�
 
 ## Skill 的场景与方法（Q16、Q17）
 
-> 2026-10-22 后继说明：本节 Skill 的场景组织与介入阶段已由 [ADR-043](../../adr/043-conversation-scenarios-and-direction-exploration.md)、[ADR-074（自动 Skill）](../../adr/074-automatic-conversation-skill-loading.md)、[ADR-096](../../adr/096-directory-backed-reply-skills.md) 收敛；“首批场景清单尚未确定”与“当前未创建、安装或验证对应 Skill”仅作历史，实际状态以正式规格和 Skill 库为准。
+> 2026-10-22 后继说明：本节 Skill 的场景组织与介入阶段已由 [ADR-043](../../adr/043-conversation-scenarios-and-direction-exploration.md)、[ADR-074（自动 Skill）](../../adr/superseded/074-automatic-conversation-skill-loading.md)、[ADR-096](../../adr/superseded/096-directory-backed-reply-skills.md) 收敛；“首批场景清单尚未确定”与“当前未创建、安装或验证对应 Skill”仅作历史，实际状态以正式规格和 Skill 库为准。
 
 - **Q16：按沟通场景组织**。通用流程负责理解情况、明确目的、确认方向及生成和修改候选；Skill 面向一类沟通场景，提供更细的判断与处理方法。用户明确纠正：场景是正在发生的沟通情境，例如收到邀约；接受、拒绝、先问清楚属于回应方向，不应当作场景拆分 Skill。场景是匹配线索，用户目的决定具体用法，联系人背景提供真实依据。首批场景清单尚未确定。
 - **Q17：同一 Skill 包含多种处理方法**。一个 Skill 处理一类沟通场景，内部支持不同回应方向，并根据用户目的和背景选择处理方法，不固定套用话术，也不必为委婉、直接或保留余地等表达变体分别建立 Skill。以邀约场景中的拒绝方向为例，拒绝一次邀请与不希望以后再被邀约需要不同处理；判断所需信息优先从已有上下文取得，不意味着每次都逐项询问用户。

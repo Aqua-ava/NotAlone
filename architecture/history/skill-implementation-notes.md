@@ -6,19 +6,19 @@
 
 ### 清理前第 3–20 行
 
-> 2026-11-03 可迁移性修订：[ADR-157](../adr/157-portable-skill-directory-identity.md) 将业务身份与物理目录定位分离；设备编号变化及迁移后，只在授权根中以最新已核验完整内容恢复定位，保留停用、来源资格及旧修订失效边界。
+> 2026-11-03 可迁移性修订：[ADR-157](../adr/superseded/157-portable-skill-directory-identity.md) 将业务身份与物理目录定位分离；设备编号变化及迁移后，只在授权根中以最新已核验完整内容恢复定位，保留停用、来源资格及旧修订失效边界。
 
-> 2026-10-31 默认启用与中文管理修订：[ADR-135](../adr/135-default-enabled-localized-skill-library.md) 规定授权根内的新包和既有未知项在核验成功后默认启用，保留显式停用与来源失效边界；中文标题、场景标签与单个滑动开关用于管理。
+> 2026-10-31 默认启用与中文管理修订：[ADR-135](../adr/superseded/135-default-enabled-localized-skill-library.md) 规定授权根内的新包和既有未知项在核验成功后默认启用，保留显式停用与来源失效边界；中文标题、场景标签与单个滑动开关用于管理。
 
-> 2026-10-31 发现与启用修订：[ADR-129](../adr/129-controlled-dsh-reply-skill-discovery.md)是目录发现、技术更新和新包启用的当前入口。用户已取消手动添加与手填目录入口，管理刷新自动发现，新增内容不要求用户填写安装或导入路径。当前 DSH/SQLite 实现使用官方 scoped registry 和业务受控 provider；下文旧 Python、数据库表及历史验收只描述当时状态，不能视为当前集成证据。
-> 回复组合修订：[ADR-136](../adr/136-multi-skill-reply-composition.md)允许正常回复按需组合零个或多个已启用、已核验 Skill；每包固定一个当前不可变修订，总模型请求数、静态资源数与输入预算不扩大。
+> 2026-10-31 发现与启用修订：[ADR-129](../adr/superseded/129-controlled-dsh-reply-skill-discovery.md)是目录发现、技术更新和新包启用的当前入口。用户已取消手动添加与手填目录入口，管理刷新自动发现，新增内容不要求用户填写安装或导入路径。当前 DSH/SQLite 实现使用官方 scoped registry 和业务受控 provider；下文旧 Python、数据库表及历史验收只描述当时状态，不能视为当前集成证据。
+> 回复组合修订：[ADR-136](../adr/superseded/136-multi-skill-reply-composition.md)允许正常回复按需组合零个或多个已启用、已核验 Skill；每包固定一个当前不可变修订，总模型请求数、静态资源数与输入预算不扩大。
 
 > 2026-10-23 框架迁移：[ADR-102](../adr/102-dsh-typescript-backend-migration.md)采纳精简 DSH 与 TS 后端；当时 Python／LangChain 与 `SkillsMiddleware` 的实现已退役；当前装配与技术核验见 [DSH／SQLite Skill 实现](../../backend-ts/src/skills/sqlite/README.md)，实际验收范围仍须分别核对。ADR-010 的框架选择由 ADR-102 替代，本文的范围、不可变版本、审核、渐进加载、预算和删除契约保持。DSH 官方 Skill 基础设施须通过受控适配承接 `SkillPort`，不得默认开放任意目录或脚本。
 
-> 数据库精简：[ADR-098](../adr/098-skill-business-state-only.md)将描述、质量警告和资源索引放入不可变版本的无正文清单，数据库仅保存其完整性锚点和业务状态。
-> 目录存储决定：[ADR-096](../adr/096-directory-backed-reply-skills.md)采用标准目录保存已发布正文及辅助资源，自动发现新增和修改；数据库仅保留业务状态和内容定位。实现及本机迁移证据见[本次规格](../../.scratch/directory-reply-skills/spec.md)。
+> 数据库精简：[ADR-098](../adr/superseded/098-skill-business-state-only.md)将描述、质量警告和资源索引放入不可变版本的无正文清单，数据库仅保存其完整性锚点和业务状态。
+> 目录存储决定：[ADR-096](../adr/superseded/096-directory-backed-reply-skills.md)采用标准目录保存已发布正文及辅助资源，自动发现新增和修改；数据库仅保留业务状态和内容定位。实现及本机迁移证据见[本次规格](../../.scratch/directory-reply-skills/spec.md)。
 
-> 2026-10-21 决定收敛：按 [ADR-093](../adr/093-retain-current-skill-resource-budget.md)沿用当前导入限制和整轮输入预算，不新增独立辅助资源额度。原规格中的独立额度缺口已不属于必做功能；导入边界测试、真实质量及桌面／HTTP 等其他历史验证仍按实际证据核对，不能据接口存在宣称全部完成。
+> 2026-10-21 决定收敛：按 [ADR-093](../adr/superseded/093-retain-current-skill-resource-budget.md)沿用当前导入限制和整轮输入预算，不新增独立辅助资源额度。原规格中的独立额度缺口已不属于必做功能；导入边界测试、真实质量及桌面／HTTP 等其他历史验证仍按实际证据核对，不能据接口存在宣称全部完成。
 
 > 状态：已采纳；当前管理、持久化和读取入口见 [DSH／SQLite Skill 实现](../../backend-ts/src/skills/sqlite/README.md)，当前测试命令见[后台说明](../../backend-ts/README.md#开发与验证)。历史 Python 测试目录与 `python -m unittest discover -s tests` 属于旧版本，不是当前检出的执行入口；需要追溯时遵循[历史测试说明](../../backend-ts/test/HISTORICAL.md)，不能用历史通过数代替当前验收。
 > 日期：2026-08-24
@@ -87,6 +87,6 @@ Skill Library 的权威数据归属于 Owner，使用 Owner 级 revision：
 
 ### 清理前第 228–230 行
 
-目录、正文、资源、准备与最终候选均核对版本和来源范围。按 [ADR-074](../adr/074-automatic-conversation-skill-loading.md)，当前对话自动判断受控目录内的策略相关性，回复区仅展示实际策略。授权场景仍只按用户声明逐字匹配，进入输入身份、继续、中断恢复及联系人缓存；入口模式不建立场景授权。13候选的准备编码为version2/schema5：已编码的历史依据变化新增`reply_skill/skill_policy_changed`严格变体，旧schema4必须经原身份、可靠终态及租约核对后显式重新准备；不补签执行视图或场景。
+目录、正文、资源、准备与最终候选均核对版本和来源范围。按 [ADR-074](../adr/superseded/074-automatic-conversation-skill-loading.md)，当前对话自动判断受控目录内的策略相关性，回复区仅展示实际策略。授权场景仍只按用户声明逐字匹配，进入输入身份、继续、中断恢复及联系人缓存；入口模式不建立场景授权。13候选的准备编码为version2/schema5：已编码的历史依据变化新增`reply_skill/skill_policy_changed`严格变体，旧schema4必须经原身份、可靠终态及租约核对后显式重新准备；不补签执行视图或场景。
 
 私人依据留在原取材联系人范围；扩大策略范围不扩大依据读取权限。额外对照材料、偏好与概览隐藏导航均承担删除依赖。来源删除在原事务清除对照、发布正文、资源、方法及跨联系人使用副本，也清除尚未创建回复请求但明确选择了该版本的准备输入。实际验证与未验边界见[11集成记录](../../.scratch/memory-skill-integration-preparation/frontier-11-validation.md)。

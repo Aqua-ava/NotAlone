@@ -2,7 +2,7 @@
 
 > 后续修订（2026-10-23）：[ADR-102](102-dsh-typescript-backend-migration.md)已采纳精简 DSH 与 TS 后端迁移。DSH 搁置与沿用旧框架的阶段决定由 ADR-102 替代；记忆、Skill 审核、范围、预算和删除规则保持。 当前代码仍为旧实现，迁移及验收未完成。
 
-> 后续局部替代：[ADR-096](096-directory-backed-reply-skills.md)采用目录文件保存已发布正文与资源，自动发现新增和修改；数据库只管理业务元数据。本文旧存储及仅手动导入表述保留历史，范围、审核、预算、删除和权限约束继续有效。
+> 后续局部替代：[ADR-096](superseded/096-directory-backed-reply-skills.md)采用目录文件保存已发布正文与资源，自动发现新增和修改；数据库只管理业务元数据。本文旧存储及仅手动导入表述保留历史，范围、审核、预算、删除和权限约束继续有效。
 
 > 2026-10-21 设计审查：本文“尚未实现”是方案采纳时状态；分项工程签收与主线集成见[任务索引](../../.scratch/memory-skill-evolution/planning.md)。旧资料升级、个人画像推断和失效版本资格分别由 [ADR-070](070-automatic-memory-maintenance.md)、[ADR-072](072-personal-memory-insights-without-action-guidance.md)、[ADR-080](080-unified-memory-list-and-retired-exclusion.md)局部修订。人工审核发布、来源删除和反馈不自动授予权限保持。
 

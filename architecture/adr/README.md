@@ -28,7 +28,7 @@
 - [ADR-016：用本地微信 CLI 读取消息正文，OCR 只定位当前会话](016-local-wechat-cli-observation.md)
 - [ADR-017：优先用选中会话元数据匹配当前微信会话](017-selected-session-metadata-matching.md)
 - [ADR-018：Worker 启动命令当前全局串行](018-worker-command-global-serialization.md)
-- [ADR-019：回复 Skill 的受控辅助资源](019-controlled-reply-skill-resources.md)
+- [ADR-019：回复 Skill 的受控辅助资源](superseded/019-controlled-reply-skill-resources.md)（已合并入ADR-196）
 - [ADR-020：常驻本地后端服务与事件驱动前台同步](020-local-backend-service-and-event-driven-sync.md)
 - [ADR-021：源码分发与双层首次配置](021-source-distribution-and-first-run-setup.md)
 - [ADR-022：前台同步人工验证的独立控制面](022-foreground-sync-verification-control-surface.md)
@@ -83,7 +83,7 @@
 - [ADR-071：区分错误纠正与状态变化的历史生成资格](071-memory-retirement-and-generation-eligibility.md)
 - [ADR-072：个人主题与画像允许有据推断，排除行动指导](072-personal-memory-insights-without-action-guidance.md)
 - [ADR-073：前台观察与后台同步独立执行](073-foreground-observation-independent-of-background-sync.md)
-- [ADR-074：当前对话自动判断并加载回复 Skill](074-automatic-conversation-skill-loading.md)
+- [ADR-074：当前对话自动判断并加载回复 Skill](superseded/074-automatic-conversation-skill-loading.md)（已合并入ADR-196）
 - [ADR-074：参考腾讯源码自行实现自动记忆](074-tencent-reference-python-memory.md)
 - [ADR-075：孤立尾部表情的独立文字证据](075-isolated-emoji-tail-text-evidence.md)
 - [ADR-076：结合完整会话名单核验标题 OCR](076-session-list-assisted-name-matching.md)
@@ -103,12 +103,12 @@
 - [ADR-090：回复运行时按需补查受控历史](superseded/090-bounded-runtime-history-retrieval.md)（已合并入ADR-195）
 - [ADR-091：不增加运行计划和自动过程摘要](091-retire-runtime-todos-and-auto-summary.md)
 - [ADR-092：时间、日历和网络搜索工具保留为未来可选方向](092-defer-time-calendar-web-tools.md)
-- [ADR-093：沿用现有 Skill 导入限制与整轮输入预算](093-retain-current-skill-resource-budget.md)
+- [ADR-093：沿用现有 Skill 导入限制与整轮输入预算](superseded/093-retain-current-skill-resource-budget.md)（已合并入ADR-196）
 - [ADR-094：按删除范围保留或清除最小调用记录](094-ledger-erasure-by-deletion-scope.md)
 - [ADR-095：首次连接微信与一次账号范围授权](095-first-wechat-connection-and-account-grant.md)
-- [ADR-096：目录保存回复 Skill，数据库只管理业务状态](096-directory-backed-reply-skills.md)
+- [ADR-096：目录保存回复 Skill，数据库只管理业务状态](superseded/096-directory-backed-reply-skills.md)（已合并入ADR-196）
 - [ADR-097：维度门运维回退保留来源核验](superseded/097-dimension-gate-rollback-keeps-source-verification.md)
-- [ADR-098：Skill 数据库只保留业务状态](098-skill-business-state-only.md)
+- [ADR-098：Skill 数据库只保留业务状态](superseded/098-skill-business-state-only.md)（已合并入ADR-196）
 - [ADR-099：提取任务内的批次流水线](099-parallel-batch-extraction.md)
 - [ADR-100：授权私聊首次完整历史同步](100-authorized-private-history-sync.md)
 - [ADR-101：本机 App 完整首用与资料生命周期](101-local-app-first-use-lifecycle.md)
@@ -129,13 +129,13 @@
 - [ADR-126：受管语音原件与本地SILK转换](126-managed-voice-local-silk-conversion.md)
 - [ADR-127：SQLite 私聊历史正常重启后从头重扫](127-sqlite-history-normal-use-restart-rescan.md)
 - [ADR-128：微信消息去重保存与撤回状态](128-deduplicated-wechat-message-storage.md)
-- [ADR-129：DSH 回复 Skill 的受控发现与启用](129-controlled-dsh-reply-skill-discovery.md)
+- [ADR-129：DSH 回复 Skill 的受控发现与启用](superseded/129-controlled-dsh-reply-skill-discovery.md)（已合并入ADR-196）
 - [ADR-130：同账号本机来源变化后的明确重新关联](130-explicit-wechat-source-reconfirmation.md)
 - [ADR-131：联系人确认后使用当前可用资料生成](131-available-context-without-history-wait.md)
 - [ADR-132：按会话名称关联已有联系人](132-existing-contact-name-matching.md)
 - [ADR-133：按变化页持续同步与持久检查点](133-page-delta-private-history-sync.md)
-- [ADR-135：Skill 默认启用与中文场景管理](135-default-enabled-localized-skill-library.md)
-- [ADR-136：回复生成按需组合多个 Skill](136-multi-skill-reply-composition.md)
+- [ADR-135：Skill 默认启用与中文场景管理](superseded/135-default-enabled-localized-skill-library.md)（已合并入ADR-196）
+- [ADR-136：回复生成按需组合多个 Skill](superseded/136-multi-skill-reply-composition.md)（已合并入ADR-196）
 - [ADR-137：授权会话同步中的原图保存](137-original-image-authorized-sync.md)
 - [ADR-138：聊天图片原图提取与占位替换](138-chat-image-original-extraction-and-placeholder.md)
 - [ADR-139：引用回复同步与历史补齐](139-quoted-reply-sync-and-history-enrichment.md)
@@ -156,7 +156,7 @@
 - [ADR-154：按微信资源来源记录图片版本](154-source-grounded-image-versions.md)
 - [ADR-155：图片资源角色展示与缩略图复查](155-image-variant-display-and-thumbnail-refresh.md)
 - [ADR-156：授权范围内自动补查全部图片](156-automatic-image-reconciliation.md)
-- [ADR-157：Skill 业务身份与可迁移物理定位分离](157-portable-skill-directory-identity.md)
+- [ADR-157：Skill 业务身份与可迁移物理定位分离](superseded/157-portable-skill-directory-identity.md)（已合并入ADR-196）
 - [ADR-158：显式选择联系人后继续前台跟随](158-contact-selection-keeps-foreground-follow.md)
 - [ADR-159：前台联系人识别独立读取通道](159-foreground-read-channel-isolation.md)
 - [ADR-160：助手回看与 Skill 核验分离执行队列](160-assistant-read-and-skill-worker-isolation.md)
@@ -180,7 +180,7 @@
 
 - [ADR-177：退役重新认证与副本清理流程，保留最小删除等价事实](177-retire-source-recertification-and-cleanup.md)——来源守卫仅保护本轮独占读取，删除旧请求／批量面板和清理流程，迁移保留必要旧来源删除保护。
 
-- [ADR-178：按联系人分组限定可用的回复 Skill](178-contact-skill-groups.md)——用户自定义分组绑定 Skill，联系人至多归入一组，未分组默认不使用 Skill；局部修订 ADR-135／136。
+- [ADR-178：按联系人分组限定可用的回复 Skill](superseded/178-contact-skill-groups.md)——用户自定义分组绑定 Skill，联系人至多归入一组，未分组默认不使用 Skill；局部修订 ADR-135／136。（已合并入ADR-196）
 
 - [ADR-179：记忆图片在内存规范化并保留原图依据](179-memory-image-input-normalization.md)
 
@@ -207,8 +207,10 @@
 
 - [ADR-192：前台定位仅保留名称观察与已有联系人关联](192-retire-foreground-observation-compatibility.md)——退役旧双区域协议及前台再次确认写证明链，保留名称质量、手选和授权边界。
 
-- [ADR-193：回复 Skill 统一按需目录并退役显式预加载](193-retire-explicit-reply-skill-preload.md)——新请求拒绝显式选包，保留历史材料及删除约束。
+- [ADR-193：回复 Skill 统一按需目录并退役显式预加载](superseded/193-retire-explicit-reply-skill-preload.md)——新请求拒绝显式选包，保留历史材料及删除约束。（已合并入ADR-196）
 
 - [ADR-194：集中运行事实与回复准备职责](194-single-runtime-facts-and-reply-preparation.md)——统一在途及尝试登记，收敛近期聊天读取，退役新请求的旧历史确认参数。
 
 - [ADR-195：回复检索现行合并决定](195-reply-retrieval-consolidated.md)——合并 ADR-028／035／090／182／185／186／190／191：按需 BM25＋向量＋RRF 检索、全部获准历史、独立额度、未确认候选不进入新回复；原条目归档于 superseded/。
+
+- [ADR-196：回复 Skill 的发现、启用与按需加载现行合并决定](196-reply-skill-library-consolidated.md)——合并 ADR-019／074／093／096／098／129／135／136／157／178／193：授权目录只读包为权威来源，默认启用，联系人分组限定范围，官方 skill 工具按需组合，退役显式预加载；原条目归档于 superseded/。

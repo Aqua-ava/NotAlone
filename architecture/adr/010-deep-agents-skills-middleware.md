@@ -2,9 +2,9 @@
 
 > 状态：部分替代。下文保留历史决定与原因；当前要求见[Skill Library](../current/skill-library.md)与[核心流程](../current/core-flows.md)，实现及验收范围见[后台说明](../../backend-ts/README.md)。
 
-> 替代范围：[ADR-102](102-dsh-typescript-backend-migration.md)以 TypeScript／DSH 替代必须采用 `SkillsMiddleware` 的实现选择；[ADR-109](109-controlled-sqlite-storage-foundation.md)以受控 SQLite 替代 PostgreSQL 业务存储；[ADR-136](136-multi-skill-reply-composition.md)取消每轮零或一个 Skill 的上限。受控只读、来源与联系人隔离、按包固定修订、缓存失效、预算及禁止扩权边界继续有效，最终消息仍由用户亲自发送。
+> 替代范围：[ADR-102](102-dsh-typescript-backend-migration.md)以 TypeScript／DSH 替代必须采用 `SkillsMiddleware` 的实现选择；[ADR-109](109-controlled-sqlite-storage-foundation.md)以受控 SQLite 替代 PostgreSQL 业务存储；[ADR-136](superseded/136-multi-skill-reply-composition.md)取消每轮零或一个 Skill 的上限。受控只读、来源与联系人隔离、按包固定修订、缓存失效、预算及禁止扩权边界继续有效，最终消息仍由用户亲自发送。
 
-> 存储与发现后继：[ADR-096](096-directory-backed-reply-skills.md)与 [ADR-098](098-skill-business-state-only.md)采用目录文件保存正文与资源，数据库只管理业务状态；当前发现、核验与启停按 [ADR-129](129-controlled-dsh-reply-skill-discovery.md)及 [ADR-135](135-default-enabled-localized-skill-library.md)执行。本文旧存储及仅手动导入表述保留历史，范围、自动学习审核、预算、删除和权限约束继续有效。
+> 存储与发现后继：[ADR-096](superseded/096-directory-backed-reply-skills.md)与 [ADR-098](superseded/098-skill-business-state-only.md)采用目录文件保存正文与资源，数据库只管理业务状态；当前发现、核验与启停按 [ADR-129](superseded/129-controlled-dsh-reply-skill-discovery.md)及 [ADR-135](superseded/135-default-enabled-localized-skill-library.md)执行。本文旧存储及仅手动导入表述保留历史，范围、自动学习审核、预算、删除和权限约束继续有效。
 
 > 后续修订：[ADR-091](091-retire-runtime-todos-and-auto-summary.md)明确不增加运行计划和自动过程摘要；本文对 ADR-009 单次运行机制的保留不再包含 Todo／摘要中间件要求。框架、Skill、预算、持续讨论与删除边界保持。
 
@@ -13,7 +13,7 @@
 > 2026-10-11 局部修订见 [ADR-043](043-conversation-scenarios-and-direction-exploration.md)；不改变既有只读、联系人隔离和禁止发送边界。
 > 日期：2026-08-16
 > 修订：ADR-009 第 3 节的 `load_skill` 实现和第 6 节的 Deep Agents 边界
-> 早期修订：[ADR-019](019-controlled-reply-skill-resources.md)修订 v1 supporting files 的范围；只读读取、缓存和禁止扩权边界保留，单 Skill 上限已由 ADR-136 替代。
+> 早期修订：[ADR-019](superseded/019-controlled-reply-skill-resources.md)修订 v1 supporting files 的范围；只读读取、缓存和禁止扩权边界保留，单 Skill 上限已由 ADR-136 替代。
 
 ## 背景
 
@@ -23,7 +23,7 @@ LangChain 文档把这种 progressive disclosure 描述为一种可自行实现�
 
 ## 决策
 
-> 2026-10-19 后续修订：[ADR-074](074-automatic-conversation-skill-loading.md) 将回复区改为自动加载及只读实际策略；原显式版本 API 保留兼容，不再作为回复区手选入口。
+> 2026-10-19 后续修订：[ADR-074](superseded/074-automatic-conversation-skill-loading.md) 将回复区改为自动加载及只读实际策略；原显式版本 API 保留兼容，不再作为回复区手选入口。
 
 ### 1. 在 create_agent 中组合 SkillsMiddleware
 
