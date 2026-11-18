@@ -16,6 +16,7 @@ import type {SqliteDiscussionService} from '../service.ts';
 import type {SqliteDiscussionRuntime} from '../runtime.ts';
 import type {DiscussionAttempt} from '../contracts.ts';
 import {SqliteDiscussionSkillProtection} from '../skill-protection.ts';
+import {OwnedWork} from '../owned-work.ts';
 import {runSingleDiscussionTurn} from '../generation.ts';
 import {isSkillReadFailure} from '../skill-loop.ts';
 import {encode} from '../requests.ts';
@@ -31,7 +32,7 @@ export type ReplyPreparationStage='accepted'|'context-frozen'|'runtime-available
 interface Options {storage:SqliteStorage;service:SqliteReplyCandidateService;discussions:SqliteDiscussionService;runtime:SqliteDiscussionRuntime;model:HostReplyModelConfiguration;provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter;library?:SqliteSkillLibrary;authorize:(contactId:string)=>Promise<void>;onPreparationStage?:(stage:ReplyPreparationStage)=>void;/** 共享的本机检索索引；缺少语义模型时仍可使用BM25。 */retrieval?:Pick<RetrievalIndexLifecycle,'queryVector'|'wake'>;/** 可信装配仅可缩短历史搜索预算，供有界验证使用；页面与Tool不接收此参数。 */historySearchTimeoutMs?:number}
 /** 与11共享实际DSH执行、provider和arbiter；候选不创建第二套调用身份或账本。 */
 export class SqliteReplyTurns {
- private readonly options:Options;private stopping=false;private readonly pending=new Set<Promise<unknown>>();private readonly controllers=new Set<AbortController>();
+ private readonly options:Options;private readonly work=new OwnedWork();
  constructor(options:Options){this.options=options;}
  private stage(stage:ReplyPreparationStage):void{try{this.options.onPreparationStage?.(stage);}catch{}}
  private digest(requestId:string,revision:SkillRunRevision){return sha256(encode({format:1,systemPrompt:candidateSystemPrompt,model:this.options.model,revision,requestId}));}
@@ -62,15 +63,13 @@ export class SqliteReplyTurns {
  generate(input:ReplyGenerationInput){
   return withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),()=>{
   const observe=observeReply(input.contactId);observe('preparing');
-  if(this.stopping){observe('blocked','shutdown');return Promise.reject(new StorageFailure('reply_runtime_closed'));}
-  const controller=new AbortController();this.controllers.add(controller);
-  const pending=this.generateOwned({...input,signal:input.signal?AbortSignal.any([input.signal,controller.signal]):controller.signal},observe).then(value=>{observe('completed');return value;},error=>{
+  if(this.work.closed){observe('blocked','shutdown');return Promise.reject(new StorageFailure('reply_runtime_closed'));}
+  return this.work.run(input.signal,signal=>this.generateOwned({...input,signal},observe).then(value=>{observe('completed');return value;},error=>{
    const reasonCode=replyFailureReason(error);observe('failed',reasonCode);diagnose({event:'diagnostics.error',module:'reply',caller:'reply_generate',reasonCode,...(/^[a-f0-9]{8}/.test(input.contactId)?{contactPrefix:input.contactId.slice(0,8)}:{})});throw error;
-  });
-  this.pending.add(pending);const release=()=>{this.pending.delete(pending);this.controllers.delete(controller);};pending.then(release,release);return pending;
+  }));
   });
  }
- async close(){this.stopping=true;for(const c of this.controllers)c.abort();await Promise.allSettled([...this.pending]);}
+ close():Promise<void>{return this.work.close();}
  private async generateOwned(input:ReplyGenerationInput,observe:(phase:ReplyDiagnosticPhase,reasonCode?:string)=>void){
   const o=this.options,ownerId=o.service.ownerId;
   if(Object.hasOwn(input,'selectedPackageId')||Object.hasOwn(input,'acceptIncomplete'))throw new StorageFailure('reply_input_invalid');
