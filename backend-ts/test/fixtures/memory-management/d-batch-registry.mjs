@@ -66,7 +66,6 @@ export const registry={...base,migrations,actions:[...base.actions,...pagination
   if(revision(tx,true)!==before+1n)throw Error('fixture_owner_was_not_partially_updated');
   tx.run('DROP TRIGGER fixture_contact_flush_failure');return true;
  }},
- {name:'fixture.batchHistoryCount',mode:'read',retryBusy:false,execute(tx,{ownerId}){return tx.get('SELECT count(*) n FROM message WHERE owner_id=?',[ownerId]).n;}},
  {name:'fixture.batchParentDelete',mode:'write',retryBusy:false,execute(tx){
   for(const self of [true,false])tx.run("INSERT INTO memory_candidate(owner_id,id,scope_kind,contact_id,proposed_body,produced_attempt_id,event_id,output_no,state) VALUES(?,?,?,?,NULL,NULL,NULL,0,'deleted')",['owner-a',`parent-delete-${self}`,self?'self':'contact',self?null:'contact-a']);
   tx.run("DELETE FROM memory_candidate WHERE owner_id='owner-a'");

@@ -9,7 +9,7 @@ import type {ModelTaskClaim} from '../../../platform/models/model-permit-port.ts
 import type {L2ScenarioMemory} from '../../scenarios/document.ts';
 import {actualInputSources,taskSceneVersions,memoryBasis,frozenMemories,eligiblePriorMembers,publicationMembers,publicationDigest,renderDocuments,sourceStillValid,withDocumentSourceQualifications} from './basis.ts';
 import {documentActualInputs} from './inputs.ts';
-import {preconditions,revisions,task,taskView} from './actions.ts';
+import {preconditions,revisions,task} from './actions.ts';
 import {fail,textId} from '../qualification.ts';
 import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
 import {failLaterStage,finishLaterStagePublication,laterTaskPaused,reconcileTerminalLaterRuns} from './later-schedule.ts';

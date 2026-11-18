@@ -5,7 +5,8 @@ import {watch} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
-import {SqliteSkillLibrary,skillAnchor} from '../src/skills/sqlite/library.ts';
+import {skillAnchor} from '../src/skills/sqlite/library.ts';
+import {TestSkillLibrary} from './fixtures/sqlite-skills/test-library.mjs';
 import {SqliteSkillHttp} from '../src/skills/sqlite/http.ts';
 import {createServer} from 'node:http';
 import {once} from 'node:events';
@@ -20,7 +21,7 @@ async function fixture(t){
  await writeFile(reader,`#!/bin/sh\nif [ "$1" = package ] && [ -f ${quote(slow)} ]; then : > ${quote(join(dir,'native-entered'))}; /bin/sleep 0.8; fi\nexec ${quote(resolve('../native/skill-read/.build/skill-read'))} "$@"\n`,{mode:0o700});
  const storage=await SqliteStorage.open({userData:dir,intent:'create',role:'test',registryModule:new URL('./fixtures/sqlite-skills/registry.mjs',import.meta.url).href});
  await storage.execute('fixture.owner',{ownerId:'owner-a'});
- const library=new SqliteSkillLibrary(storage,'owner-a',root,{readerBinary:reader});
+ const library=new TestSkillLibrary(storage,'owner-a',root,{readerBinary:reader});
  t.after(async()=>{await library.close();await storage.close();await rm(dir,{recursive:true,force:true});});
  const [item]=await library.refresh();
  async function enterSlow(){
@@ -37,7 +38,7 @@ test('关闭Skill库时中止在途文件核验，不把关闭误写为文件失
  const result=f.library.assertAnchor(skillAnchor(f.item)).then(value=>({value}),error=>({error}));
  await entered;await f.library.close();
  assert.ok((await result).error,'关闭必须拒绝旧文件结果');
- const reader=new SqliteSkillLibrary(f.storage,'owner-a',f.root);t.after(()=>reader.close());
+ const reader=new TestSkillLibrary(f.storage,'owner-a',f.root);t.after(()=>reader.close());
  assert.deepEqual(await reader.get(f.item.id),f.item);
 });
 
@@ -48,7 +49,7 @@ test('取消慢刷新后不提交已读取的新Skill字节或修改既有核验
  await entered;controller.abort(new Error('synthetic-skill-cancelled'));
  assert.equal((await result).error?.message,'synthetic-skill-cancelled');
  await f.library.close();
- const reader=new SqliteSkillLibrary(f.storage,'owner-a',f.root);t.after(()=>reader.close());
+ const reader=new TestSkillLibrary(f.storage,'owner-a',f.root);t.after(()=>reader.close());
  assert.deepEqual(await reader.get(f.item.id),f.item);
 });
 
@@ -77,7 +78,7 @@ test('Skill管理HTTP断连取消慢核验，不在请求结束后提交新字�
 });
 
 test('首次异步扫描之前替换授权根也不能重新信任同字节目录',async t=>{
- const f=await fixture(t),library=new SqliteSkillLibrary(f.storage,'owner-a',f.root);t.after(()=>library.close());
+ const f=await fixture(t),library=new TestSkillLibrary(f.storage,'owner-a',f.root);t.after(()=>library.close());
  await rename(f.root,f.root+'-retained');await mkdir(join(f.root,'gentle'),{recursive:true});
  await writeFile(join(f.root,'gentle/SKILL.md'),f.document);
  await assert.rejects(library.inspect(),{code:'skill_directory_conflict'});

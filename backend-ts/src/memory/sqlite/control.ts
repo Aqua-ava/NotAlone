@@ -106,21 +106,6 @@ function calls(tx:StorageTransaction,ownerId:string,runId:string,contactId?:stri
  return summary;
 }
 function tasks(tx:StorageTransaction,ownerId:string,runId:string):StorageRow[]{return tx.all('SELECT * FROM processing_task WHERE owner_id=? AND run_id=? ORDER BY scope_kind,contact_id',[ownerId,runId]);}
-function resumable(tx:StorageTransaction,ownerId:string,runId:string,rows:StorageRow[],taskStates:Map<string,string>):boolean{
- const pendingByContact=new Map<string,number>();
- for(const row of tx.all(`SELECT i.source_contact_id,i.input_no FROM run_input i WHERE i.owner_id=? AND i.run_id=? AND i.role='target'
-  AND NOT EXISTS(SELECT 1 FROM step_input si JOIN processing_step s ON s.owner_id=si.owner_id AND s.id=si.step_id
-   WHERE si.owner_id=i.owner_id AND si.run_id=i.run_id AND si.run_input_no=i.input_no AND s.state IN ('succeeded','unknown'))`,[ownerId,runId]))pendingByContact.set(String(row.source_contact_id),(pendingByContact.get(String(row.source_contact_id))??0)+1);
- for(const task of rows){
-  const state=taskStates.get(String(task.id)),code=task.error_code===null?null:String(task.error_code);
-  if(state==='revoked')continue;
-  if(state==='failed'||state==='paused')return true;
-  if(state==='pending'&&(task.scope_kind==='self'||(pendingByContact.get(String(task.contact_id))??0)>0))return true;
-  if(state==='running')return true;
-  if(state==='incomplete'&&code!=='targets_completed_elsewhere')return true;
- }
- return false;
-}
 /** 只读投影；后续阶段由09的 laterStagesState 提供，未合并时视为尚未完成。 */
 export function projectControl(tx:StorageTransaction,ownerId:string,run:StorageRow,options:{laterStages?:LaterStagesState;taskStates?:Map<string,string>;contactId?:string}={}):ControlProjection{
  const result=projectExistingControl(tx,ownerId,run,options);
@@ -140,7 +125,6 @@ function projectExistingControl(tx:StorageTransaction,ownerId:string,run:Storage
  const taskUnknown=[...taskStates.values()].includes('unknown');
  const anyUnknown=callUnknown||classUnknown;
  const interruptedKnown=!anyUnknown&&(taskUnknown||unknownSteps(tx,ownerId,runId,options.contactId).length>0);
- const canResume=resumable(tx,ownerId,runId,taskRows,taskStates);
  const retryable=failedTasks.length>0||classes.pending>0;
  const controlVersion=count(run.intent_revision);
  const base={controlVersion,pending:classes.pending,revoked:classes.revoked,sharedFaultCode:sharedFault,calls:callsSummary};

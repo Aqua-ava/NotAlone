@@ -35,10 +35,6 @@ export interface ReplyCandidateVersion {
  candidateId:string;versionNo:number;origin:'model'|'manual';parentVersionNo:number|null;
  parts:string[];basis:({itemNo:number;kind:string;text:string;verification:'actual_input'|'inherited_unverified'}&InputMaterialMetadata)[];
 }
-export interface ReplyCandidateView extends DiscussionScope {
- requestId:string;coverageWarning:string|null;candidates:ReplyCandidateVersion[];
- selections:{id:string;candidateId:string;versionNo:number;selectionNo:number}[];
-}
 export type ReplyGenerationPhase='not_found'|'preparing'|'queued'|'generating'|'saving'|'committed'|'failed'|'unknown';
 export interface ReplyGenerationStatus {
  requestKey:string;phase:ReplyGenerationPhase;sent:boolean;/** 已发出但未收到结果、被本机自动放弃的未知调用（ADR-183）；已收到响应的失败不属于此类。 */abandoned:boolean;errorCode:string|null;retryable:boolean;startedAt:number|null;finishedAt:number|null;

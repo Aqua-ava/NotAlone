@@ -1,8 +1,6 @@
 import {hasCurrentReplyDependencies} from './provenance.ts';
-import {randomUUID} from 'node:crypto';
 import {StorageFailure,type StorageAction,type StorageRow,type StorageTransaction} from '../../storage/sqlite/contracts.ts';
 import {requireSkillRun} from '../../skills/sqlite/storage.ts';
-import type {SkillRunRevision} from '../../skills/sqlite/contracts.ts';
 import {requestAllowed} from '../../storage/sqlite/deletion/actions.ts';
 import {requireDiscussion,requireDiscussionContact,identifier,discussionView,selectDiscussionForRequest} from './actions.ts';
 import type {DiscussionAttempt} from './contracts.ts';

@@ -7,7 +7,8 @@ import {Context} from '@deepseek-ai/cordis';
 import {createScope} from '@deepseek-ai/dsh-scope';
 import SkillRegistry from '@deepseek-ai/dsh-skill';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
-import {SqliteSkillLibrary,skillAnchor} from '../src/skills/sqlite/library.ts';
+import {skillAnchor} from '../src/skills/sqlite/library.ts';
+import {TestSkillLibrary} from './fixtures/sqlite-skills/test-library.mjs';
 import {openSqliteSkillRun} from '../src/skills/sqlite/provider.ts';
 
 async function fixture(t){
@@ -16,7 +17,7 @@ async function fixture(t){
  t.after(()=>rm(directory,{recursive:true,force:true}));
  const storage=await SqliteStorage.open({userData:directory,intent:'create',role:'test',registryModule:new URL('./fixtures/sqlite-skills/registry.mjs',import.meta.url).href});
  t.after(()=>storage.close());await storage.execute('fixture.owner',{ownerId:'owner-a'});
- const library=new SqliteSkillLibrary(storage,'owner-a',root),items=[];
+ const library=new TestSkillLibrary(storage,'owner-a',root),items=[];
  for(const name of ['gentle','clear']){
   await mkdir(join(root,name,'references'),{recursive:true});
   await writeFile(join(root,name,'SKILL.md'),`---\nname: ${name}\ndescription: 用于合成回复场景\n---\n先了解表达方向。\n保留本意。\n参考 references/guide.md。\n`);

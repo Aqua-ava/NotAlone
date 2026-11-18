@@ -135,7 +135,7 @@ export class SqliteHistoryResyncService {
         return this.view(contactId, await this.stored(contactId), await this.coverage(contactId));
       }
       if (!await this.storage.execute<boolean>('history.preflightContinuity', { token: current, target: goal.target })) fail('history_source_continuity_unverified');
-      const coverage = await this.readGoal(contactId, current, goal, currentReport, signal, channel, currentScope);
+      const coverage = await this.readGoal(current, goal, currentReport, signal, channel, currentScope);
       await this.storage.execute('history.restoreComplete', { ownerId: this.owner(), contactId, requestKey, at: Date.now() });
       return this.view(contactId, await this.stored(contactId), coverage);
     } catch (error) {
@@ -146,7 +146,7 @@ export class SqliteHistoryResyncService {
       this.active.delete(contactId); finish();
     }
   }
-  private async readGoal(contactId: string, token: ReadEligibility, goal: RestoreGoal, report: HistorySupportReport,
+  private async readGoal(token: ReadEligibility, goal: RestoreGoal, report: HistorySupportReport,
     signal: AbortSignal, channel: HistoryChannel, scope: HistoryScope): Promise<HistoryCoverage> {
     let cursor = goal.cursor;
     try {

@@ -10,10 +10,8 @@ const action = (name: string, mode: 'read' | 'write', execute: (tx: StorageTrans
   ({ name: `history.${name}`, mode, retryBusy: true, execute });
 const fail = (code: string): never => { throw new StorageFailure(code); };
 const id = (value: unknown): string => typeof value === 'string' && value.length > 0 && value.length <= 256 && !/[\u0000-\u001f]/.test(value) ? value : fail('history_clear_request_invalid');
-const sha = (value: unknown): string => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value) ? value : fail('history_clear_request_invalid');
 const generation = (value: unknown): bigint => typeof value === 'string' && /^(0|[1-9][0-9]{0,17})$/.test(value) ? BigInt(value) : fail('history_clear_request_invalid');
 const boundedText = (value: unknown, max = 512): string => typeof value === 'string' && value.length > 0 && value.length <= max && !/[\u0000-\u001f\u007f]/.test(value) ? value : fail('history_clear_request_invalid');
-const integerCount = (value: unknown, max = maxBoundaryMembers): number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= max ? value : fail('history_clear_request_invalid');
 const row = (value: StorageRow | undefined, code: string): StorageRow => value ?? fail(code);
 /** 旧结构升级夹具可能只安装到本票之前的迁移；缺表时按“尚未具备该能力”拒绝，不把升级测试变成SQL错误。 */
 function hasTable(tx: StorageTransaction, name: string): boolean {

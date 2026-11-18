@@ -1,6 +1,6 @@
 // 仅迁移47读取已归档证明；不得作为新认证或运行时证明提供器。
 import {sha256} from '../../../platform/sha256.ts';
-import {StorageFailure,type StorageTransaction} from '../contracts.ts';
+import {StorageFailure} from '../contracts.ts';
 import type {ReadEligibility} from '../../../contacts/sqlite/contracts.ts';
 import type {HistorySupportReport,HistoryTarget} from '../../../history/sqlite/contracts.ts';
 import type {ResolvedWechatScope,WechatSchemaInspection} from '../../../history/wechat/native-client.ts';
@@ -11,7 +11,6 @@ const canonical=(v:any):string=>JSON.stringify(v,(_key,value)=>value&&typeof val
 export const legacyProofDigest=(proof:unknown)=>sha256(canonical(proof));
 const physical=(target:HistoryTarget)=>canonical({generation:target.sourceGeneration,partitions:[...target.partitions].sort(),
  tables:target.tables.map(t=>[t.partition,t.instance]).sort(),checked:target.checkedPartitions?[...target.checkedPartitions].sort():null});
-export const legacyTargetDigest=(target:HistoryTarget)=>legacyProofDigest(physical(target));
 const selected=(target:HistoryTarget)=>canonical({partitions:[...target.partitions].sort(),tables:target.tables.map(t=>[t.partition,t.instance]).sort()});
 const rawTable=(table:any)=>({...Object.fromEntries(Object.entries(table).filter(([k])=>!['target','partition','schemaVersion','indexes'].includes(k))),
  indexes:table.indexes.map((index:any)=>Object.fromEntries(Object.entries(index).filter(([k])=>k!=='id'))).map(canonical).sort()});

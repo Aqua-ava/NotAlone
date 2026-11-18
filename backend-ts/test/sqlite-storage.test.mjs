@@ -71,7 +71,6 @@ test('普通打开拒绝缺失、实例不符、损坏、漂移和未知高版�
  const reopen=()=>SqliteStorage.open({...options,intent:'open',expectedDatabaseId:id});
  const before=await readFile(databasePath(options));
  await assert.rejects(SqliteStorage.open({...options,intent:'open',expectedDatabaseId:'wrong'}),{code:'instance_mismatch'});
- await assert.rejects(SqliteStorage.open({...options,intent:'reset',expectedDatabaseId:id}),{code:'reset_requires_cutover'});
  assert.deepEqual(await readFile(databasePath(options)),before);
  const db=new DatabaseSync(databasePath(options));db.exec('CREATE TABLE drift(id TEXT)');db.close();
  await assert.rejects(reopen(),{code:'schema_drift'});

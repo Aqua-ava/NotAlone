@@ -63,7 +63,7 @@ function scopeRows(tx:StorageTransaction,op:DeletionOperation):RowDeletionTarget
  const quoteRows=tx.all(`SELECT id,contact_id,message_id,source_record_id,binding_id,target_message_id,referenced_server_id FROM history_quote WHERE owner_id=?${scope.kind==='account'?'':' AND contact_id=?'}`,
   scope.kind==='account'?[ownerId]:[ownerId,scope.contactId]);
  for(const quote of quoteRows){
-  const quoteId=String(quote.id),carrier=String(quote.message_id),quoteSource=String(quote.source_record_id),targetId=quote.target_message_id===null?null:String(quote.target_message_id);
+  const quoteId=String(quote.id),carrier=String(quote.message_id),quoteSource=String(quote.source_record_id);
   if(sourceIds.has(quoteSource)||deletedMessageIds.has(carrier))targets.push(target('history_quote',{owner_id:ownerId,id:quoteId}));
   else if(quoteTargetAffected(tx,ownerId,String(quote.contact_id),quote,affectedMessageIds))
    targets.push(target('history_quote_dependency',{owner_id:ownerId,id:quoteId}));

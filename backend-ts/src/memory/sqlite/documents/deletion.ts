@@ -1,6 +1,6 @@
 import {sourceDeletionIds} from '../../../history/sqlite/source-deletion.ts';
 import {sha256StableJson,sortedEntries} from '../../../platform/stable-json.ts';
-import {StorageFailure,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
+import {StorageFailure,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import type {CheckResult,DeletionDomain,DeletionOperation,RowDeletionTarget} from '../../../storage/sqlite/deletion/contracts.ts';
 import {identityDeletionAuthority} from '../../../contacts/sqlite/deletion.ts';
 import {isMediaDeletionScope,mediaDeletionAuthority} from '../../../media/sqlite/deletion.ts';

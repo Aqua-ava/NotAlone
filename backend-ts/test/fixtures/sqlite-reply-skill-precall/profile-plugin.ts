@@ -6,7 +6,7 @@ import {resolveAdapterOptions} from '@deepseek-ai/dsh-llm-deepseek';
 import {SqliteStorage} from '../../../src/storage/sqlite/client.ts';
 import {SqliteContactService} from '../../../src/contacts/sqlite/service.ts';
 import {SqliteHistoryService} from '../../../src/history/sqlite/service.ts';
-import {SqliteSkillLibrary} from '../../../src/skills/sqlite/library.ts';
+import {TestSkillLibrary} from '../sqlite-skills/test-library.mjs';
 import {SqliteDiscussionService} from '../../../src/reply/sqlite/service.ts';
 import {SqliteDiscussionRuntime} from '../../../src/reply/sqlite/runtime.ts';
 import {ActiveHolders} from '../../../src/storage/sqlite/deletion/holders.ts';
@@ -37,7 +37,7 @@ export async function apply(ctx:Context):Promise<void>{
  await contacts.setReading(true);await history.synchronize(contactId);
  const skillRoot=join(root,'user-skills');await mkdir(join(skillRoot,'gentle'),{recursive:true});
  await writeFile(join(skillRoot,'gentle/SKILL.md'),'---\nname: gentle\ndescription: 合成 profile 策略\n---\n先回应感受，再说明情况。\n');
- const library=new SqliteSkillLibrary(storage,owner,skillRoot);cleanups.push(()=>library.close());
+ const library=new TestSkillLibrary(storage,owner,skillRoot);cleanups.push(()=>library.close());
  let skill=await library.discover('gentle');skill=await library.setEnabled(skill.id,skill.headRevision,'enabled');
  {const group=await library.createGroup('合成分组',[skill.id]);await library.assignContactGroup(contactId,group.id,null);}
  const configuration=resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:'synthetic-only'});if(configuration.status!=='configured')throw new Error('synthetic host configuration unavailable');

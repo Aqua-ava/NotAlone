@@ -5,7 +5,7 @@ import { Tokenizer } from '@huggingface/tokenizers';
 import { InferenceSession, Tensor } from 'onnxruntime-node';
 import {EMBEDDING_REVISION} from './embedding-model.ts';
 export type EmbedTexts = (texts:readonly string[])=>Promise<readonly (readonly number[])[]>;
-export {EMBEDDING_REVISION,EMBEDDING_MODEL} from './embedding-model.ts';
+export {EMBEDDING_REVISION} from './embedding-model.ts';
 export function embeddingSnapshot(cache=join(homedir(),'.cache/notalone/memory-embedding')):string {
  return join(cache,'models--Qdrant--bge-small-zh-v1.5/snapshots',EMBEDDING_REVISION);
 }

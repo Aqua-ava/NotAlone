@@ -5,12 +5,10 @@ export type {ContentEvidence} from '../content/evidence.ts';
 
 export type AdoptionAction='add'|'update'|'noop'|'keep'|'merge';
 export type EvolutionKind='supplement'|'state_change'|'error_correction'|'historical_supplement'|'unresolved_conflict'|'independent';
-export interface AdoptionScope {owner_id:string;contact_id:string}
 export interface AdoptionFact extends ExtractedFact {
  dimension_evidence:Record<string,unknown>|null;
  verified_source_receipt:readonly [string,string,'any'|'all',boolean]|null;
 }
-export interface AdoptionFactInput {fact:AdoptionFact;candidate_trace_id?:string|null}
 export interface ModelUsage {
  call_id?:string|null;
  model_name?:string|null;
@@ -87,33 +85,4 @@ export interface AdjudicationRuntime {
  adjudicate(items:readonly AdjudicationItem[],signal:AbortSignal):Promise<readonly AdjudicationDecision[]>;
  verifyRelations(items:readonly AdjudicationItem[],decisions:readonly AdjudicationDecision[],signal:AbortSignal):Promise<readonly RelationVerification[]>;
  verifyMerge(item:AdjudicationItem,decision:AdjudicationDecision,source_ids:readonly string[],source_receipt:string,signal:AbortSignal):Promise<MergeVerification>;
-}
-export interface AdoptionBatchInput {
- contact_id:string;
- trace_id?:string|null;
- batch_key?:string|null;
- facts:readonly AdoptionFactInput[];
- signal:AbortSignal;
-}
-export type AdoptionDisposition='adopted'|'updated'|'merged'|'pending'|'skipped_duplicate'|'skipped_deleted'|'skipped_noop'|'failed';
-export interface AdoptionResult {
- candidate_index:number;
- disposition:AdoptionDisposition;
- candidate_id:string|null;
- memory_id:string|null;
- parent_memory_ids:string[];
- decision:AdoptionAction|null;
- reason:string|null;
-}
-export interface AdoptionStats {
- adopted:number;
- updated:number;
- merged:number;
- pending:number;
- skipped_duplicate:number;
- skipped_deleted:number;
- skipped_noop:number;
- failed:number;
- results:AdoptionResult[];
- usages:ModelUsage[];
 }

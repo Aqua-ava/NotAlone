@@ -29,27 +29,6 @@ import {
   type ScenarioVerificationFeedback,
 } from './document.ts';
 
-export {
-  DEFAULT_L2_SCENARIO_BUDGET,
-  L2ScenarioError,
-  L2ScenarioVerificationError,
-  canonicalScenarioJSON,
-  parseScenarioVerification,
-  scenarioDigest,
-  scenarioTopicId,
-  scenarioVerificationFeedback,
-  validateScenarioDocument,
-  type L2ScenarioScope,
-  type L2ScenarioBudget,
-  type L2ScenarioMemory,
-  type L2ScenarioReference,
-  type L2ScenarioParagraph,
-  type L2ScenarioVersion,
-  type L2ScenarioDraft,
-  type ScenarioVerification,
-  type ScenarioVerificationFeedback,
-} from './document.ts';
-
 export interface ScenarioDocumentCall {
   claim: {
     task_id: string;

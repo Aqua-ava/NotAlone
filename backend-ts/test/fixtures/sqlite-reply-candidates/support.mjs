@@ -13,7 +13,7 @@ import {resolveAdapterOptions} from '@deepseek-ai/dsh-llm-deepseek';
 import {SqliteStorage} from '../../../src/storage/sqlite/client.ts';
 import {SqliteContactService} from '../../../src/contacts/sqlite/service.ts';
 import {SqliteHistoryService} from '../../../src/history/sqlite/service.ts';
-import {SqliteSkillLibrary} from '../../../src/skills/sqlite/library.ts';
+import {TestSkillLibrary} from '../sqlite-skills/test-library.mjs';
 import {SqliteDiscussionService} from '../../../src/reply/sqlite/service.ts';
 import {SqliteDiscussionRuntime} from '../../../src/reply/sqlite/runtime.ts';
 import {ActiveHolders} from '../../../src/storage/sqlite/deletion/holders.ts';
@@ -110,7 +110,7 @@ const requests=[],supplierErrors=[],inProcessModel=options.inProcessModel??proce
  const skillRoot=join(root,'user-skills');await mkdir(skillRoot,{mode:0o700});
  const discussions=new SqliteDiscussionService(storage,owner,options.clock??Date.now);
  runtime=new SqliteDiscussionRuntime({storage,ownerId:owner,userData:root,ctx,holders,fault:options.runtimeFault});await runtime.initialize();
- const arbiter=new ModelPermitArbiter();library=new SqliteSkillLibrary(storage,owner,skillRoot,{readerBinary:options.skillReaderBinary});
+ const arbiter=new ModelPermitArbiter();library=new TestSkillLibrary(storage,owner,skillRoot,{readerBinary:options.skillReaderBinary});
  if(options.skillGroups!=='manual'){
   // 既有 Skill 机制测试默认让合成联系人使用全部 Skill；联系人分组门禁由专门测试验证，传 skillGroups:'manual' 可关闭。
   const scopeOf=library.groupScope.bind(library);

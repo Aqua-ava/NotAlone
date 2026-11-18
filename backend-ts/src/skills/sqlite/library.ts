@@ -2,7 +2,7 @@
 import {randomUUID} from 'node:crypto';
 import {isAbsolute} from 'node:path';
 import type {SqliteStorage} from '../../storage/sqlite/client.ts';
-import {sha256,validateName,type SkillPackage} from '../skill-package.ts';
+import {sha256,type SkillPackage} from '../skill-package.ts';
 import type {SkillAnchor,SkillEnabledState,SkillPackageState,SkillVerificationState} from './contracts.ts';
 import type {SkillGroupScope,SkillGroupState} from './groups.ts';
 import type {SkillObservation} from './storage.ts';
@@ -26,10 +26,6 @@ export interface VerifiedSkillSnapshot {
   snapshot: DirectorySnapshot;
 }
 type RefreshWork={controller:AbortController;promise:Promise<SkillPackageState[]>;waiters:number;settled:boolean};
-/** 管理核验与显式根迁移共用同一原生快照和摘要规则。 */
-export function readSkillDirectorySnapshot(directory: SecureSkillDirectory,name: string,expectedIdentity: string): DirectorySnapshot {
-  return directorySnapshot(name,directory.snapshot(name,expectedIdentity));
-}
 function directorySnapshot(name:string,snapshot:ReturnType<SecureSkillDirectory['snapshot']>):DirectorySnapshot{
   const {document,pkg}=snapshot;
   const manifest=[['SKILL.md',document.length,sha256(document)],...pkg.resources.map(r=>[r.relative_path,r.content.length,r.content_sha256])];
@@ -134,13 +130,6 @@ export class SqliteSkillLibrary {
   }
   inspect(signal?:AbortSignal): Promise<SkillPackageState[]> {return this.refresh(signal);}
   get(id: string,signal?:AbortSignal): Promise<SkillPackageState> {return this.execute('skills.get',{ownerId:this.ownerId,id},signal);}
-  async discover(directoryName: string,signal?:AbortSignal): Promise<SkillPackageState> {
-    return this.change(async()=>{
-      validateName(directoryName);
-      const current=(await this.list(signal)).find(item=>item.directoryName===directoryName);
-      return current??this.associateDirectory(directoryName,signal);
-    });
-  }
   private async associateDirectory(directoryName: string,signal?:AbortSignal): Promise<SkillPackageState> {
     let identity: string;
     try {identity=await this.directory.directoryIdentity(directoryName,this.signal(signal));}
@@ -173,10 +162,6 @@ export class SqliteSkillLibrary {
       }
       return this.execute('skills.setEnabled',{ownerId:this.ownerId,id,expectedHead,enabledState},signal);
     });
-  }
-  /** 来源资格失效时由05调用；不删除目录，不将包复制成独立来源。 */
-  requireVerification(id: string,expectedHead: bigint,signal?:AbortSignal): Promise<SkillPackageState> {
-    return this.change(()=>this.execute('skills.invalidate',{ownerId:this.ownerId,id,expectedHead,verificationState:'pending',reason:'source_qualification_changed'},signal));
   }
   /** 只共享在途只读核验；显式操作开始和完成后均须脱离旧一轮结果。 */
   private async change<T>(operation:()=>Promise<T>): Promise<T> {

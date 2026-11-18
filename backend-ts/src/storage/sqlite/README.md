@@ -6,7 +6,7 @@ SQLite 是当前默认业务存储。正式装配使用 `sqlite-host-plugin.ts`�
 
 ## 实例与连接
 
-`client.ts` 导出 `SqliteStorage.open({userData,intent,role,expectedDatabaseId?})`。`userData` 必须为配置提供的真实绝对目录；所有数据库文件固定在 `managed/sqlite/notalone.sqlite`，不接受独立 SQL 路径。`create` 排他创建；`open` 必须带预期 `databaseId`，文件缺失或身份、权限、版本、完整性不符均保留现场并失败，不新建。`reset` 明确返回 `reset_requires_cutover`，不承担 20 的重置授权及清理流程。数据库角色 `business/test` 不授权破坏操作。
+`client.ts` 导出 `SqliteStorage.open({userData,intent,role,expectedDatabaseId?})`。`userData` 必须为配置提供的真实绝对目录；所有数据库文件固定在 `managed/sqlite/notalone.sqlite`，不接受独立 SQL 路径。`create` 排他创建；`open` 必须带预期 `databaseId`，文件缺失或身份、权限、版本、完整性不符均保留现场并失败，不新建。未知 `intent`（含 `reset`）返回 `storage_configuration_invalid`，不承担 20 的重置授权及清理流程。数据库角色 `business/test` 不授权破坏操作。
 
 `status` 包含 `databaseId,runtimeId,epoch:bigint,schemaVersion,sqliteVersion,role`。每次成功打开推进持久 `epoch` 并更换 `runtimeId`；`StorageLease` 为前三个字段。重开撤销旧运行租约；业务自己的读取、联系人、来源、任务代次仍须在具名动作内分别复验，不可用该租约代替业务资格。
 

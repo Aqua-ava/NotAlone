@@ -6,7 +6,7 @@ import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {randomUUID} from 'node:crypto';
 import {fixture,record,owner} from './fixtures/memory-sqlite/support.mjs';
-import {SqliteSkillLibrary} from '../src/skills/sqlite/library.ts';
+import {TestSkillLibrary} from './fixtures/sqlite-skills/test-library.mjs';
 
 const modes=new Set(['skill','resource','none','readfail']);
 const skillDocument='---\nname: gentle\ndescription: 用于温和回应合成对话，先回应感受再说明本意\n---\n先回应感受。\n保持本次表达方向。\n需要补充例子时查看 references/guide.md。\n';
@@ -28,7 +28,7 @@ export async function prepareSkillDesktop({mode='resource'}={}){
  const skillRoot=join(root,'user-skills'),skillPath=join(skillRoot,'gentle/SKILL.md');
  await mkdir(join(skillRoot,'gentle/references'),{recursive:true,mode:0o700});
  await writeFile(skillPath,skillDocument,{mode:0o600});await writeFile(join(skillRoot,'gentle/references/guide.md'),resourceText,{mode:0o600});
- const library=new SqliteSkillLibrary(f.storage,owner,skillRoot);let skill=await library.discover('gentle');skill=await library.setEnabled(skill.id,skill.headRevision,'enabled');
+ const library=new TestSkillLibrary(f.storage,owner,skillRoot);let skill=await library.discover('gentle');skill=await library.setEnabled(skill.id,skill.headRevision,'enabled');
  f.channel.page=async scope=>({target:f.target.descriptor,cursorIn:null,cursorOut:null,records:[record('1',{text:scope.token.contact_id===contactIds[0]?'我最近想找你聊聊，这周末有空吗？':'我周末准备休息，我们下次再约。'})],completedPartitions:['shard-a'],exhausted:true});
  for(const contactId of contactIds)await f.service.synchronize(contactId);
  await f.contacts.setReading(false);const databaseId=f.storage.status.databaseId;

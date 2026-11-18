@@ -67,7 +67,7 @@ test('执行壳独占按需Skill，正文载入后可在两次上限内读取声
  const {writeFile}=await import('node:fs/promises');
  const {SqliteStorage}=await import('../src/storage/sqlite/client.ts');
  const {SqliteContactService}=await import('../src/contacts/sqlite/service.ts');
- const {SqliteSkillLibrary,skillAnchor}=await import('../src/skills/sqlite/library.ts');
+ const {skillAnchor}=await import('../src/skills/sqlite/library.ts'),{TestSkillLibrary}=await import('./fixtures/sqlite-skills/test-library.mjs');
  const {openSqliteSkillRun}=await import('../src/skills/sqlite/provider.ts');
  const home=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-auto-skill-'))),original=path.join(home,'originals');
  await mkdir(path.join(original,'gentle','references'),{recursive:true});
@@ -76,7 +76,7 @@ test('执行壳独占按需Skill，正文载入后可在两次上限内读取声
  const database=await SqliteStorage.open({userData:home,intent:'create',role:'test',registryModule:new URL('./fixtures/sqlite-skills/real-registry.mjs',import.meta.url).href});
  t.after(async()=>{await database.close();await rm(home,{recursive:true,force:true});});
  await new SqliteContactService(database,f.options.attempt.ownerId,{account:async()=>{throw Error('不得读取渠道');},sessions:async()=>[]}).initialize();
- const library=new SqliteSkillLibrary(database,f.options.attempt.ownerId,original);let item=await library.discover('gentle');item=await library.setEnabled(item.id,item.headRevision,'enabled');await database.execute('fixture.grantSkills',{ownerId:f.options.attempt.ownerId,contactId:f.options.attempt.contactId});
+ const library=new TestSkillLibrary(database,f.options.attempt.ownerId,original);let item=await library.discover('gentle');item=await library.setEnabled(item.id,item.headRevision,'enabled');await database.execute('fixture.grantSkills',{ownerId:f.options.attempt.ownerId,contactId:f.options.attempt.contactId});
  const selections=[],inputs=[],protection={assertCurrent:async(scope,revision)=>{if(revision)await database.execute('skills.assertRun',{ownerId:scope.ownerId,revision});},recordSelection:async(_scope,value)=>{selections.push(value);},recordInput:async value=>{inputs.push(value);}};
  let ownedRun,opened=0;
  f.options.openSkillRun=async()=>{opened++;return ownedRun=await openSqliteSkillRun(library,{contactId:f.options.attempt.contactId,callId:f.options.callId},protection);};
@@ -140,7 +140,7 @@ test('真实SQLite Skill库经官方scoped provider载入，选择事实与真�
  const {writeFile,readFile}=await import('node:fs/promises');
  const {SqliteStorage}=await import('../src/storage/sqlite/client.ts');
  const {SqliteContactService}=await import('../src/contacts/sqlite/service.ts');
- const {SqliteSkillLibrary,skillAnchor}=await import('../src/skills/sqlite/library.ts');
+ const {skillAnchor}=await import('../src/skills/sqlite/library.ts'),{TestSkillLibrary}=await import('./fixtures/sqlite-skills/test-library.mjs');
  const {openSqliteSkillRun}=await import('../src/skills/sqlite/provider.ts');
  const f=await fixture(t,(_req,res)=>f.requests.length===1?modelToolResponse(res,'skill',{name:'gentle'}):modelTextResponse(res,'使用实际载入方法的合成讨论。'));const home=await realpath(await mkdtemp(path.join(tmpdir(),'notalone-discussion-skill-')));
  const original=path.join(home,'originals');await mkdir(path.join(original,'gentle'),{recursive:true});
@@ -149,7 +149,7 @@ test('真实SQLite Skill库经官方scoped provider载入，选择事实与真�
  const database=await SqliteStorage.open({userData:home,intent:'create',role:'test',registryModule:new URL('./fixtures/sqlite-skills/real-registry.mjs',import.meta.url).href});
  t.after(async()=>{await database.close();await rm(home,{recursive:true,force:true});});
  await new SqliteContactService(database,f.options.attempt.ownerId,{account:async()=>{throw Error('本测试不得读取渠道');},sessions:async()=>[]}).initialize();
- const library=new SqliteSkillLibrary(database,f.options.attempt.ownerId,original);let item=await library.discover('gentle');item=await library.setEnabled(item.id,item.headRevision,'enabled');await database.execute('fixture.grantSkills',{ownerId:f.options.attempt.ownerId,contactId:f.options.attempt.contactId});
+ const library=new TestSkillLibrary(database,f.options.attempt.ownerId,original);let item=await library.discover('gentle');item=await library.setEnabled(item.id,item.headRevision,'enabled');await database.execute('fixture.grantSkills',{ownerId:f.options.attempt.ownerId,contactId:f.options.attempt.contactId});
  const selected=[],loaded=[];
  const protection={
   assertCurrent:async(scope,revision)=>{assert.equal(scope.callId,f.options.callId);if(revision)await database.execute('skills.assertRun',{ownerId:scope.ownerId,revision});},

@@ -4,7 +4,7 @@ import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import type {SqliteStorage} from '../../storage/sqlite/client.ts';
 import {ActiveHolders} from '../../storage/sqlite/deletion/holders.ts';
 import {DeletionService} from '../../storage/sqlite/deletion/service.ts';
-import type {ManagedAddress,DeletionSnapshot} from '../../storage/sqlite/deletion/contracts.ts';
+import type {ManagedAddress} from '../../storage/sqlite/deletion/contracts.ts';
 import {MediaFiles} from './files.ts';
 import type {AttemptHandle} from './actions.ts';
 import type {MediaAdapter,MediaGoal,MediaSnapshot,MediaPreview,MediaValidation,MediaContactPort,MediaSourcePort,MediaFileInput,MediaAttemptView} from './contracts.ts';

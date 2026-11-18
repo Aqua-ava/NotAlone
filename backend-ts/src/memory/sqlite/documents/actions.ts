@@ -1,4 +1,3 @@
-import {randomUUID} from 'node:crypto';
 import type {StorageAction,StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {assertInputs,assertTaskContributions,fail,textId} from '../qualification.ts';
 import {available,scope as readScope} from '../management/qualification.ts';

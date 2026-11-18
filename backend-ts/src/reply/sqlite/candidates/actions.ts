@@ -146,7 +146,7 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
  action('skillInputs','read',(tx,i)=>{
   requireDiscussion(tx,i);
   if(typeof i.requestId!=='string'||!/^[a-f0-9-]{36}$/.test(i.requestId)||!Number.isSafeInteger(i.offset)||i.offset<0||i.offset>1_000_000)fail('reply_input_invalid');
-  const request=tx.get("SELECT 1 FROM reply_request WHERE owner_id=? AND id=? AND contact_id=? AND discussion_id=? AND kind='reply' AND state='committed'",[i.ownerId,i.requestId,i.contactId,i.discussionId])??fail('reply_candidate_unavailable');
+  tx.get("SELECT 1 FROM reply_request WHERE owner_id=? AND id=? AND contact_id=? AND discussion_id=? AND kind='reply' AND state='committed'",[i.ownerId,i.requestId,i.contactId,i.discussionId])??fail('reply_candidate_unavailable');
   const candidate=tx.get('SELECT id FROM reply_candidate WHERE owner_id=? AND request_id=? ORDER BY candidate_no LIMIT 1',[i.ownerId,i.requestId]);
   if(!candidate)return {items:[],nextOffset:null,total:0};
   requireCandidate(tx,{...i,candidateId:String(candidate.id)},reader);
@@ -172,4 +172,3 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
  }),
  ];
 }
-export const replyCandidateActions=createReplyCandidateActions();

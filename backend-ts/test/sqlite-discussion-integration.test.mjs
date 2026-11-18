@@ -16,7 +16,7 @@ import {resolveAdapterOptions} from '@deepseek-ai/dsh-llm-deepseek';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
 import {StorageFailure} from '../src/storage/sqlite/contracts.ts';
 import {SqliteContactService} from '../src/contacts/sqlite/service.ts';
-import {SqliteSkillLibrary} from '../src/skills/sqlite/library.ts';
+import {TestSkillLibrary} from './fixtures/sqlite-skills/test-library.mjs';
 import {SqliteDiscussionService} from '../src/reply/sqlite/service.ts';
 import {SqliteDiscussionRuntime} from '../src/reply/sqlite/runtime.ts';
 import {SqliteDiscussionTurns} from '../src/reply/sqlite/turns.ts';
@@ -39,7 +39,7 @@ async function fixture(t,options={}){
  const provider=installModelProvider(ctx,{provider:'synthetic-official',connection:resolveAdapterOptions({baseURL:`http://127.0.0.1:${server.address().port}/anthropic`,thinking:'disabled',maxTokens:512,retryPolicy:{mode:'normal',maxRetries:0}}),resolveAuth:async()=>({headers:{}}),resolveUserId:()=> 'synthetic-anonymous'});
  const model={provider:'synthetic-official',model:'synthetic-model',maxTokens:512,temperature:0,reasoningEffort:'off',physical_limit:1,deadline_ms:5000,warning_ratio:0.8,budgetProfile:{context_window_tokens:8192,safety_margin_tokens:512}};
  const skillRoot=join(root,'user-skills');await mkdir(skillRoot,{mode:0o700});const holders=new ActiveHolders();let runtime;let service;let turns;let library;
- const bind=async()=>{service=new SqliteDiscussionService(storage,owner,options.clock??Date.now);runtime=new SqliteDiscussionRuntime({storage:options.runtimeStorageHook?{status:storage.status,execute:(...args)=>options.runtimeStorageHook(storage,...args)}:storage,ownerId:owner,userData:root,ctx,holders,fault:options.fault});await runtime.initialize();library=new SqliteSkillLibrary(storage,owner,skillRoot);turns=new SqliteDiscussionTurns({storage:options.turnStorageHook?{status:storage.status,execute:(...args)=>options.turnStorageHook(storage,...args)}:storage,discussions:service,runtime,library,model,provider,arbiter:new ModelPermitArbiter(),authorize:async()=>{}});};await bind();
+ const bind=async()=>{service=new SqliteDiscussionService(storage,owner,options.clock??Date.now);runtime=new SqliteDiscussionRuntime({storage:options.runtimeStorageHook?{status:storage.status,execute:(...args)=>options.runtimeStorageHook(storage,...args)}:storage,ownerId:owner,userData:root,ctx,holders,fault:options.fault});await runtime.initialize();library=new TestSkillLibrary(storage,owner,skillRoot);turns=new SqliteDiscussionTurns({storage:options.turnStorageHook?{status:storage.status,execute:(...args)=>options.turnStorageHook(storage,...args)}:storage,discussions:service,runtime,library,model,provider,arbiter:new ModelPermitArbiter(),authorize:async()=>{}});};await bind();
  t.after(async()=>{try{await runtime.close();}catch(error){if(!options.expectedBlocked)throw error;}await provider.dispose();await ctx.fiber.dispose();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));await storage.close();await rm(root,{recursive:true,force:true});});
  return {root,ids,requests,skillRoot,contacts,holders,get service(){return service;},get storage(){return storage;},get runtime(){return runtime;},get turns(){return turns;},get library(){return library;},async reopen(){await runtime.close();const id=storage.status.databaseId;await storage.close();storage=await SqliteStorage.open({userData:root,intent:'open',expectedDatabaseId:id,role:'test',registryModule});await bind();}};
 }

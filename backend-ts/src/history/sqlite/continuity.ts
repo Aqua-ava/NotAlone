@@ -1,4 +1,4 @@
-import { StorageFailure, type StorageTransaction, type StorageDiagnostic } from '../../storage/sqlite/contracts.ts';
+import { StorageFailure, type StorageTransaction } from '../../storage/sqlite/contracts.ts';
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistorySupportReport, HistoryTarget } from './contracts.ts';
 import { historyTargetTransition, isPartitionGrowthTargetChange, type HistoryTargetTransition } from '../partition-growth.ts';

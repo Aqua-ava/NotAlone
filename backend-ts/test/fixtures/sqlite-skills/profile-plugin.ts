@@ -5,7 +5,7 @@ import {createServer} from 'node:http';
 import {once} from 'node:events';
 import {join} from 'node:path';
 import {SqliteStorage} from '../../../src/storage/sqlite/client.ts';
-import {SqliteSkillLibrary} from '../../../src/skills/sqlite/library.ts';
+import {TestSkillLibrary} from './test-library.mjs';
 import {openSqliteSkillRun} from '../../../src/skills/sqlite/provider.ts';
 import {SqliteSkillHttp} from '../../../src/skills/sqlite/http.ts';
 export const name='notalone-sqlite-skills-profile-test';
@@ -14,7 +14,7 @@ export async function apply(ctx: Context): Promise<void> {
  const dir=process.env.NOTALONE_SKILL_TEST_DIR!;
  const storage=await SqliteStorage.open({userData:dir,intent:'create',role:'test',registryModule:new URL('./registry.mjs',import.meta.url).href});
  await storage.execute('fixture.owner',{ownerId:'owner-a'});
- const library=new SqliteSkillLibrary(storage,'owner-a',join(dir,'originals'),{readerBinary:process.env.NOTALONE_SKILL_TEST_READER});
+ const library=new TestSkillLibrary(storage,'owner-a',join(dir,'originals'),{readerBinary:process.env.NOTALONE_SKILL_TEST_READER});
  const skills=new SqliteSkillHttp(library,req=>req.headers.authorization==='Bearer profile-only'&&!req.headers.origin);
  let sequence=0;
  const server=createServer(async(req,res)=>{

@@ -10,7 +10,3 @@ export interface RuntimeCopy extends DiscussionScope {
 }
 /** 07通用调用表的reply producer必须指向这些真实身份；不可按owner推导讨论权限。 */
 export interface DiscussionAttempt extends DiscussionScope {requestId:string;attemptId:string;leaseToken:string;dataGeneration:bigint;discussionGeneration:bigint;sourceRevision:bigint}
-export type ContextMaterial =
- | {kind:'message';recordId:string;messageId:string;sourceContactId:string;acceptedRevision:bigint}
- | {kind:'entry';entryId:string}
- | {kind:'skill';packageId:string;packageRevisionNo:bigint};

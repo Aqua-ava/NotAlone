@@ -2,7 +2,7 @@ import {observedProcessingAction} from '../diagnostics.ts';
 import {randomUUID} from 'node:crypto';
 import type {StorageAction,StorageLease,StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {readExtractionToolArguments} from '../../extraction/arguments.ts';
-import {DEFAULT_L2_SCENARIO_BUDGET,L2ScenarioError,parseScenarioVerification,validateScenarioDocument,type L2ScenarioMemory,type L2ScenarioReference} from '../../scenarios/document.ts';
+import {DEFAULT_L2_SCENARIO_BUDGET,L2ScenarioError,parseScenarioVerification,validateScenarioDocument,type L2ScenarioReference} from '../../scenarios/document.ts';
 import {selectProfilePublication,validateProfile,type ProfileVerification} from '../../profiles/document.ts';
 import {taskSceneVersions,documentSources,frozenMemories,eligiblePriorMembers,publicationMembers,publicationDigest,renderDocuments,withDocumentSourceQualifications,withSourceMemo} from './basis.ts';
 import {current} from './stages.ts';

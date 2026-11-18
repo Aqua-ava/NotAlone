@@ -4,7 +4,7 @@ import {mkdtemp,realpath,mkdir,writeFile,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
-import {SqliteSkillLibrary} from '../src/skills/sqlite/library.ts';
+import {TestSkillLibrary} from './fixtures/sqlite-skills/test-library.mjs';
 
 async function fixture(t){
  const dir=await realpath(await mkdtemp(join(tmpdir(),'notalone-skills-14-')));
@@ -14,7 +14,7 @@ async function fixture(t){
  await writeFile(join(root,'gentle','SKILL.md'),bytes);
  const storage=await SqliteStorage.open({userData:dir,intent:'create',role:'test',registryModule:new URL('./fixtures/sqlite-skills/registry.mjs',import.meta.url).href});
  t.after(()=>storage.close());await storage.execute('fixture.owner',{ownerId:'owner-a'});
- return {dir,root,storage,bytes,library:new SqliteSkillLibrary(storage,'owner-a',root)};
+ return {dir,root,storage,bytes,library:new TestSkillLibrary(storage,'owner-a',root)};
 }
 
 test('授权根中核验通过的 Skill 默认启用，用户停用持续优先，原目录字节保持',async t=>{
@@ -110,12 +110,12 @@ test('默认启用来历与后续用户停用在 SQLite 重开后保持',async t
  let [item]=await library.refresh();assert.equal(item.enabledState,'enabled');assert.equal(item.enabledOrigin,'default');
  const databaseId=storage.status.databaseId;await storage.close();
  const reopened=await SqliteStorage.open({userData:dir,intent:'open',expectedDatabaseId:databaseId,role:'test',registryModule:new URL('./fixtures/sqlite-skills/registry.mjs',import.meta.url).href});t.after(()=>reopened.close());
- const same=new SqliteSkillLibrary(reopened,'owner-a',root);
+ const same=new TestSkillLibrary(reopened,'owner-a',root);
  item=await same.get(item.id);assert.equal(item.enabledState,'enabled');assert.equal(item.enabledOrigin,'default');
  item=await same.setEnabled(item.id,item.headRevision,'disabled');assert.equal(item.enabledOrigin,'user_action');
  await reopened.close();
  const reopenedAgain=await SqliteStorage.open({userData:dir,intent:'open',expectedDatabaseId:databaseId,role:'test',registryModule:new URL('./fixtures/sqlite-skills/registry.mjs',import.meta.url).href});t.after(()=>reopenedAgain.close());
- const final=new SqliteSkillLibrary(reopenedAgain,'owner-a',root);
+ const final=new TestSkillLibrary(reopenedAgain,'owner-a',root);
  item=await final.get(item.id);assert.equal(item.enabledState,'disabled');assert.equal(item.enabledOrigin,'user_action');
 });
 
@@ -169,7 +169,7 @@ test('相同内容目录重建保留包身份与停用，目录缺失不删除�
 test('目录/资源越界与指令扩权被拒绝，owner查询隔离，未知不隐式变为停用',async t=>{
  const {library,root,storage,bytes}=await fixture(t);await library.discover('gentle');
  await storage.execute('fixture.owner',{ownerId:'owner-b'});
- const other=new SqliteSkillLibrary(storage,'owner-b',root);assert.deepEqual(await other.list(),[]);
+ const other=new TestSkillLibrary(storage,'owner-b',root);assert.deepEqual(await other.list(),[]);
  await assert.rejects(other.get((await library.list())[0].id),{code:'skill_missing'});
  await assert.rejects(library.discover('../gentle'));
  await symlink(join(root,'gentle'),join(root,'linked'));await assert.rejects(library.discover('linked'));
@@ -248,7 +248,7 @@ test('重开沿用已知启停及未知状态，缺业务引用不触发目录�
  const {library,storage,dir,root,bytes}=await fixture(t);let item=await library.discover('gentle');item=await library.setEnabled(item.id,item.headRevision,'disabled');
  const id=storage.status.databaseId;await storage.close();
  const reopened=await SqliteStorage.open({userData:dir,intent:'open',expectedDatabaseId:id,role:'test',registryModule:new URL('./fixtures/sqlite-skills/registry.mjs',import.meta.url).href});t.after(()=>reopened.close());
- const same=new SqliteSkillLibrary(reopened,'owner-a',root);assert.equal((await same.get(item.id)).enabledState,'disabled');
+ const same=new TestSkillLibrary(reopened,'owner-a',root);assert.equal((await same.get(item.id)).enabledState,'disabled');
  assert.equal(await readFile(join(root,'gentle','SKILL.md'),'utf8'),bytes);
  await assert.rejects(openSqliteSkillRun(same,{contactId:'contact-a',callId:'no-protection'},null),{code:'skill_protection_required'});
 });
@@ -301,7 +301,7 @@ test('末尾scope检查期间停用Skill，组合事务必须同时拒绝旧目�
 test('账号fence后拒绝迟到管理写入和空目录运行资格，其他owner不受影响',async t=>{
  const {library,storage,root}=await fixture(t);let item=await library.discover('gentle');item=await library.setEnabled(item.id,item.headRevision,'enabled');
  const anchor=skillAnchor(item),frozen={packages:[{id:item.id,headRevision:item.headRevision}],eligible:[anchor]};
- await storage.execute('fixture.owner',{ownerId:'owner-b'});const other=new SqliteSkillLibrary(storage,'owner-b',root);await other.discover('gentle');
+ await storage.execute('fixture.owner',{ownerId:'owner-b'});const other=new TestSkillLibrary(storage,'owner-b',root);await other.discover('gentle');
  for(const state of ['deleting','deleted']){
   await storage.execute('fixture.ownerState',{ownerId:'owner-a',state});
   await assert.rejects(library.discover('gentle'),{code:'skill_owner_unavailable'});
@@ -320,7 +320,7 @@ test('账号元数据删除合同清两表并可重试，拒绝越owner且原目
  await assert.rejects(storage.execute('fixture.skillFence',account),{code:'skill_deletion_not_fenced'});
  const source={...account,scope:{kind:'source',contactId:'contact-a',sourceId:'source-a'}};
  assert.deepEqual(await storage.execute('fixture.skillTargets',source),[]);
- await storage.execute('fixture.owner',{ownerId:'owner-b'});const other=new SqliteSkillLibrary(storage,'owner-b',root);await other.discover('gentle');
+ await storage.execute('fixture.owner',{ownerId:'owner-b'});const other=new TestSkillLibrary(storage,'owner-b',root);await other.discover('gentle');
  await storage.execute('fixture.ownerState',{ownerId:'owner-a',state:'deleting'});await storage.execute('fixture.skillFence',account);
  const targets=await storage.execute('fixture.skillTargets',account);assert.equal(targets.length,2);assert.ok(targets.every(t=>t.kind==='row'&&!JSON.stringify(t).includes(root)));
  assert.equal((await storage.execute('fixture.skillVerify',account)).database_rows.result,'blocked');

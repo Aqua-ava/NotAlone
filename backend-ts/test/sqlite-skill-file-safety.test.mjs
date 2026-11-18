@@ -6,7 +6,8 @@ import {basename,join,resolve} from 'node:path';
 import {execFileSync,spawn,spawnSync} from 'node:child_process';
 import {once} from 'node:events';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
-import {SqliteSkillLibrary,skillAnchor} from '../src/skills/sqlite/library.ts';
+import {skillAnchor} from '../src/skills/sqlite/library.ts';
+import {TestSkillLibrary} from './fixtures/sqlite-skills/test-library.mjs';
 import {SecureSkillDirectory} from '../src/skills/secure-directory.ts';
 import {readPackage} from '../src/skills/skill-package.ts';
 
@@ -17,7 +18,7 @@ async function fixture(t){
  const document='---\nname: gentle\ndescription: 用于合成表达\n---\n先回应感受。\n';
  await writeFile(join(root,'gentle/SKILL.md'),document);await writeFile(join(root,'gentle/references/guide.md'),'已核验合成资料。');
  const storage=await SqliteStorage.open({userData:dir,intent:'create',role:'test',registryModule:new URL('./fixtures/sqlite-skills/registry.mjs',import.meta.url).href});t.after(()=>storage.close());await storage.execute('fixture.owner',{ownerId:'owner-a'});
- const library=new SqliteSkillLibrary(storage,'owner-a',root);let item=await library.discover('gentle');item=await library.setEnabled(item.id,item.headRevision,'enabled');
+ const library=new TestSkillLibrary(storage,'owner-a',root);let item=await library.discover('gentle');item=await library.setEnabled(item.id,item.headRevision,'enabled');
  return {dir,root,library,item,document};
 }
 

@@ -1,6 +1,5 @@
 import { sha256 } from '../../platform/sha256.ts';
-import { StorageFailure } from '../../storage/sqlite/contracts.ts';
-import type { HistoryRecord, HistoryScope, HistorySupportReport, HistoryTarget } from './contracts.ts';
+import type { HistoryScope, HistorySupportReport, HistoryTarget } from './contracts.ts';
 
 /** 由只读适配器提供的固定源快照边界；真实制品未认证时不得返回已认证候选。 */
 export const boundaryProtocol = 'private-history-boundary-v1' as const;
@@ -137,11 +136,4 @@ export function prepareBoundaryCandidate(scope: HistoryScope, candidate: History
   if (manifestSha256 !== candidate.manifestSha256) fail('history_boundary_manifest_mismatch');
   return { boundaryToken: candidate.boundaryToken, manifestSha256, members, target: fixed, support: report,
     proof: { partitions: fixed.partitions.map(partition => ({ ...observed.get(partition)! })), namespaceContinuity: true, instanceContinuity: true, observedAt: candidate.observedAt } };
-}
-/** 来源记录是否属于边界成员；供接受页和诊断复用。 */
-export function boundaryMemberFor(record: HistoryRecord, sourceGeneration: string): string {
-  return sourceLocalKey(sourceGeneration, record.partition, record.table, record.localId!);
-}
-export function boundaryStorageFailure(error: unknown, fallback: string): StorageFailure {
-  return error instanceof StorageFailure ? error : new StorageFailure(error instanceof HistoryBoundaryInvalid ? error.reason : fallback);
 }

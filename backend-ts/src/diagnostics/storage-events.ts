@@ -1,5 +1,5 @@
 import {DiagnosticBuffer,diagnosticOverflow,diagnosticTransportLimit} from './buffer.mjs';
-import {checkedDiagnosticEvent, type DiagnosticEvent} from './unified-contract.mjs';
+import {checkedDiagnosticEvent} from './unified-contract.mjs';
 import {diagnoseObserved} from './context.ts';
 
 /** Worker 不持有日志写者；宿主只接收有界、再次核验的安全事件。 */

@@ -2,7 +2,7 @@ import {observedProcessingAction,recordProcessingRunChange} from '../diagnostics
 import {randomUUID} from 'node:crypto';
 import {sha256} from '../../../platform/sha256.ts';
 import {runTargetsReleased} from '../run-retirement.ts';
-import type {StorageAction,StorageMigration,StorageTransaction,StorageRow,StorageLease} from '../../../storage/sqlite/contracts.ts';
+import type {StorageAction,StorageMigration,StorageTransaction,StorageRow} from '../../../storage/sqlite/contracts.ts';
 import type {MemoryScope} from '../management/contracts.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import {available} from '../management/qualification.ts';

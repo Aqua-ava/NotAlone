@@ -149,11 +149,6 @@ function latestTargetRun(tx:StorageTransaction,ownerId:string,contactId:string):
    AND EXISTS(SELECT 1 FROM run_input i WHERE i.owner_id=r.owner_id AND i.run_id=r.id AND i.source_contact_id=rc.contact_id AND i.role='target')
   ORDER BY r.started_at DESC,r.rowid DESC LIMIT 1`,[ownerId,contactId]);
 }
-function taskHasPendingCandidate(tx:StorageTransaction,ownerId:string,taskId:string):boolean{
- return !!tx.get(`SELECT 1 FROM memory_candidate c JOIN step_attempt a ON a.owner_id=c.owner_id AND a.id=c.produced_attempt_id
-  JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id
-  WHERE c.owner_id=? AND s.task_id=? AND c.state='pending' LIMIT 1`,[ownerId,taskId]);
-}
 function hasNewerSuccessfulL1Run(tx:StorageTransaction,ownerId:string,contactId:string,failedRun:StorageRow):boolean{
  const candidates=tx.all(`SELECT later.* FROM processing_run later JOIN run_contact rc ON rc.owner_id=later.owner_id AND rc.run_id=later.id
   WHERE rc.owner_id=? AND rc.contact_id=? AND rc.state='active' AND ${currentRunContactScope} AND later.id<>? AND later.started_at>?

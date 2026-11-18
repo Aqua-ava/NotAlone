@@ -9,7 +9,7 @@ import type {DiscussionAttempt} from '../contracts.ts';
 import {requireAttempt,encode,decode} from '../requests.ts';
 import type {ReplyKnowledgeHeader,ReplyKnowledgeItem,ReplyMemoryReader,ReplySource} from './contracts.ts';
 import {selectRankedReplyMemories} from './knowledge-budget.ts';
-import {requireReplyInput,memorySourceTimeLabel,sources,knowledge,type FrozenReplyInput} from './input.ts';
+import {requireReplyInput,memorySourceTimeLabel,knowledge,type FrozenReplyInput} from './input.ts';
 
 export {REPLY_SEARCH_BUDGET} from '../retrieval-policy.ts';
 export type ReplySearchKind=RelationshipSearchKind;

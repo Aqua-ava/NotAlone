@@ -3,12 +3,14 @@ import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
 import {
   L2ScenarioDocumentWorkspace,
-  L2ScenarioVerificationError,
   runScenarioDocumentAgent,
-  validateScenarioDocument,
   verifyScenarioProposal,
-  scenarioVerificationFeedback,
 } from '../src/memory/scenarios/workspace.ts';
+import {
+  L2ScenarioVerificationError,
+  validateScenarioDocument,
+  scenarioVerificationFeedback,
+} from '../src/memory/scenarios/document.ts';
 
 const budget = {
   max_memories: 12,

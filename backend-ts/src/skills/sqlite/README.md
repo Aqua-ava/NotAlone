@@ -8,13 +8,13 @@
 
 `storage.ts` 导出 `skillSchemaSql` 和 `skillActions`，公共 registry 在身份迁移后追加版本4并注册动作，不改已发布 SQL；后续版本23用 default_enabled 字段独立记录默认启用，版本24补充其已核验修订与来源资格约束。仅建立 `skill_package`、`skill_package_revision` 两张表；测试夹具的 owner、scope、input 表不进入生产。包复合主键和修订复合外键隔离 owner，revision 锚点字段有不可变触发器。公开调用只有固定动作，不接受 SQL。
 
-`SqliteSkillLibrary(storage, runtimeOwnerId, authorizedRoot)` 的 owner 和目录由已认证宿主配置提供，不能取自模型、任意 HTTP 请求或 Skill 文本。`refresh`/`inspect` 自动发现授权根中的直接子目录；内部 `discover(directoryName)` 仅供这一受控流程登记目录身份，不是用户管理、IPC 或 HTTP 添加入口。新包首次登记 `unknown + pending`、零可用修订，随后在同一受控刷新中完整核验，通过后以 `default` 来历启用；既有未知项也适用。显式停用和来源失效不恢复，不查旧 PG，也不从 `.versions` 猜审核或启用历史。
+`SqliteSkillLibrary(storage, runtimeOwnerId, authorizedRoot)` 的 owner 和目录由已认证宿主配置提供，不能取自模型、任意 HTTP 请求或 Skill 文本。`refresh`/`inspect` 自动发现授权根中的直接子目录；目录身份只在这一受控流程内部登记（`associateDirectory`），不是用户管理、IPC 或 HTTP 添加入口；测试用 `test/fixtures/sqlite-skills/test-library.mjs` 的 `TestSkillLibrary.discover` 按名登记。新包首次登记 `unknown + pending`、零可用修订，随后在同一受控刷新中完整核验，通过后以 `default` 来历启用；既有未知项也适用。显式停用和来源失效不恢复，不查旧 PG，也不从 `.versions` 猜审核或启用历史。
 
 - `list/get` 查询已记录状态；`refresh`/`inspect` 自动发现并核验已启用包的有效更新，显示 unknown/enabled/disabled 与 verified/pending/missing/conflict/invalid 两组状态。停用包只检查目录身份，不读取正文；未知项通过完整核验后默认启用。
 - `setEnabled(id, expectedHead, state)` 只供明确用户操作，保留 `user_action` 来历并推进 head；显式停用优先于默认启用，来源资格失效不因技术核验恢复。
 - `verify(id, expectedHead)` 显式核验目录及内容，以 CAS 提交当前修订。目录身份为当前物理定位和 dev/ino，拒绝任何路径段的符号链接；物理标记变化按下述完整核验恢复，不凭同名关联。
 - 目录标记变化或既有 conflict 在已授权根中重新安全读取完整快照。只有正文及全部资源的双摘要与最新历史修订一致时，`skills.rebindDirectory` 才在单个 CAS 事务中重建定位和新修订；保留包 ID、启停与来历，旧修订、旧运行锚点和迟到结果保持失效。停用项到显式重新启用时才读正文，来源撤销不可恢复；无核验历史、内容不符和历史降级仍拒绝。规则见 ADR-196。
-- `requireVerification(id, expectedHead)` 在来源资格失效时以 CAS 标为 pending，撤销当前指针与旧修订可用性，保留启停状态和原目录。扫描或字节相同不能恢复来源授权；当前普通 SQLite 管理入口没有绕过来源失效的恢复动作。
+- 来源资格失效由存储动作 `skills.invalidate` 以 CAS 标为 pending（reason 为 `source_qualification_changed`；生产库没有按 id 触发它的公开方法，测试用 `TestSkillLibrary.requireVerification`），撤销当前指针与旧修订可用性，保留启停状态和原目录。扫描或字节相同不能恢复来源授权；当前普通 SQLite 管理入口没有绕过来源失效的恢复动作。
 
 刷新在开始和返回前读取权威状态，目录发现复用本轮清单；已启用包的一次原生快照同时核对目录身份和全部内容，摘要未变化时不重复提交观察。停用或来源失效项目仍只检查目录身份。同一库实例只共享在途核验，不缓存已完成结果；显式管理操作开始与完成后均脱离旧一轮刷新，避免操作后的读取复用写入前状态。实际运行的版本、来源和输入核验保持独立执行。
 
@@ -58,7 +58,7 @@
 
 本模块没有文件删除、文件清理器、目录覆盖或孤儿扫描代码。空库缺引用、旧 PG 行缺失和任何管理状态都不构成原目录删除授权。原 Skill 目录不得登记成统一删除的受管文件删除目标。
 
-实际 Skill 输入由执行追踪和运行副本领域登记、收集、fence、清除并复核。包来源资格变化调用 `requireVerification`，不把包复制成独立来源。`requireSkillRun/requireSkillRevision` 与联系人、来源和删除资格在实际输入写入的同一短事务核验。生产删除组合由公共 registry 安装；`fixture_scope/fixture_input` 仅属合成测试，不能替代真实闭包。
+实际 Skill 输入由执行追踪和运行副本领域登记、收集、fence、清除并复核。包来源资格变化通过 `skills.invalidate` 标记，不把包复制成独立来源。`requireSkillRun/requireSkillRevision` 与联系人、来源和删除资格在实际输入写入的同一短事务核验。生产删除组合由公共 registry 安装；`fixture_scope/fixture_input` 仅属合成测试，不能替代真实闭包。
 
 正常管理动作和 `requireSkillRun`／`requireSkillRevision` 在同一短事务要求 `owner.state=active`；deleting、deleted、missing均拒绝，包括零包目录。
 

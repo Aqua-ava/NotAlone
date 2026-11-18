@@ -10,7 +10,7 @@ export interface StorageReader {
 }
 export interface OpenStorageOptions {
   userData: string;
-  intent: 'create' | 'open' | 'reset';
+  intent: 'create' | 'open';
   expectedDatabaseId?: string;
   role: SqliteRole;
   // 仅受信任的构建装配代码使用；不接受HTTP/Tool或界面传入模块。

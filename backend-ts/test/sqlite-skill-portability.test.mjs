@@ -4,7 +4,8 @@ import {mkdtemp,realpath,mkdir,writeFile,rm,cp} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {SqliteStorage} from '../src/storage/sqlite/client.ts';
-import {SqliteSkillLibrary,skillAnchor} from '../src/skills/sqlite/library.ts';
+import {skillAnchor} from '../src/skills/sqlite/library.ts';
+import {TestSkillLibrary} from './fixtures/sqlite-skills/test-library.mjs';
 
 async function fixture(t){
  const dir=await realpath(await mkdtemp(join(tmpdir(),'notalone-skill-portability-')));
@@ -15,7 +16,7 @@ async function fixture(t){
  await writeFile(join(root,'gentle','references','cases.md'),'合成案例：表达理解，保留选择。\n');
  const storage=await SqliteStorage.open({userData:dir,intent:'create',role:'test',registryModule:new URL('./fixtures/sqlite-skills/registry.mjs',import.meta.url).href});
  t.after(()=>storage.close());await storage.execute('fixture.owner',{ownerId:'owner-a'});
- const library=new SqliteSkillLibrary(storage,'owner-a',root);
+ const library=new TestSkillLibrary(storage,'owner-a',root);
  const [item]=await library.refresh();return {dir,root,bytes,storage,library,item};
 }
 
@@ -48,7 +49,7 @@ test('设备编号刚变化时直接刷新即可恢复，不必先经历一次�
 
 async function moveRoot(f){
  const target=join(f.dir,'moved-skills');await cp(f.root,target,{recursive:true});await rm(f.root,{recursive:true});
- return {target,library:new SqliteSkillLibrary(f.storage,'owner-a',target)};
+ return {target,library:new TestSkillLibrary(f.storage,'owner-a',target)};
 }
 
 test('迁移到新路径和新目录且旧目录已不存在，沿用原场景与启停决定',async t=>{

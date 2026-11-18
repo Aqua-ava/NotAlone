@@ -44,27 +44,6 @@ import {
   type L3ProfileDraft,
   type ProfileVerification,
 } from './document.ts';
-export {
-  validateProfile,
-  validateProfileCorrections,
-  filterProfileProposal,
-  renderProfile,
-  parseProfileVerification,
-  parseProfileVerificationOutput,
-  MAX_PROFILE_VERIFICATION_ATTEMPTS,
-  isRetryableProfileVerificationError,
-  selectProfilePublication,
-  validateIncrementalProfile,
-  profileDigest,
-  type ProfileTemporalStatus,
-  type ProfileKind,
-  type ProfileSection,
-  type L3ProfileEntry,
-  type L3ProfileDocument,
-  type L3ProfileDraft,
-  type RejectedProfileEntry,
-  type ProfileVerification,
-} from './document.ts';
 
 const PATH = /^[a-zA-Z0-9_-]{1,96}\.md$/;
 

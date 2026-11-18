@@ -8,7 +8,7 @@ import { SqliteStorage } from '../src/storage/sqlite/client.ts';
 import { registry } from '../src/storage/sqlite/registry.ts';
 import {cutoverActions} from '../src/platform/cutover/inspect.ts';
 import { SqliteSkillLibrary } from '../src/skills/sqlite/library.ts';
-import { EXPECTED_TABLES, FORBIDDEN_TABLES, DEFERRED_DESIGN_TABLES, REPLACED_DESIGN_TABLES } from '../src/platform/cutover/structure.ts';
+import { EXPECTED_TABLES } from '../src/platform/cutover/structure.ts';
 import { dumpSchema, readBaseline } from './fixtures/cutover/build-structure-baseline.mjs';
 import {loadRetrievalExtension} from '../src/retrieval/sqlite/extension.ts';
 
@@ -52,15 +52,6 @@ test('实际 DDL 与 111 表结构基线逐表一致（含 CHECK、触发器 bod
   try {
     assert.equal(db.prepare('PRAGMA integrity_check').all()[0].integrity_check, 'ok');
     assert.equal(db.prepare('PRAGMA foreign_key_check').all().length, 0);
-  } finally { db.close(); }
-});
-
-test('暂缓与替代表不建空表，77 项逻辑目录分类闭合', async t => {
-  const f = await fixture(t);
-  const db = openDatabase(f.database, { readOnly: true });
-  try {
-    const names = new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(row => row.name));
-    for (const name of [...FORBIDDEN_TABLES, ...DEFERRED_DESIGN_TABLES, ...REPLACED_DESIGN_TABLES]) assert.equal(names.has(name), false, `${name} 不应创建`);
   } finally { db.close(); }
 });
 

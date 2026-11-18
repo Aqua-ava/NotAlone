@@ -4,7 +4,6 @@ import { StorageFailure, type StorageRow, type StorageTransaction } from '../../
 import type { ReadEligibility } from '../../contacts/sqlite/contracts.ts';
 import type { HistoryRecord, HistorySupportReport, HistoryTarget } from './contracts.ts';
 import { verifiedTerminalReason, prepareRecord } from './normalize.ts';
-import {currentSourceScopeCTE,currentSourcePredicate} from './current-scope.ts';
 import {rememberSourceTerminal,type SourceTerminalReason} from './terminal.ts';
 import {failHistoryQuoteInTransaction,quoteParserVersion,saveHistoryQuoteInTransaction} from './quote-store.ts';
 import {nextMessageDisplayNo} from '../../storage/sqlite/message-order.ts';

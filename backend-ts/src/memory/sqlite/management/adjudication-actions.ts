@@ -1,7 +1,7 @@
 /** 裁决只消费被冻结的候选、正式版本和消息；模型结果本身不授予写入资格。 */
 import {randomUUID} from 'node:crypto';
 import {sha256} from '../../../platform/sha256.ts';
-import {StorageFailure,type StorageAction,type StorageLease,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
+import {StorageFailure,type StorageAction,type StorageLease,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {assertSourceEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
 import type {MessageSourceReference} from '../../../history/sqlite/contracts.ts';
 import {assertTaskContributions} from '../qualification.ts';

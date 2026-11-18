@@ -33,7 +33,6 @@ const code = (error: unknown): string => {
 };
 let db: DatabaseSync | undefined;
 try {
-  if (options.intent === 'reset') throw new StorageFailure('reset_requires_cutover');
   if (!['create', 'open'].includes(options.intent) || !['test', 'business'].includes(options.role)) throw new StorageFailure('storage_configuration_invalid');
   if (options.intent === 'open' && !options.expectedDatabaseId) throw new StorageFailure('instance_required');
   const registry: StorageRegistry = options.registryModule ? (await import(options.registryModule)).registry : defaultRegistry;
