@@ -11,7 +11,6 @@ import {DEFAULT_L2_SCENARIO_BUDGET,L2ScenarioError,L2ScenarioVerificationError,s
 import {L2ScenarioDocumentWorkspace,runScenarioDocumentAgent,verifyScenarioProposal,type ScenarioDocumentCallPort} from '../../scenarios/workspace.ts';
 import {L3ProfileWorkspace,runProfileDocumentAgent,verifyProfileProposal} from '../../profiles/workspace.ts';
 import type {DocumentClaim,DocumentWork} from './stages.ts';
-import type {VerifiedProfileReplay} from './replay.ts';
 
 export interface DocumentRequest {system:string;user:string;messages:any[];tools:any[];validateOutput(blocks:readonly unknown[]):void;}
 export interface DocumentModelPort {
@@ -57,31 +56,6 @@ export class SqliteMemoryDocuments {
   if(retryKnownFailures&&!contactId)return Promise.reject(new StorageFailure('document_scope_invalid'));
   const prior=this.active.get(runId);if(prior)return prior.contactId===contactId&&prior.retryKnownFailures===retryKnownFailures?prior.work:Promise.reject(new StorageFailure('document_run_busy'));
   const work=withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),()=>this.run(runId,contactId,retryKnownFailures));this.active.set(runId,{contactId,retryKnownFailures,work});void work.then(()=>this.active.delete(runId),()=>this.active.delete(runId));return work;
- }
- /** 用户显式恢复已知回执的画像；只重放本地材料，不获取模型许可或发起模型调用。 */
- replayVerifiedProfile(taskId:string):Promise<unknown>{
-  if(this.stop.signal.aborted)return Promise.reject(new StorageFailure('document_service_closed'));
-  const key=`profile-replay:${taskId}`,prior=this.active.get(key);if(prior)return prior.work;
-  const work=withDiagnosticTrace(currentDiagnosticTrace()??newTraceId(),()=>this.replayProfile(taskId));
-  this.active.set(key,{contactId:undefined,retryKnownFailures:false,work});void work.then(()=>this.active.delete(key),()=>this.active.delete(key));return work;
- }
- private async replayProfile(taskId:string):Promise<unknown>{
-  const prepared=await this.storage.execute<VerifiedProfileReplay>('memoryDocuments.prepareVerifiedProfileReplay',{ownerId:this.ownerId,taskId});
-  if(prepared.completed)return this.readTask(taskId);
-  const claim=prepared.claim,controller=new AbortController(),signal=AbortSignal.any([this.stop.signal,controller.signal]),releases:(()=>Promise<void>)[]=[];
-  let finish!:()=>void;const done=new Promise<void>(resolve=>finish=resolve);
-  try{
-   const contacts=prepared.profileSaved?prepared.contacts:await this.storage.execute<{contactId:string;generation:string}[]>('memoryDocuments.holders',{ownerId:this.ownerId,attemptId:claim.attemptId});
-   for(const contact of contacts)releases.push(this.holders.register({key:`memoryDocuments:${claim.attemptId}_${contact.contactId}`,ownerId:this.ownerId,contactId:contact.contactId,coversAllSources:true,generation:BigInt(contact.generation),close:async()=>{controller.abort();await done;}}));
-   signal.throwIfAborted();
-   if(!prepared.profileSaved)await this.storage.execute('memoryDocuments.saveProfile',{ownerId:this.ownerId,attemptId:claim.attemptId,entries:prepared.entries,verificationEventId:prepared.verificationEventId});
-   signal.throwIfAborted();
-   const result=await this.storage.execute('memoryDocuments.publish',{ownerId:this.ownerId,taskId,now:claim.scheduleNow??undefined});
-   await this.storage.execute('memoryDocuments.settle',{ownerId:this.ownerId,runId:claim.runId}).catch(()=>false);return result;
-  }catch(error){
-   const code=this.errorCode(error);await this.storage.execute('memoryDocuments.fail',{ownerId:this.ownerId,attemptId:claim.attemptId,code}).catch(()=>{});
-   await this.storage.execute('memoryDocuments.noteFailure',{ownerId:this.ownerId,taskId,code}).catch(()=>{});throw error;
-  }finally{finish();await Promise.all(releases.map(release=>release()));}
  }
  private async run(runId:string,contactId?:string,retryKnownFailures=false){
   const tasks=await this.storage.execute<string[]>('memoryDocuments.tasks',{ownerId:this.ownerId,runId,...(contactId===undefined?{}:{contactId})});const results=[];

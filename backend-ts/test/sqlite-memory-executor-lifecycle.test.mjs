@@ -44,19 +44,3 @@ for(const entry of executors){
   await service.close();await service.close();assert.equal(closes,2);
  });
 }
-
-test('文档已知回执重放也进入同一关闭登记，迟到准备不保存或发布',{timeout:3000},async()=>{
- const prepared=deferred(),entered=deferred(),actions=[];
- const service=new SqliteMemoryDocuments({execute:async(name)=>{
-  actions.push(name);
-  if(name==='memoryDocuments.prepareVerifiedProfileReplay'){entered.resolve();await prepared.promise;return {completed:false,claim:{attemptId:'attempt-a'}};}
-  if(name==='memoryDocuments.holders')return [];
-  if(name==='memoryDocuments.fail'||name==='memoryDocuments.noteFailure')return;
-  assert.fail(`关闭后出现非预期动作：${name}`);
- }},'synthetic-owner',{close:async()=>{actions.push('port.close');}},new ActiveHolders());
- const work=service.replayVerifiedProfile('task-a');void work.catch(()=>{});await entered.promise;
- assert.equal(service.replayVerifiedProfile('task-a'),work);
- const closing=service.close();await assert.rejects(service.replayVerifiedProfile('task-b'),{code:'document_service_closed'});
- prepared.resolve();await assert.rejects(work,{name:'AbortError'});await closing;
- assert.deepEqual(actions,['memoryDocuments.prepareVerifiedProfileReplay','memoryDocuments.holders','memoryDocuments.fail','memoryDocuments.noteFailure','port.close']);
-});
