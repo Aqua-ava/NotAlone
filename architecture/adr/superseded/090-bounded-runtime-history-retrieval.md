@@ -1,10 +1,12 @@
 # ADR-090：回复运行时按需补查受控历史
 
+已合并入[ADR-195：回复检索现行合并决定](../195-reply-retrieval-consolidated.md)（2026-11-18）：回复侧记忆与历史检索的现行约束已收拢到该 ADR。下文保留为历史决定与原因，现行条款以该 ADR 为准。
+
 > 2026-11-14 范围修订：见 [ADR-186](186-full-contact-history-search.md)，新请求搜索当前联系人全部获准历史，不再使用固定条数的历史准备窗口；返回量、耗时和次数仍有界。
 
 > 2026-11-14 局部替代：见 [ADR-185](185-on-demand-reply-memory-and-history-search.md)。当前工具装配和次数改为记忆／历史共享预算；既有身份、来源与有界读取要求保留。
 
-> 状态：已采纳（2026-10-21）。用户在逐项复审 Q05 时选择沿用当前受控补查设计。
+> 状态：已合并（ADR-195）。原记录：已采纳（2026-10-21）。用户在逐项复审 Q05 时选择沿用当前受控补查设计。
 
 ADR-012 的“Runtime 初期不直接调用动态检索 Tool”与后续上下文规格、现行流程和生产装配不一致。此次明确结束该初期限制：应用层先确认本次回复范围并组装初始上下文，Runtime 在该范围与预算内按需调用只读工具补查相关历史，不必把全量聊天预先放入模型输入。
 
@@ -18,6 +20,6 @@ ADR-012 的“Runtime 初期不直接调用动态检索 Tool”与后续上下�
 
 ## 替代范围与验证限制
 
-局部替代 ADR-012 第 4 条的初期动态检索禁令及[旧模块草案](../drafts/archive/reply-module-structure.md)的笼统“不直接查询”要求；保留模块职责和应用层范围控制。允许范围仅为已有受控只读能力，不因此批准时间、日历、网络、Shell、任意文件或写入工具；这些能力各自的设计状态不由本决定改变。既有 Skill 与分层资料读取继续遵循其独立规则。
+局部替代 ADR-012 第 4 条的初期动态检索禁令及[旧模块草案](../../drafts/archive/reply-module-structure.md)的笼统“不直接查询”要求；保留模块职责和应用层范围控制。允许范围仅为已有受控只读能力，不因此批准时间、日历、网络、Shell、任意文件或写入工具；这些能力各自的设计状态不由本决定改变。既有 Skill 与分层资料读取继续遵循其独立规则。
 
-实现依据为[生产装配](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/reply/adapters/langchain_runtime.py)、[历史工具边界](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/reply/tools.py)和[上下文资格](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/reply/context.py)，原功能规格见[记忆与 Skill 上下文](../../.scratch/memory-skill-context/spec.md)。本次仅统一文档，未改代码、同步授权、运行配置或业务数据，不据此宣称本轮已做真实模型或端到端验收。
+实现依据为[生产装配](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/reply/adapters/langchain_runtime.py)、[历史工具边界](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/reply/tools.py)和[上下文资格](https://github.com/Aqua-ava/NotAlone/blob/23a767330e4af8a024629a00c8740344be564259/backend/src/notalone/reply/context.py)，原功能规格见[记忆与 Skill 上下文](../../../.scratch/memory-skill-context/spec.md)。本次仅统一文档，未改代码、同步授权、运行配置或业务数据，不据此宣称本轮已做真实模型或端到端验收。

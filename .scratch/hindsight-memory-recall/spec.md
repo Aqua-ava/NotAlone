@@ -172,7 +172,7 @@ B 优先以真实本机 cross encoder 的 `scores.reranker` 作为相关性过�
 
 ## 补充说明与来源
 
-本规格是可撤销的实验，不是新增正式架构决定，不修改领域词汇。继续遵守 [ADR-005](../../architecture/adr/005-explainable-retrieval-and-contact-knowledge-view.md) 的可解释检索、索引删除和向量补充边界，以及 [ADR-028](../../architecture/adr/028-lexical-memory-recall-phase-1.md) 的现行生产词法路径。将来启用生产向量、替换主路径或扩大数据流需要基于运行证据另行设计并复审相应 ADR。
+本规格是可撤销的实验，不是新增正式架构决定，不修改领域词汇。继续遵守 [ADR-005](../../architecture/adr/005-explainable-retrieval-and-contact-knowledge-view.md) 的可解释检索、索引删除和向量补充边界，以及 [ADR-028](../../architecture/adr/superseded/028-lexical-memory-recall-phase-1.md) 的现行生产词法路径。将来启用生产向量、替换主路径或扩大数据流需要基于运行证据另行设计并复审相应 ADR。
 
 本地阅读入口：
 

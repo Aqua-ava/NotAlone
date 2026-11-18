@@ -6,7 +6,7 @@
 
 同号 ADR-074 有两份，引用时附标题与完整链接，不能只凭编号判断。
 
-`superseded/` 存放已被后续决定整体替代（状态为“已替代”）或默认运行路径已不再使用（状态为“已退役”）的 ADR，仅供追溯；它们描述的机制在现行代码中不再作为默认行为，不得当作新增要求。
+`superseded/` 存放已被后续决定整体替代（状态为“已替代”）、默认运行路径已不再使用（状态为“已退役”），或其仍有效条款已收拢进“现行合并 ADR”（状态为“已合并”，顶部写明并入的 ADR 编号）的 ADR，仅供追溯；它们描述的机制在现行代码中不再作为默认行为，不得当作新增要求。
 
 ## 决策文件
 
@@ -37,14 +37,14 @@
 - [ADR-025：CLI 后台同步自动补齐可检测缺口](025-cli-background-sync-gap-backfill.md)
 - [ADR-026：语用解释先于关系记忆采纳](superseded/026-pragmatic-interpretation-before-memory-adoption.md)
 - [ADR-027：记忆准确率评测门槛与待确认候选的参考边界](superseded/027-memory-accuracy-evaluation-gate.md)
-- [ADR-028：记忆召回第一期采用确定性中文词法评分](028-lexical-memory-recall-phase-1.md)
+- [ADR-028：记忆召回第一期采用确定性中文词法评分](superseded/028-lexical-memory-recall-phase-1.md)（已合并入ADR-195）
 - [ADR-029：提取失败的分类计数与批次跳过恢复](029-extraction-failure-recovery.md)
 - [ADR-030：已确认联系人的后台同步与首次手动选择](030-confirmed-contact-background-sync-consent.md)
 - [ADR-031：来源删除保留不含正文的调用记录](031-source-deletion-retains-minimal-ledger.md)
 - [ADR-032：审计基线与实际迁移账本分开](032-audited-legacy-schema-baseline.md)
 - [ADR-033：记忆采纳前核验来源语义支持](033-source-semantic-verification-before-adoption.md)
 - [ADR-034：显式失败任务恢复按原任务领取](034-explicit-failed-task-recovery-selection.md)
-- [ADR-035：待确认候选作为强制标注的未确认参考进入回复](035-pending-candidate-unconfirmed-reply-reference.md)
+- [ADR-035：待确认候选作为强制标注的未确认参考进入回复](superseded/035-pending-candidate-unconfirmed-reply-reference.md)（已合并入ADR-195）
 - [ADR-036：按维度放行自动采纳](superseded/036-per-dimension-adoption-release.md)
 - [ADR-037：默认保存记忆提取的完整过程](037-complete-memory-extraction-trace.md)
 - [ADR-038：导入触发原记忆任务并让前台回复优先](038-import-triggered-memory-work-and-reply-priority.md)
@@ -100,7 +100,7 @@
 - [ADR-087：新联系人只从微信会话确认加入](087-wechat-confirmed-contact-onboarding.md)
 - [ADR-088：一秒作为正常联系人切换的优化目标](088-normal-switch-one-second-optimization-target.md)
 - [ADR-089：一次授权同步全部微信私聊](089-all-private-wechat-sync-scope.md)
-- [ADR-090：回复运行时按需补查受控历史](090-bounded-runtime-history-retrieval.md)
+- [ADR-090：回复运行时按需补查受控历史](superseded/090-bounded-runtime-history-retrieval.md)（已合并入ADR-195）
 - [ADR-091：不增加运行计划和自动过程摘要](091-retire-runtime-todos-and-auto-summary.md)
 - [ADR-092：时间、日历和网络搜索工具保留为未来可选方向](092-defer-time-calendar-web-tools.md)
 - [ADR-093：沿用现有 Skill 导入限制与整轮输入预算](093-retain-current-skill-resource-budget.md)
@@ -187,13 +187,13 @@
 - [ADR-180：图片输入有界恢复、单项隔离与运行退休](180-memory-image-recovery-isolation-and-run-retirement.md)
 
 - [ADR-181：L3 逐条核验与合格条目发布](181-l3-item-verification-and-partial-publication.md)
-- [ADR-182：回复时联系人／本人记忆改用本机混合检索](182-reply-memory-hybrid-retrieval.md)
+- [ADR-182：回复时联系人／本人记忆改用本机混合检索](superseded/182-reply-memory-hybrid-retrieval.md)（已合并入ADR-195）
 - [ADR-183：回复模型调用结果未知时自动放弃，不锁定联系人](183-auto-abandon-unknown-reply-model-calls.md)——局部修订 ADR-121 的 unknown 阻断口径。
 - [ADR-184：有来源支持的记忆变化自动更新与合并](184-source-grounded-memory-update-and-merge.md)——局部替代 ADR-174／081 的动作与变化拦截限制，保留来源和人工保护。
 
-- [ADR-185：先读近期语境，再按需检索记忆和历史](185-on-demand-reply-memory-and-history-search.md)——局部替代固定预检索，保留 DSH 官方装配、联系人范围、来源与有界读取。
+- [ADR-185：先读近期语境，再按需检索记忆和历史](superseded/185-on-demand-reply-memory-and-history-search.md)——局部替代固定预检索，保留 DSH 官方装配、联系人范围、来源与有界读取。（已合并入ADR-195）
 
-- [ADR-186：按需搜索当前联系人全部获准历史](186-full-contact-history-search.md)——取消五百条候选窗口，保留 DSH 官方工具与返回量、耗时、次数上限。
+- [ADR-186：按需搜索当前联系人全部获准历史](superseded/186-full-contact-history-search.md)——取消五百条候选窗口，保留 DSH 官方工具与返回量、耗时、次数上限。（已合并入ADR-195）
 
 - [ADR-187：退役表达工作区最近聊天区块及专用读取链](187-retire-workspace-recent-chat.md)——保留自动背景和候选依据，移除区块与候选列表的额外聊天读取。
 
@@ -201,12 +201,14 @@
 
 - [ADR-189：分别手动配置回复与记忆的模型参数](189-editable-model-thinking-and-temperature.md)——开放独立思考档位与温度，复用受控配置重载和唯一 DSH provider。
 
-- [ADR-190：L1 与 L0 统一采用腾讯式本机混合检索](190-tencent-style-local-hybrid-retrieval.md)——共享 BM25、向量与 RRF，正文表示增量维护并纳入删除。
+- [ADR-190：L1 与 L0 统一采用腾讯式本机混合检索](superseded/190-tencent-style-local-hybrid-retrieval.md)——共享 BM25、向量与 RRF，正文表示增量维护并纳入删除。（已合并入ADR-195）
 
-- [ADR-191：收敛回复检索合同并退役未使用适配](191-reply-retrieval-contract-simplification.md)——强制按需读者与已有排名，退役旧词法／未确认候选选择接口，保留历史材料和删除合同。
+- [ADR-191：收敛回复检索合同并退役未使用适配](superseded/191-reply-retrieval-contract-simplification.md)——强制按需读者与已有排名，退役旧词法／未确认候选选择接口，保留历史材料和删除合同。（已合并入ADR-195）
 
 - [ADR-192：前台定位仅保留名称观察与已有联系人关联](192-retire-foreground-observation-compatibility.md)——退役旧双区域协议及前台再次确认写证明链，保留名称质量、手选和授权边界。
 
 - [ADR-193：回复 Skill 统一按需目录并退役显式预加载](193-retire-explicit-reply-skill-preload.md)——新请求拒绝显式选包，保留历史材料及删除约束。
 
 - [ADR-194：集中运行事实与回复准备职责](194-single-runtime-facts-and-reply-preparation.md)——统一在途及尝试登记，收敛近期聊天读取，退役新请求的旧历史确认参数。
+
+- [ADR-195：回复检索现行合并决定](195-reply-retrieval-consolidated.md)——合并 ADR-028／035／090／182／185／186／190／191：按需 BM25＋向量＋RRF 检索、全部获准历史、独立额度、未确认候选不进入新回复；原条目归档于 superseded/。

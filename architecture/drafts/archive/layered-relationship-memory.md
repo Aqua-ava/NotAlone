@@ -50,7 +50,7 @@
 ## 现行约束与待复审点
 
 - [ADR-048](../../adr/048-memory-skill-evolution-lifecycle.md)允许可追溯概览，不自动开展深入性格或动机分析。Q2 沿用此边界；[ADR-072](../../adr/072-personal-memory-insights-without-action-guidance.md) 现已允许有依据的个人 L2/L3 推断并显式标注不确定性，本条仅保留讨论时序。
-- [ADR-011](../../adr/011-automatic-relationship-memory-index.md)原定不固定全量加载普通联系人／本人记忆；[ADR-028](../../adr/028-lexical-memory-recall-phase-1.md)规定生产词法检索和独立预算。用户在 Q5 选择 L3 背景及 L2 目录的分层加载，[ADR-067](../../adr/067-layered-scenario-and-profile-context.md)为此提供明确的局部修订；L1 词法检索和原预算保持，新增层不能挤占或绕过它们。
+- [ADR-011](../../adr/011-automatic-relationship-memory-index.md)原定不固定全量加载普通联系人／本人记忆；[ADR-028](../../adr/superseded/028-lexical-memory-recall-phase-1.md)规定生产词法检索和独立预算。用户在 Q5 选择 L3 背景及 L2 目录的分层加载，[ADR-067](../../adr/067-layered-scenario-and-profile-context.md)为此提供明确的局部修订；L1 词法检索和原预算保持，新增层不能挤占或绕过它们。
 - [现行领域数据](../../current/domain-data.md)、[核心流程](../../current/core-flows.md)和[隐私删除](../../current/privacy-deletion.md)将当前概览限定为无正文投影与底层导航。新增生成正文应使用明确的新对象及删除依赖，不直接向原投影追加正文。
 - 来源删除、人工纠错、范围隔离、时间状态和迟到结果复验继续适用。L2/L3 的正文、版本、缓存、任务产物及回复使用副本均须进入相应生命周期。
 - 现行默认自动采纳按 [ADR-070](../../adr/070-automatic-memory-maintenance.md)、[ADR-085](../../adr/085-source-verified-automatic-adoption.md) 逐条来源与适用检查后自动裁决；“默认放行集合为空”是旧阶段状态，历史台账见[放行台账](../../../docs/evaluations/memory/dimension-release/memory-adoption-dimension-release-ledger.md)。选择只整理已采纳记忆，意味着新的待确认候选不会自动进入 L2/L3。

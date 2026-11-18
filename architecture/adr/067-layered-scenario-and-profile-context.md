@@ -1,8 +1,8 @@
 # ADR-067：场景文档与长期画像的分层加载
 
-> 2026-11-17 局部修订：[ADR-191](191-reply-retrieval-contract-simplification.md)退役无正常入口的旧词法选择及待确认候选注入适配；本文 L2／L3 分层、读取预算、来源和删除合同保持。历史未确认材料仍按原资格回看，不恢复新的注入入口。
+> 2026-11-17 局部修订：[ADR-191](superseded/191-reply-retrieval-contract-simplification.md)退役无正常入口的旧词法选择及待确认候选注入适配；本文 L2／L3 分层、读取预算、来源和删除合同保持。历史未确认材料仍按原资格回看，不恢复新的注入入口。
 
-> 2026-11-14 局部替代：见 [ADR-185](185-on-demand-reply-memory-and-history-search.md)。初始 L1 预注入由按需搜索替代；L2/L3 分层与读取预算保留。
+> 2026-11-14 局部替代：见 [ADR-185](superseded/185-on-demand-reply-memory-and-history-search.md)。初始 L1 预注入由按需搜索替代；L2/L3 分层与读取预算保留。
 
 > 后续修订：[ADR-070](070-automatic-memory-maintenance.md) 将正常记忆维护改为默认逐项核验后自动处理；原评测结论不变，旧资料升级功能退役。
 
