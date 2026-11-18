@@ -4,7 +4,7 @@ import {readHttpBody,HttpBodyError} from '../../platform/http/body.ts';
 import type {SqliteMediaService} from './service.ts';
 import type {MediaGoal} from './contracts.ts';
 import { sendJson } from '../../platform/http/json.ts';
-const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+import {uuidPattern as uuid} from '../../platform/uuid.ts';
 async function body(req:IncomingMessage):Promise<Record<string,unknown>> {
  const value=JSON.parse((await readHttpBody(req,2048,10_000)).toString('utf8')||'{}');
  if(!value||typeof value!=='object'||Array.isArray(value))throw new StorageFailure('media_request_invalid');return value;

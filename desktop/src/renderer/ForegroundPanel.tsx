@@ -1,7 +1,7 @@
 import type { ContactSessionView } from './contact-session';
 import { useBridgeState } from './use-bridge-state';
 import { initialForegroundState, type ForegroundBridge, type ForegroundState } from '../shared/foreground-bridge';
-import { foregroundFailureReason, isTransientForegroundContextChange, isUnsupportedForegroundConversation } from '../shared/foreground-failure.mjs';
+import { foregroundFailureReason, isTransientForegroundContextChange, isUnsupportedForegroundConversation } from '../shared/foreground-failure';
 import { ScreenPermissionPanel, type ScreenPermissionView } from './ScreenPermissionPanel';
 
 export function useForegroundState(bridge: ForegroundBridge, enabled: boolean): { state: ForegroundState; error: string; retry: () => void } {

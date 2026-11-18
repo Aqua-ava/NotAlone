@@ -3,24 +3,14 @@ import {open, mkdir, rename, unlink} from 'node:fs/promises';
 import {basename, dirname, join} from 'node:path';
 import {randomUUID} from 'node:crypto';
 import {StorageFailure} from '../storage/sqlite/contracts.ts';
-import {readSqliteModelEnvironment} from './sqlite-model-config.ts';
+import {parseEnvLine,readBoundedEnvFile,readSqliteModelEnvironment} from './sqlite-model-config.ts';
 import {normalizeModelBaseUrl} from './model-base-url.ts';
 import {modelCredentialKey} from './host-reply-config.ts';
 import {MODEL_PARAMETER_ENV_KEYS,isModelParameters,readModelParameters} from './model-parameters.ts';
 
 const modelKeys=['NOTALONE_OPENCODE_API_KEY','NOTALONE_DEEPSEEK_API_KEY','NOTALONE_DEEPSEEK_MODEL','NOTALONE_DEEPSEEK_BASE_URL',...MODEL_PARAMETER_ENV_KEYS] as const;
-function parseLine(line:string):[string,string]|undefined {
- const match=/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line.trim().replace(/^export\s+/,''));
- if(!match)return;let value=match[2].trim();
- if(value.length>=2&&['"',"'"].includes(value[0])&&value.at(-1)===value[0])value=value.slice(1,-1);
- return [match[1],value];
-}
 async function readFile(location:string):Promise<string> {
- let file;
- try {file=await open(location,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);const stat=await file.stat();
-  if(!stat.isFile()||stat.size>1024*1024)throw new Error();const text=await file.readFile('utf8');if(Buffer.byteLength(text)>1024*1024)throw new Error();return text;
- }catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return '';throw new StorageFailure('configuration_unavailable');}
- finally{await file?.close();}
+ try {return await readBoundedEnvFile(location)??'';}catch {throw new StorageFailure('configuration_unavailable');}
 }
 /** 只管理受控文件中的模型设置；不会返回或记录密钥。 */
 export class SqliteModelSetup {
@@ -53,7 +43,7 @@ export class SqliteModelSetup {
   const operation=this.tail.then(async()=>{
    let temp:string|undefined;
    try{await mkdir(dirname(this.location),{recursive:true,mode:0o700});const existing=await readFile(this.location);
-    const lines=existing.split(/\r?\n/).filter(line=>{const entry=parseLine(line);return !entry||!(entry[0] in changes);});
+    const lines=existing.split(/\r?\n/).filter(line=>{const entry=parseEnvLine(line);return !entry||!(entry[0] in changes);});
     while(lines.at(-1)==='')lines.pop();const output=[...lines,...Object.entries(changes).map(([name,value])=>`${name}=${value}`),''].join('\n');
     temp=join(dirname(this.location),`.${basename(this.location)}.${randomUUID()}.tmp`);
     const file=await open(temp,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);

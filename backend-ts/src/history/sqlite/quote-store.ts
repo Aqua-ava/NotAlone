@@ -7,11 +7,11 @@ import {assertHistoryReadBoundary} from './suppression.ts';
 import type {HistoryQuoteContent,MessageSourceReference} from './contracts.ts';
 import {assertSourceEligibility} from './source.ts';
 import {currentSourcePredicate,currentSourceScopeCTE} from './current-scope.ts';
+import {isUuid} from '../../platform/uuid.ts';
 
 const quoteType='244813135921';
 export const quoteParserVersion='wechat-quote-v2';
 const fail=(code:string):never=>{throw new StorageFailure(code);};
-const isUuid=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value);
 function id(value:unknown):string {if(typeof value!=='string'||!value||value.length>256||/[\x00-\x1f]/.test(value))return fail('history_quote_request_invalid');return value;}
 function version(value:unknown):string {if(typeof value!=='string'||value.length<1||value.length>128||/[\x00-\x1f]/.test(value))return fail('history_quote_request_invalid');return value;}
 function senderRole(value:unknown):value is HistoryQuoteContent['referencedSenderRole'] {return value==='owner'||value==='contact'||value==='unknown';}

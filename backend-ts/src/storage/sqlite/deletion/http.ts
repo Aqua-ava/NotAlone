@@ -3,6 +3,7 @@ import {checkedTraceId,tracedRequest} from '../../../diagnostics/request-trace.t
 import { sha256 } from '../../../platform/sha256.ts';
 import { StorageFailure } from '../contracts.ts';
 import { readHttpBody, HttpBodyError } from '../../../platform/http/body.ts';
+import { sendJson } from '../../../platform/http/json.ts';
 import type { DeletionService } from './service.ts';
 import type { DeletionScope, DeletionSnapshot } from './contracts.ts';
 
@@ -46,7 +47,7 @@ export class SqliteDeletionHttp {
     const isTask = url.pathname === '/api/tasks/status' && url.searchParams.has('task_id');
     if (!((method === 'DELETE' && (source || discussion || contact || url.pathname === '/api/account'))
       || (method === 'GET' && (state || isTask || url.pathname === '/api/deletions')) || (method === 'POST' && retry))) return false;
-    const respond = (status: number, body: unknown) => {res.writeHead(status, {'Content-Type': 'application/json', 'Cache-Control': 'no-store'}); res.end(JSON.stringify(body));};
+    const respond = (status: number, body: unknown) => sendJson(res, status, body);
     const trace=req.headers['x-trace-id'];if(trace!==undefined&&!checkedTraceId(trace)){respond(400,{error:'deletion_request_invalid'});return true;}
     return tracedRequest(checkedTraceId(trace),'deletion',contact?'contact_deletion':url.pathname==='/api/account'?'account_deletion':'source_deletion',async()=>{
     try {

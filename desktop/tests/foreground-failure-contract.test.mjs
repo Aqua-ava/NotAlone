@@ -3,11 +3,11 @@ import { test } from 'node:test';
 import { readFile } from 'node:fs/promises';
 import { build } from 'esbuild';
 
-const generated = await build({ stdin: { contents: "export * from './src/shared/foreground-failure.mjs';", resolveDir: process.cwd() },
+const generated = await build({ stdin: { contents: "export * from './src/shared/foreground-failure.ts';", resolveDir: process.cwd() },
   bundle: true, platform: 'node', format: 'esm', write: false });
 const foreground = await import(`data:text/javascript;base64,${Buffer.from(generated.outputFiles[0].text).toString('base64')}`);
 const controllerSource = await readFile('src/main/foreground/controller.ts', 'utf8');
-const foregroundSource = await readFile('src/shared/foreground-failure.mjs', 'utf8');
+const foregroundSource = await readFile('src/shared/foreground-failure.ts', 'utf8');
 
 test('前台待选原因集合来自共享模块，且每个原因都有固定中文说明', () => {
   assert.match(controllerSource, /isAwaitingForegroundSelection/, 'controller 必须引用共享待选判断');

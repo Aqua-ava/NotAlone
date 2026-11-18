@@ -7,6 +7,7 @@ import type { FirstHistoryCoordinatorState } from './coordinator.ts';
 import type { IncrementalHistoryCoordinatorState } from './incremental-coordinator.ts';
 import { displayMessageType, messagePlaceholder } from './message-types.ts';
 import { sendJson } from '../../platform/http/json.ts';
+import {uuidPattern as uuid} from '../../platform/uuid.ts';
 
 interface HistoryHttpService {
   readChat(contactId: string, options?: { limit?: number; before?: string }): Promise<HistoryRead>;
@@ -14,7 +15,6 @@ interface HistoryHttpService {
   coverage(contactId: string): Promise<HistoryCoverage>;
   synchronize(contactId: string, signal?: AbortSignal): Promise<HistoryCoverage>;
 }
-const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const quoteErrorPlaceholders:Record<HistoryQuoteErrorCode,string>={
   history_quote_unavailable:'[引用回复：引用内容暂不可用]',
   history_quote_metadata_invalid:'[引用回复：引用信息无效]',

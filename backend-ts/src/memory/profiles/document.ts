@@ -2,13 +2,22 @@
 import type {ContentBlock} from '@deepseek-ai/dsh-llm';
 import {
   L2ScenarioError,
+  UUID,
   canonicalScenarioJSON,
+  clone,
+  count,
+  exactKeys,
+  object,
+  readToolCalls,
   scenarioDigest,
   type L2ScenarioBudget,
   type L2ScenarioMemory,
   type L2ScenarioReference,
   type L2ScenarioVersion,
 } from '../scenarios/document.ts';
+
+// profiles/workspace.ts 与测试沿用本模块导出的名字。
+export {UUID, clone, count, exactKeys, object, readToolCalls};
 
 export type ProfileTemporalStatus = 'stable' | 'historical' | 'uncertain';
 export type ProfileKind = 'fact' | 'preference' | 'inference' | 'contradiction';
@@ -45,7 +54,6 @@ export interface RejectedProfileEntry {
   reason: string;
 }
 
-export const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const KINDS = new Set<ProfileKind>(['fact', 'preference', 'inference', 'contradiction']);
 const SECTIONS = new Set<ProfileSection>([
   'basic_information', 'long_term_preferences', 'life_context', 'interests', 'insights', 'evolution', 'contradictions',
@@ -67,22 +75,6 @@ const ACTION_GUIDANCE = [
   /(?:替|帮)(?:对方|联系人|本人)(?:决定|做主)/u,
   /(?:先|再)(?:安慰|试探|冷处理)[^。！？\n]{0,30}(?:然后|再|并)[^。！？\n]{0,30}/u,
 ];
-
-export function object(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value);
-}
-
-export function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
-  return Object.keys(value).sort().join('|') === [...keys].sort().join('|');
-}
-
-export function count(value: string): number {
-  return [...value].length;
-}
-
-export function clone<T>(value: T): T {
-  return structuredClone(value);
-}
 
 export function invalid(code = 'l3_profile_proposal_invalid', detail?: string): never {
   throw new L2ScenarioError(code, undefined, detail);
@@ -410,11 +402,6 @@ export function parseProfileVerification(
 }
 
 export const PROFILE_VERIFICATION_TOOL_NAME = 'ProfileVerificationOutput';
-
-export function readToolCalls(blocks: readonly ContentBlock[]): {id:string; name:string; arguments:string}[] {
-  return blocks.filter((block): block is Extract<ContentBlock, {type:'tool-call'}> => block.type === 'tool-call')
-    .map(block => ({id:block.id, name:block.name, arguments:block.arguments}));
-}
 
 /** 在线核验与已知回执重放共用相同的工具包络及逐字证据合同。 */
 export function parseProfileVerificationOutput(blocks:readonly ContentBlock[],entries:readonly L3ProfileEntry[],memories:readonly L2ScenarioMemory[]):ProfileVerification {

@@ -7,24 +7,36 @@ const keys=new Set(['NOTALONE_OPENCODE_API_KEY','NOTALONE_DEEPSEEK_API_KEY','NOT
  'NOTALONE_REPLY_RUNTIME','NOTALONE_EXTRACTION_RUNTIME','NOTALONE_REPLY_REMOTE_URL','NOTALONE_REPLY_REMOTE_TOKEN',
  'NOTALONE_EXTRACTION_REMOTE_URL','NOTALONE_EXTRACTION_REMOTE_TOKEN',...MODEL_PARAMETER_ENV_KEYS]);
 const invalid=()=>new StorageFailure('sqlite_model_configuration_invalid');
+/** 解析dotenv单行：支持export前缀与成对引号；非赋值行返回undefined。 */
+export function parseEnvLine(line:string):[string,string]|undefined{
+ const match=/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line.trim().replace(/^export\s+/,''));
+ if(!match)return;let value=match[2].trim();
+ if(value.length>=2&&['"',"'"].includes(value[0])&&value.at(-1)===value[0])value=value.slice(1,-1);
+ return [match[1],value];
+}
+/** 受限读取dotenv：拒绝符号链接与非常规文件，上限1MB；文件不存在返回undefined，其余失败原样抛出，由调用方映射错误码。 */
+export async function readBoundedEnvFile(location:string):Promise<string|undefined>{
+ let file;
+ try{
+  file=await open(location,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);
+  const info=await file.stat();if(!info.isFile()||info.size>1024*1024)throw new Error('env_file_invalid');
+  const source=await file.readFile('utf8');if(Buffer.byteLength(source)>1024*1024)throw new Error('env_file_invalid');
+  return source;
+ }catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return undefined;throw error;}
+ finally{await file?.close();}
+}
 /** 沿用既有dotenv优先级与引号语义，只从明确配置指针读取模型键，不实例化PG或修改进程环境。 */
 export async function readSqliteModelEnvironment(location:string,environment:Readonly<NodeJS.ProcessEnv>):Promise<Readonly<NodeJS.ProcessEnv>>{
  const values:NodeJS.ProcessEnv=Object.fromEntries(Object.entries(environment).filter(([key])=>keys.has(key)));
  if(environment.NOTALONE_DISABLE_DOTENV==='1')return Object.freeze(values);
- let file;
- try{
-  file=await open(location,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);
-  const info=await file.stat();if(!info.isFile()||info.size>1024*1024)throw invalid();
-  const source=await file.readFile('utf8');if(Buffer.byteLength(source)>1024*1024)throw invalid();
-  for(const line of source.split(/\r?\n/)){
-   const match=/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line.trim().replace(/^export\s+/,''));
-   if(!match||!keys.has(match[1])||values[match[1]]!==undefined)continue;
-   let value=match[2].trim();if(value.length>=2&&['"',"'"].includes(value[0])&&value.at(-1)===value[0])value=value.slice(1,-1);
-   values[match[1]]=value;
-  }
-  return Object.freeze(values);
- }catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return Object.freeze(values);throw invalid();}
- finally{if(file)try{await file.close();}catch{throw invalid();}}
+ let source;
+ try{source=await readBoundedEnvFile(location);}catch{throw invalid();}
+ for(const line of source?.split(/\r?\n/)??[]){
+  const entry=parseEnvLine(line);
+  if(!entry||!keys.has(entry[0])||values[entry[0]]!==undefined)continue;
+  values[entry[0]]=entry[1];
+ }
+ return Object.freeze(values);
 }
 
 /** 显式manual只关闭自动派发，不撤销业务授权或手动单联系人入口。 */

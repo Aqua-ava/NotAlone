@@ -31,6 +31,7 @@ import type { LaunchConfiguration, SqliteLaunchConfiguration } from './launch.ts
 import { createWechatContactMetadata } from './contacts/sqlite/wechat-metadata.ts';
 import { ContactMetadataLifetime } from './storage/sqlite/deletion/contact-metadata.ts';
 import {readSqliteCapabilities} from './sqlite-capabilities.ts';
+import {sendJson} from './platform/http/json.ts';
 import {SqliteSkillLibrary} from './skills/sqlite/library.ts';
 import {SqliteSkillHttp} from './skills/sqlite/http.ts';
 import { DeletionService } from './storage/sqlite/deletion/service.ts';
@@ -292,7 +293,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
       foregroundLocation: foreground?'typescript':'unavailable', contactContext: 'unavailable', memory: memoryEnabled?'typescript':'unavailable', memoryManagement:memoryEnabled?'typescript':'unavailable', discussions:discussionsEnabled?'typescript':'unavailable',
       expressionPreferences: 'unavailable', replies: 'unavailable' };
     const handleRequest=async (req:IncomingMessage,res:ServerResponse):Promise<void> => {
-      const respond = (status: number, value: unknown) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(value)); };
+      const respond = (status: number, value: unknown) => sendJson(res, status, value);
       if (!authorizeSqliteRequest(req, token)) { respond(401, { error: 'unauthorized' }); return; }
       return withDiagnosticTrace(checkedTraceId(req.headers['x-trace-id'])??newTraceId(),async()=>{
       let url: URL;
@@ -383,7 +384,7 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
     server=createServer((req,res)=>{
       const pending=handleRequest(req,res),lifecycle=req.url==='/api/runtime/status'||req.url==='/api/runtime/shutdown'||req.url==='/api/runtime/shutdown/begin';
       if(!lifecycle){requests.add(pending);const release=()=>requests.delete(pending);pending.then(release,release);}
-      void pending.catch(()=>{if(!res.headersSent){res.writeHead(503,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify({error:'sqlite_operation_unavailable'}));}else res.destroy();});
+      void pending.catch(()=>{if(!res.headersSent)sendJson(res,503,{error:'sqlite_operation_unavailable'});else res.destroy();});
     });
     server.requestTimeout = 15_000; server.headersTimeout = 10_000;
     await new Promise<void>((resolve, reject) => { server!.once('error', reject); server!.listen(0, '127.0.0.1', () => { server!.removeListener('error', reject); resolve(); }); });

@@ -18,7 +18,7 @@
 | 候选回复、讨论与生成运行时 | [reply/sqlite/](reply/sqlite/) |
 | Skill 注册与执行 | [skills/sqlite/](skills/sqlite/) |
 | 媒体资料与处理状态 | [media/sqlite/](media/sqlite/) |
-| 微信外置工具适配及前台定位 | [sync/](sync/)、[foreground/](foreground/) |
+| 微信外置工具适配及前台定位 | [history/wechat/](history/wechat/)、[foreground/](foreground/) |
 | 存储、事务与统一删除 | [storage/sqlite/](storage/sqlite/) |
 | 模型调用、切换与进程支持 | [platform/](platform/) |
 

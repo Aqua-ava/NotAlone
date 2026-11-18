@@ -1,5 +1,6 @@
 /** 物理调用台账合同。完整元数据存储必须显式注入，禁止静默丢字段。 */
 import type {MessagesBudgetReceipt} from './model-input-budget.ts';
+import {uuidPattern as uuid} from '../uuid.ts';
 export interface ModelLedgerUsage {
   input_tokens: number; output_tokens: number;
   cache_read_tokens: number | null; cache_write_tokens: number | null;
@@ -44,7 +45,6 @@ export class ModelLedgerError extends Error {
   readonly code: string;
   constructor(code:string) {super(code);this.code=code;}
 }
-const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const count=(value:unknown)=>Number.isSafeInteger(value)&&Number(value)>=0&&Number(value)<=2147483647;
 export function validateModelLedgerReceipt(receipt:ModelLedgerReceipt) {
   const invalid=()=>{throw new ModelLedgerError('model_ledger_receipt_invalid');};

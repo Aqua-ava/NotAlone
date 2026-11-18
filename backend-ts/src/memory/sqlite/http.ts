@@ -3,7 +3,7 @@ import {readHttpBody} from '../../platform/http/body.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import type {SqliteMemoryExtraction} from './service.ts';
 import { sendJson } from '../../platform/http/json.ts';
-const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+import {uuidPattern as uuid} from '../../platform/uuid.ts';
 /** 认证函数来自唯一宿主；owner和固定输入不能由HTTP指定。 */
 export class SqliteMemoryExtractionHttp {
  private service:SqliteMemoryExtraction;private authorize:(req:IncomingMessage)=>boolean;

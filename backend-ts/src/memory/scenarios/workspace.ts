@@ -15,9 +15,15 @@ import type {MessagesBudgetProfile} from '../../platform/models/model-input-budg
 import {
   L2ScenarioError,
   L2ScenarioVerificationError,
+  UUID,
   canonicalScenarioJSON,
+  clone,
   compileScenarioMarkdown,
+  count,
+  exactKeys,
+  object,
   parseScenarioVerification,
+  readToolCalls,
   renderScenarioDocument,
   validateScenarioBudget,
   validateScenarioDocument,
@@ -64,24 +70,7 @@ export interface ScenarioDocumentCallPort {
   call(input: ScenarioDocumentCall): Promise<ScenarioDocumentCallResult>;
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PATH = /^[a-zA-Z0-9_-]{1,96}\.md$/;
-
-function count(value: string): number {
-  return [...value].length;
-}
-
-function object(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value);
-}
-
-function clone<T>(value: T): T {
-  return structuredClone(value);
-}
-
-function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
-  return Object.keys(value).sort().join('|') === [...keys].sort().join('|');
-}
 
 function parseToolArguments(value: unknown): Record<string, unknown> {
   if (!object(value)) throw new L2ScenarioError('l2_scenario_tool_arguments_invalid');
@@ -238,11 +227,6 @@ export class L2ScenarioDocumentWorkspace {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : '文档格式无效';
-}
-
-function readToolCalls(blocks: readonly ContentBlock[]): {id: string; name: string; arguments: string}[] {
-  return blocks.filter((block): block is Extract<ContentBlock, {type: 'tool-call'}> => block.type === 'tool-call')
-    .map(block => ({id: block.id, name: block.name, arguments: block.arguments}));
 }
 
 function boundedMessages(messages: GenerateOptions['messages'], budget: L2ScenarioBudget): void {

@@ -1,29 +1,31 @@
+export interface ForegroundFailureReason { code: string; layer: string; message: string }
+
 // 当前帧上下文变化不证明联系人匹配失败；必须由下一轮重新取得完整的已有绑定证据。
-const transientContextChanges = new Set([
+const transientContextChanges = new Set<string | null>([
   'automatic_capture_context_changed',
   'automatic_capture_window_metadata_changed', 'automatic_capture_dimensions_changed',
 ]);
-export function isTransientForegroundContextChange(code) {
+export function isTransientForegroundContextChange(code: string | null): boolean {
   return transientContextChanges.has(code);
 }
 
 // 模型预热是宿主启动状态，不证明本轮联系人匹配失败，也不应留下人工确认门。
-const transientStartupReasons = new Set(['probe_warming', 'probe_warmup_timeout']);
-export function isTransientForegroundStartup(code) {
+const transientStartupReasons = new Set<string | null>(['probe_warming', 'probe_warmup_timeout']);
+export function isTransientForegroundStartup(code: string | null): boolean {
   return transientStartupReasons.has(code);
 }
 
-export function isUnsupportedForegroundConversation(code) {
+export function isUnsupportedForegroundConversation(code: string | null): boolean {
   return code === 'group_chat_unsupported' || code === 'group_chat_suspected';
 }
 
 // 这些原因表示已取得候选但需要用户手动选择/确认，不是技术失败，也不应清空已有资格。
-const awaitingSelectionReasons = new Set([
+const awaitingSelectionReasons = new Set<string | null>([
   'ambiguous_requires_selection', 'unmatched_requires_selection',
   'session_candidates_truncated', 'manual_confirmation_required',
 ]);
 
-export function isAwaitingForegroundSelection(code) {
+export function isAwaitingForegroundSelection(code: string | null): boolean {
   return awaitingSelectionReasons.has(code);
 }
 
@@ -31,7 +33,7 @@ export function isAwaitingForegroundSelection(code) {
 const knownNonFailureReasons = new Set(['confirmed_active_binding']);
 
 // 固定协议原因的中文说明；不显示原生原文、会话名称或任意reason字符串。
-const reasons = Object.freeze({
+const reasons: Readonly<Record<string, readonly [string, string]>> = Object.freeze({
   foreground_application_unavailable: ['前台检查', '系统未返回前台应用'],
   calibration_wechat_instances_ambiguous: ['前台检查', '微信运行实例不唯一'],
   calibration_wechat_version_unsupported: ['前台检查', '当前微信版本尚未适配'],
@@ -85,13 +87,13 @@ const reasons = Object.freeze({
   manual_confirmation_required: ['联系人匹配', '识别已恢复，需要在助手内确认本次联系人'],
 });
 
-export function isKnownForegroundReason(code) {
+export function isKnownForegroundReason(code: string | null): boolean {
   return typeof code === 'string' && (Object.hasOwn(reasons, code)
     || isTransientForegroundContextChange(code) || isUnsupportedForegroundConversation(code)
     || knownNonFailureReasons.has(code));
 }
 
-export function foregroundFailureReason(code) {
+export function foregroundFailureReason(code: string | null): ForegroundFailureReason | null {
   if (typeof code !== 'string' || !Object.hasOwn(reasons, code)) return null;
   const [layer, message] = reasons[code];
   return { code, layer, message };

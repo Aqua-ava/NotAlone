@@ -1,4 +1,7 @@
 import {verifyEvent,groundedEventProposal,groundedValidity} from './calendar.ts';
+import {ExtractionProtocolError,object,requireValid,uuid,text,choices,stringArray,when,instantMicros,exactFields,positions,sourcePositions} from './validators.ts';
+// 既有调用方仍从 protocol.ts 取校验原语。
+export {ExtractionProtocolError,object,requireValid,uuid,text,choices,stringArray,when,instantMicros,exactFields,positions,sourcePositions};
 /** direct E 与完整命题 V 的确定性边界；模型调用、许可、重试和写入由宿主负责。 */
 export interface ExtractionMessage {
   message_id: string; text: string; sender: 'self'|'contact'; occurred_at: string|null;
@@ -36,41 +39,6 @@ export interface SourceVerificationResult {
   model_claim_check?:unknown;
   claim_validation?:{status:'checked'|'invalid'|'unverified';policy_fingerprint:string;reason:string;semantic_support:'supported'|'uncertain'|'unsupported'};
 }
-export class ExtractionProtocolError extends Error {
-  readonly failure_kind='invalid_output';
-  constructor(message='来源核验结果不符合证据契约。'){super(message);this.name='ExtractionProtocolError';}
-}
-export function object(value:unknown):Record<string,any> {
-  if(value===null||typeof value!=='object'||Array.isArray(value))throw new ExtractionProtocolError();
-  return value as Record<string,any>;
-}
-export function requireValid(ok:unknown):asserts ok {if(!ok)throw new ExtractionProtocolError();}
-export function uuid(value:unknown):string {
-  requireValid(typeof value==='string');
-  const clean=value.replace(/^urn:uuid:/i,'').replace(/^\{|\}$/g,'').replace(/-/g,'');
-  requireValid(/^[0-9a-f]{32}$/i.test(clean));
-  return clean.toLowerCase().replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/,'$1-$2-$3-$4-$5');
-}
-export function text(value:unknown):string {requireValid(typeof value==='string'&&value.trim());return value;}
-export function choices(value:unknown,allowed:readonly string[]):string {requireValid(typeof value==='string'&&allowed.includes(value));return value;}
-export function stringArray(value:unknown):string[] {requireValid(Array.isArray(value));return value.map(text);}
-export function when(value:unknown):string|null {
-  if(value===null)return null;
-  requireValid(typeof value==='string'&&/^\d{4}-\d\d-\d\d[T ]\d\d:\d\d(?::\d\d(?:\.\d+)?)?(?:Z|[+-]\d\d:\d\d)$/.test(value)&&Number.isFinite(Date.parse(value)));
-  const parts=value.match(/^(\d{4})-(\d\d)-(\d\d)[T ](\d\d):(\d\d)(?::(\d\d))?/)!;
-  const year=Number(parts[1]),month=Number(parts[2]),day=Number(parts[3]);
-  const check=new Date(0);check.setUTCFullYear(year,month-1,day);
-  requireValid(year>=1&&year<=9999&&check.getUTCMonth()===month-1&&check.getUTCDate()===day&&Number(parts[4])<24&&Number(parts[5])<60&&Number(parts[6]??0)<60);
-  return value;
-}
-/** 与Python datetime相同保留六位微秒，避免JS毫秒截断改变来源等值或排序。 */
-export function instantMicros(value:string):bigint {
-  const fraction=value.match(/\.(\d+)/)?.[1]??'';
-  return BigInt(Date.parse(value.replace(/\.\d+/,'')))*1000n+BigInt(fraction.slice(0,6).padEnd(6,'0'));
-}
-export function exactFields(value:Record<string,any>,fields:string[]):void {
-  requireValid(Object.keys(value).length===fields.length&&fields.every(key=>Object.hasOwn(value,key)));
-}
 export function validateExtractionWindow(window:ExtractionWindow):void {
   uuid(window.owner_id);uuid(window.contact_id);
   requireValid(Array.isArray(window.messages)&&window.messages.length>0);
@@ -85,16 +53,6 @@ export function validateExtractionWindow(window:ExtractionWindow):void {
     when(message.occurred_at);if(message.occurred_at!==null){const time=instantMicros(message.occurred_at);requireValid(last===null||time>=last);last=time;}}
   if(window.target_message_ids!=null){requireValid(Array.isArray(window.target_message_ids)&&window.target_message_ids.length>0&&window.target_message_ids.length<=20);
     const ids=new Set(window.messages.map(m=>uuid(m.message_id)));for(const id of window.target_message_ids)requireValid(ids.has(uuid(id)));}
-}
-export function positions(value:unknown):EvidencePosition[] {
-  requireValid(Array.isArray(value)&&value.length<=8);
-  return value.map(item=>{const ref=object(item);exactFields(ref,['message_id','char_start','char_end']);
-    requireValid(Number.isInteger(ref.char_start)&&Number.isInteger(ref.char_end)&&0<=ref.char_start&&ref.char_start<ref.char_end&&ref.char_end<=100000);
-    return {message_id:uuid(ref.message_id),char_start:ref.char_start,char_end:ref.char_end};});
-}
-export function sourcePositions(refs:EvidencePosition[],fact:Pick<ExtractedFact,'source_message_ids'>,window:ExtractionWindow):void {
-  for(const ref of refs){const message=window.messages.find(m=>uuid(m.message_id)===ref.message_id);
-    requireValid(fact.source_message_ids.includes(ref.message_id)&&message&&message.text_representation==='text'&&ref.char_end<=Array.from(message.text).length);}
 }
 function parseConditions(value:unknown):MemoryConditions|null {
   if(value==null)return null;

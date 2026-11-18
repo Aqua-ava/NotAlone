@@ -7,7 +7,7 @@ import { foregroundObservation } from './observation';
 import type { SyncControlState } from '../../shared/sync-control-bridge';
 import type { ForegroundChangeSource, HeaderChangePermit } from './native-change-source';
 import { isAwaitingForegroundSelection, isKnownForegroundReason,
-  isUnsupportedForegroundConversation } from '../../shared/foreground-failure.mjs';
+  isUnsupportedForegroundConversation } from '../../shared/foreground-failure';
 import type { ContactSelection } from '../../shared/contact-session-bridge';
 
 type Flight = { abort: AbortController; promise: Promise<void> };

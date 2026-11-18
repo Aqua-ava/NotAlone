@@ -1,8 +1,9 @@
 import {currentDiagnosticTrace,diagnose,newTraceId,withDiagnosticTrace} from './context.ts';
 import type {DiagnosticModule} from './unified-contract.mjs';
+import {isUuid} from '../platform/uuid.ts';
 
 export function checkedTraceId(input:unknown):string|undefined {
- return typeof input==='string'&&/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(input)?input.toLowerCase():undefined;
+ return isUuid(input)?input.toLowerCase():undefined;
 }
 export function requestDiagnosticModule(path:string,method?:string):DiagnosticModule {
  if(method==='DELETE'&&(path==='/api/account'||/^\/api\/contacts\/[^/?]+(?:\/(?:sources|assistant-sessions)\/[^/?]+)?$/.test(path)))return 'deletion';

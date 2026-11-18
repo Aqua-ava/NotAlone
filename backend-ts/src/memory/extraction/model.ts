@@ -11,6 +11,7 @@ import type {ModelTaskClaim,ModelPermitPort,ModelPermitLease} from '../../platfo
 import {ModelLedgerError} from '../../platform/models/model-ledger-contract.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
 import {DEEPSEEK_STRICT_VERIFICATION_TOOL} from '../../platform/models/deepseek-strict.ts';
+import {uuidPattern as uuid} from '../../platform/uuid.ts';
 export type ExtractionPermitEndpoint=ModelPermitPort;
 export interface ExtractionProviderFailure {name:'LlmError'|'LlmFailure';code:string;status?:number;transport_category?:ModelTransportCategory;stage?:'before_send'|'awaiting_response'|'response_received';elapsed_ms?:number;request_bytes?:number;image_count?:number;}
 function providerFailureSnapshot(failure:LlmFailure,name:ExtractionProviderFailure['name']):ExtractionProviderFailure {
@@ -71,7 +72,6 @@ export async function extractionUnconfirmedRequests(endpoint:ExtractionPermitEnd
   if(!Array.isArray(ids)||ids.some(id=>typeof id!=='string'||!uuid.test(id)))throw new ExtractionModelError('extraction_model_recovery_unknown');
   return [...new Set(ids)].sort();
 }
-const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // 领域拒绝发生在预约事务提交前；工作线程失联或超时仍可能已经提交，不能据异常释放许可。
 function reservationWasRejected(error:unknown):boolean {
   return error instanceof ModelLedgerError || error instanceof StorageFailure

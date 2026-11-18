@@ -1,7 +1,6 @@
-import type {StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
+import {StorageFailure,type StorageRow,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import type {ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
 import {assertSourceEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
-import {fail} from './qualification.ts';
 type QualificationParent={candidateId?:string;memoryId?:string;versionNo?:bigint};
 interface QualificationMemo {rows:Map<string,StorageRow[]>;verified:Map<SourceEligibility,Set<string>>;}
 const qualificationMemos=new WeakMap<StorageTransaction,QualificationMemo>();
@@ -39,7 +38,7 @@ export function qualificationSources(tx:StorageTransaction,ownerId:string,parent
   const key=JSON.stringify([ownerId,source.contactId,source.messageId,source.recordId,String(source.acceptedRevision)]);
   if(!verified?.has(key)&&!checked.has(key)){
    sourceEligibility(tx,{owner_id:ownerId,contact_id:source.contactId,message_id:source.messageId,record_id:source.recordId});
-   if(!tx.get("SELECT 1 FROM message WHERE owner_id=? AND contact_id=? AND id=? AND interpretation_revision=? AND availability='available'",[ownerId,source.contactId,source.messageId,source.acceptedRevision]))fail('memory_source_stale');
+   if(!tx.get("SELECT 1 FROM message WHERE owner_id=? AND contact_id=? AND id=? AND interpretation_revision=? AND availability='available'",[ownerId,source.contactId,source.messageId,source.acceptedRevision]))throw new StorageFailure('memory_source_stale');
    checked.add(key);
   }
   return source;

@@ -5,10 +5,10 @@ import {MODEL_IMAGE_LIMITS} from '../../platform/models/image-normalization.ts';
 import {assertInputs,assertTaskContributions,currentAttempt,fail,textId} from './qualification.ts';
 import {readFrozenContent} from './content.ts';
 import {resumeRunSchedule,setRunSchedulePaused} from './documents/later-schedule.ts';
+import {uuidPattern as uuid} from '../../platform/uuid.ts';
 
 export interface IsolatedImageInput {inputNo:number;itemId:string;fileId:string;sha256:string;attemptId:string;eventId:string;contactId:string}
 const reason='media_model_input_unavailable';
-const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 function number(value:unknown):number{const n=Number(value);if(!Number.isSafeInteger(n)||n<0)fail('memory_extraction_count_invalid');return n;}
 function append(tx:StorageTransaction,ownerId:string,attemptId:string,kind:string,payload:unknown):string{
  const eventId=randomUUID(),eventNo=tx.get('SELECT coalesce(max(event_no),0)+1 AS n FROM execution_event WHERE owner_id=? AND step_attempt_id=?',[ownerId,attemptId])!.n;

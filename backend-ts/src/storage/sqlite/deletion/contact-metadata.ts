@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { SqliteContactService } from '../../../contacts/sqlite/service.ts';
 import { SqliteContactHttp } from '../../../contacts/sqlite/http.ts';
 import { StorageFailure } from '../contracts.ts';
+import { sendJson } from '../../../platform/http/json.ts';
 import type { ReadEligibility, ContactMetadataPort } from '../../../contacts/sqlite/contracts.ts';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { SqliteStorage } from '../client.ts';
@@ -154,8 +155,7 @@ export class ContactMetadataLifetime {
     try { return new URL(req.url ?? '', 'http://localhost').pathname; } catch { return undefined; }
   }
   private deny(res: ServerResponse): boolean {
-    res.writeHead(409, {'Content-Type': 'application/json', 'Cache-Control': 'no-store'});
-    res.end(JSON.stringify({error: 'identity_closed'}));
+    sendJson(res, 409, {error: 'identity_closed'});
     return true;
   }
   async close(): Promise<void> {

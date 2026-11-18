@@ -4,6 +4,7 @@ import { readHttpBody, HttpBodyError } from '../../platform/http/body.ts';
 import type { HistoryClearStatus } from './clear.ts';
 import type { HistoryResyncStatus } from './resync.ts';
 import { sendJson } from '../../platform/http/json.ts';
+import {uuidPattern as uuid} from '../../platform/uuid.ts';
 
 interface ClearHttpService {
   clear(contactId: string, options?: { signal?: AbortSignal }): Promise<HistoryClearStatus>;
@@ -13,7 +14,6 @@ interface ResyncHttpService {
   resync(contactId: string, options: { requestKey: string; signal?: AbortSignal }): Promise<HistoryResyncStatus>;
   status(contactId: string): Promise<HistoryResyncStatus>;
 }
-const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const requestKey = /^[A-Za-z0-9_.:@-]{1,200}$/;
 /** 去掉服务端内部游标/证明原文，只给界面必要状态。 */
 export function projectClearStatus(status: HistoryClearStatus) {

@@ -3,6 +3,7 @@ import {readExtractionToolArguments} from '../extraction/arguments.ts';
 import {sha256} from '../../platform/sha256.ts';
 import type {ModelImageInput} from '../../platform/models/model-images.ts';
 import type {ContentEvidence,ContentSource} from '../content/evidence.ts';
+import {uuidPattern as uuid} from '../../platform/uuid.ts';
 import type {
  AdjudicationDecision,AdjudicationItem,AdjudicationRelation,AdjudicationRuntime,EvolutionKind,MergeVerification,ModelUsage,RelationVerification,
 } from './contracts.ts';
@@ -33,7 +34,6 @@ export class AdjudicationModelError extends Error {
 
 const actions=['add','update','noop','keep','merge'] as const;
 const relationKinds:EvolutionKind[]=['supplement','state_change','error_correction','historical_supplement','unresolved_conflict','independent'];
-const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const contentEvidenceSchema={anyOf:[
  {type:'object',additionalProperties:false,
   properties:{message_id:{type:'string'},quote:{type:'string',minLength:1}},required:['message_id','quote']},

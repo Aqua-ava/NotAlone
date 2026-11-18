@@ -9,6 +9,7 @@ import {statementCache} from './statement-cache.ts';
 import {registry as defaultRegistry} from './registry.ts';
 import {StorageFailure,type StorageRegistry,type StorageTransaction} from './contracts.ts';
 import type {ReadonlyWorkerOptions} from './readonly-client.ts';
+import {isUuid} from '../../platform/uuid.ts';
 
 const port=parentPort!,options=workerData as ReadonlyWorkerOptions;
 const failureCode=(error:unknown):string=>{
@@ -52,7 +53,7 @@ try{
   if(ledger.length!==status.schemaVersion||ledger.length!==registry.migrations.length||ledger.some((row,index)=>row.version!==BigInt(index+1)||row.checksum!==sha256(registry.migrations[index].sql)))throw new StorageFailure('migration_drift');
   assertLease();port.postMessage({ready:true});
   port.on('message',({id,name,input,traceId})=>{
-    const safeTrace=typeof traceId==='string'&&/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(traceId)?traceId:undefined;
+    const safeTrace=isUuid(traceId)?traceId:undefined;
     sqlSummary=new SqlDiagnosticSummary(storageDiagnosticModule(name),'sqlite_readonly_worker',safeTrace);
     const respond=(value:Record<string,unknown>)=>{const diagnosticObservedAt=Date.now(),diagnosticObservedMonotonicNs=process.hrtime.bigint(),diagnostics=sqlSummary!.events();sqlSummary=undefined;port.postMessage({id,...value,diagnostics,diagnosticObservedAt,diagnosticObservedMonotonicNs});};
     try{

@@ -5,8 +5,8 @@ import type { AccountEvidence, ContactMetadataPort, ContactSelection, ReadEligib
 import { WECHAT_METADATA_SUPPORT } from '../../history/wechat/support-profile.ts';
 import { normalizeContactAvatar, type ContactAvatar } from './avatar.ts';
 import { projectContactSyncStatus } from './sync-status.ts';
+import {isUuid as uuid} from '../../platform/uuid.ts';
 function fail(code:string):never {throw new StorageFailure(code);}
-const uuid=(value:unknown):value is string=>typeof value==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(value);
 const identity=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9_.@-]{1,255}$/.test(v);
 const version=(value:unknown):value is string=>typeof value==='string'&&/^[0-9]{1,3}(\.[0-9]{1,3}){1,3}$/.test(value);
 const build=(value:unknown):value is string=>typeof value==='string'&&/^[0-9]{1,12}$/.test(value);

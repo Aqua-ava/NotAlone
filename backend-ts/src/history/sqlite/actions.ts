@@ -19,6 +19,7 @@ import { purgeStaleGoals, retireResumedEmptyGoals } from './goal-retention.ts';
 // 规范化与空目标复用判据集中在 goal-reuse.ts；这里 re-export 保持既有导入点不变。
 import { serializeSupport, reusableEmptyGoals } from './goal-reuse.ts';
 import { assertSourceContinuity, assertCheckpointSourceContinuity, assertLiveGuard, fenceContinuity, isSourceContinuityLost, normalUseContinuity, normalUseRevalidationCandidate, prepareNormalUseTarget, preflightGeneration, preflightTarget } from './continuity.ts';
+import {isUuid} from '../../platform/uuid.ts';
 const fail:(code:string)=>never=(code)=>{throw new StorageFailure(code);};
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any)=>unknown):StorageAction=>({name,mode,retryBusy:true,execute});
 export { serializeSupport };
@@ -364,7 +365,7 @@ export const historyActions:StorageAction[]=[
  action('history.readChat','read',(tx,i)=>readChatMessages(tx,i.ownerId,i.contactId,i.limit,i.before)),
  action('history.imageMedia','read',(tx,i)=>{
   if(typeof i.ownerId!=='string'||!i.ownerId||typeof i.contactId!=='string'||!i.contactId||!Array.isArray(i.messageIds)
-   ||i.messageIds.length>100||i.messageIds.some((value:unknown)=>typeof value!=='string'||!/^([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})$/i.test(value))
+   ||i.messageIds.length>100||i.messageIds.some((value:unknown)=>!isUuid(value))
    ||new Set(i.messageIds).size!==i.messageIds.length)fail('history_request_invalid');
   if(!i.messageIds.length)return [];
   return tx.all(`WITH ${currentSourceScopeCTE} SELECT m.id message_id,mm.state media_state,a.state attempt_state,a.error_code,

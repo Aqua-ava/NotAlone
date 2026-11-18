@@ -19,6 +19,7 @@ import { registry as defaultRegistry } from './registry.ts';
 import { memoryAdjudicationMigration, memoryAdjudicationRebuildPolicy, memoryAdjudicationRebuildChecksum, memoryAdjudicationUpgradeSteps } from '../../memory/sqlite/management/adjudication-schema.ts';
 import { memoryDocumentsMigration, memoryDocumentsRebuildPolicy, memoryDocumentsRebuildChecksum, memoryDocumentsUpgradeSteps } from '../../memory/sqlite/documents/schema.ts';
 import { StorageFailure, type OpenStorageOptions, type StorageRegistry, type StorageTransaction, type StorageLease, type StorageMaintenance, type StorageDiagnostic } from './contracts.ts';
+import {isUuid} from '../../platform/uuid.ts';
 
 const port = parentPort!;
 const options = workerData as OpenStorageOptions;
@@ -185,7 +186,7 @@ try {
   port.on('message', ({id, name, input, lease,traceId}) => {
     // 串行队列等待不消耗动作预算；主线程收到开始确认后监督本次同步执行。
     const startedAt=Number(process.hrtime.bigint())/1e6;
-    const safeTrace=typeof traceId==='string'&&/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(traceId)?traceId:undefined;
+    const safeTrace=isUuid(traceId)?traceId:undefined;
     sqlSummary=new SqlDiagnosticSummary(storageDiagnosticModule(name),'sqlite_worker',safeTrace);
     let diagnosticObservation:{diagnosticObservedAt:number;diagnosticObservedMonotonicNs:bigint}|undefined;
     const respond=(value:Record<string,unknown>)=>{const diagnostics=[...(Array.isArray(value.diagnostics)?value.diagnostics:[]),...sqlSummary!.events()];sqlSummary=undefined;port.postMessage({id,...value,diagnostics,...(diagnosticObservation??{diagnosticObservedAt:Date.now(),diagnosticObservedMonotonicNs:process.hrtime.bigint()}),startedAt,finishedAt:Number(process.hrtime.bigint())/1e6});};

@@ -3,6 +3,7 @@ import {AsyncLocalStorage} from 'node:async_hooks';
 import {randomUUID} from 'node:crypto';
 import type {UnifiedDiagnosticLog} from './unified-log.mjs';
 import {checkedDiagnosticEvent,type DiagnosticEvent} from './unified-contract.mjs';
+import {isUuid} from '../platform/uuid.ts';
 const traces=new AsyncLocalStorage<string>();
 let current:UnifiedDiagnosticLog|undefined,opening:Promise<void>|undefined;
 type ObservedPublisher=(event:DiagnosticEvent,observedAt:number,observedNs:bigint,protection?:DiagnosticObservation)=>void;
@@ -11,7 +12,7 @@ const pending=new DiagnosticBuffer<{event:DiagnosticEvent;observedAt:number;obse
 export const newTraceId=():string=>randomUUID();
 export const currentDiagnosticTrace=():string|undefined=>traces.getStore();
 export function withDiagnosticTrace<T>(traceId:string|undefined,work:()=>T):T {
- return traceId&&/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(traceId)?traces.run(traceId,work):work();
+ return isUuid(traceId)?traces.run(traceId,work):work();
 }
 export function registerDiagnosticLog(log:UnifiedDiagnosticLog,publishObserved:ObservedPublisher):void {
  current=log;publishCurrent=publishObserved;const batch=pending.take();
@@ -22,7 +23,7 @@ export function registerDiagnosticLog(log:UnifiedDiagnosticLog,publishObserved:O
 export function diagnosticLog():UnifiedDiagnosticLog|undefined{return current;}
 /** 删除前先停止旧图片调用；擦除惰性队列和已有统一日志中的该文件身份，失败如实返回。 */
 export async function eraseModelImageDiagnostic(imageId:string):Promise<boolean>{
- if(typeof imageId!=='string'||!/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(imageId))return false;
+ if(!isUuid(imageId))return false;
  const buffered=pending.take();
  for(const item of buffered.items)if(item.event.event!=='processing.model_image'||item.event.imageId!==imageId)pending.push(item.event,item,Buffer.byteLength(JSON.stringify(item.event)),{observedAt:item.observedAt,observedNs:item.observedNs});
  for(const entry of buffered.noticeEntries)pending.push(entry.event,undefined,0,entry.observation);

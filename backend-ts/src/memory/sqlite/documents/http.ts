@@ -4,8 +4,8 @@ import {diagnose} from '../../../diagnostics/context.ts';
 import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import type {SqliteMemoryDocuments} from './service.ts';
 import { sendJson } from '../../../platform/http/json.ts';
+import {uuidPattern as uuid} from '../../../platform/uuid.ts';
 
-const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 export function memoryDocumentsQueryAllowed(method:string|undefined,url:URL):boolean {
  const keys=[...url.searchParams.keys()],kind=url.searchParams.get('scope_kind'),contactId=url.searchParams.get('contact_id');
  return method==='GET'&&url.pathname==='/api/memory-documents'&&new Set(keys).size===keys.length

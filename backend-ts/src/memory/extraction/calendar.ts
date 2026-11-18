@@ -1,4 +1,4 @@
-import {object, positions, sourcePositions, requireValid, choices, when, uuid,instantMicros} from './protocol.ts';
+import {object, positions, sourcePositions, requireValid, choices, when, uuid,instantMicros} from './validators.ts';
 import type {ExtractionMessage, ExtractionWindow, ExtractedFact, MemoryEvent} from './protocol.ts';
 
 type LocalAnchor={epoch:number;offset:number};

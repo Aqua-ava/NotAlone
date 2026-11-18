@@ -1,5 +1,7 @@
 /** L2 场景文档的确定性合同、编译与核验；不执行模型调用或发布业务版本。 */
 import {createHash} from 'node:crypto';
+import type {ContentBlock} from '@deepseek-ai/dsh-llm';
+import {uuidPattern} from '../../platform/uuid.ts';
 
 export interface L2ScenarioScope {
   owner_id: string;
@@ -90,7 +92,7 @@ export class L2ScenarioError extends Error {
   }
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID = uuidPattern;
 const TOPIC_KEY = /^[a-z0-9][a-z0-9_-]{0,63}$/;
 const CJK = /[\u3400-\u9fff]/u;
 
@@ -120,20 +122,25 @@ export function scenarioTopicId(namespace: string, name: string): string {
   return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
 }
 
-function count(value: string): number {
+export function count(value: string): number {
   return [...value].length;
 }
 
-function object(value: unknown): value is Record<string, unknown> {
+export function object(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-function clone<T>(value: T): T {
+export function clone<T>(value: T): T {
   return structuredClone(value);
 }
 
-function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+export function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
   return Object.keys(value).sort().join('|') === [...keys].sort().join('|');
+}
+
+export function readToolCalls(blocks: readonly ContentBlock[]): {id: string; name: string; arguments: string}[] {
+  return blocks.filter((block): block is Extract<ContentBlock, {type: 'tool-call'}> => block.type === 'tool-call')
+    .map(block => ({id: block.id, name: block.name, arguments: block.arguments}));
 }
 
 export function validateScenarioBudget(budget: L2ScenarioBudget): void {

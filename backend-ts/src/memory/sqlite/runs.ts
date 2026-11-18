@@ -14,6 +14,7 @@ import {backlogRecoveryActions,backlogRunRecoverable} from './backlog-recovery.t
 import {autoProcessingActions} from './auto-processing.ts';
 import {memoryIncrementalBaseline,captureAcceptanceOrder} from '../../storage/sqlite/message-order.ts';
 import {pendingMemoryInputStats,readScheduleInputRows,scheduleInputAvailability,withScheduleInputStats} from './schedule-inputs.ts';
+import {isUuid} from '../../platform/uuid.ts';
 const number=(v:unknown):number=>{if(typeof v!=='bigint'||v<0n||v>BigInt(Number.MAX_SAFE_INTEGER))return fail('memory_extraction_count_invalid');return Number(v);};
 const minute=60_000,hour=60*minute,quietThreshold=10*minute,volumeThreshold=50,ageThreshold=6*hour,startCooldown=30*minute;
 const timeNumber=(v:unknown):number=>{if(typeof v!=='bigint'||v<0n||v>BigInt(Number.MAX_SAFE_INTEGER))return fail('memory_extraction_time_invalid');return Number(v);};
@@ -386,7 +387,7 @@ const schedulingActions:StorageAction[]=[
  }},
  {name:'memoryExtraction.scanSchedule',mode:'read',retryBusy:false,execute(tx,raw){
   const i=raw as {ownerId:string;now:number;contactIds:string[]},ownerId=textId(i.ownerId),now=checkedNow(i.now);
-  if(!Array.isArray(i.contactIds)||i.contactIds.length>32||i.contactIds.some(id=>typeof id!=='string'||!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id)))fail('memory_extraction_input_invalid');
+  if(!Array.isArray(i.contactIds)||i.contactIds.length>32||i.contactIds.some(id=>!isUuid(id)))fail('memory_extraction_input_invalid');
   if(!i.contactIds.length)return {contacts:[]};
   const wanted=new Set(i.contactIds),ids=[...new Set(validContacts(tx,ownerId).map(row=>String(row.id)))].filter(id=>wanted.has(id));
   return {contacts:ids.map(contactId=>({contactId,incrementalDueAt:queueStates(tx,ownerId,now,contactId)[0]?.dueAt??null,
@@ -443,7 +444,7 @@ function oldImageRetryRun(tx:StorageTransaction,ownerId:string,contactId:string,
 /** 联系人视图只读投影，不把全局最新轮次或本人资料混入当前联系人。 */
 function contactView(tx:StorageTransaction,raw:unknown){
  const input=raw as {ownerId:string;contactId:string},ownerId=textId(input.ownerId),contactId=textId(input.contactId);
- if(!/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(contactId))fail('memory_extraction_input_invalid');
+ if(!isUuid(contactId))fail('memory_extraction_input_invalid');
  if(!tx.get("SELECT 1 FROM contact c JOIN owner o ON o.owner_id=c.owner_id WHERE c.owner_id=? AND c.id=? AND c.state='active' AND o.state='active'",[ownerId,contactId]))fail('memory_extraction_not_found');
  if(tx.get("SELECT 1 FROM deletion_operation WHERE owner_identity=? AND state<>'completed' LIMIT 1",[ownerId]))fail('memory_extraction_scope_stale');
  const latest=tx.get(`SELECT r.id FROM processing_run r WHERE r.owner_id=?
@@ -459,8 +460,7 @@ function contactView(tx:StorageTransaction,raw:unknown){
 function startHistory(tx:StorageTransaction,raw:unknown){
  const input=raw as {ownerId:string;contactId:string;requestKey:string;policyConfig:unknown;followupStages?:boolean};
  const ownerId=textId(input.ownerId),contactId=textId(input.contactId),requestKey=textId(input.requestKey);
- const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
- if(!uuid.test(contactId)||!uuid.test(requestKey))fail('memory_extraction_request_invalid');
+ if(!isUuid(contactId)||!isUuid(requestKey))fail('memory_extraction_request_invalid');
  // 与旧全局启动分开命名；删除领域沿 start_request_key 原样写入墓碑。
  const storedKey=`history:${requestKey.toLowerCase()}`;
  if(tx.get('SELECT 1 FROM request_tombstone WHERE owner_identity=? AND request_key=?',[ownerId,storedKey]))fail('memory_extraction_request_deleted');

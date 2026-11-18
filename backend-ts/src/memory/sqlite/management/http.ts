@@ -6,7 +6,7 @@ import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import type {SqliteMemoryManagement} from './service.ts';
 import type {MemoryDecisionRequest} from './contracts.ts';
 import { sendJson } from '../../../platform/http/json.ts';
-const uuid=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+import {uuidPattern as uuid} from '../../../platform/uuid.ts';
 const fields=new Set(['requestKey','action','candidateIds','candidateRevisions','memoryId','expectedVersionNo','expectedHeadRevision','restoredFromVersionNo','expectedMergedParents','body','scope']);
 export function memoryManagementQueryAllowed(method:string|undefined,url:URL):boolean{
  const keys=[...url.searchParams.keys()],kind=url.searchParams.get('scope_kind'),contactId=url.searchParams.get('contact_id');
