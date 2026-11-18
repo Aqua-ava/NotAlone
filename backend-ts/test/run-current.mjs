@@ -2,6 +2,8 @@ import {readdir,readFile} from 'node:fs/promises';
 import {spawn,execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {dirname,resolve} from 'node:path';
+import {existsSync,readdirSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
 
 const directory=dirname(fileURLToPath(import.meta.url)),root=resolve(directory,'../..');
 const files=(await readdir(directory)).filter(name=>name.endsWith('.test.mjs')).sort();
@@ -14,14 +16,26 @@ for(const file of files){
 const args=process.argv.slice(2);
 // 并发度固定为 4：实测高于 4 时（6、8），时序敏感用例在有外部负载的机器上偶发失败
 // （history 启动宿主 409、临时目录清理竞态、真实子进程等待）。需要时在命令行追加 --test-concurrency=N 覆盖。
+// 测试进程与 SQLite Worker 反复加载同一批 TypeScript 源码；V8 编译缓存按内容校验，只缩短加载，不改变行为。
+// 默认缓存放系统临时目录；测试动态生成的临时脚本每次都会产生新条目，条目超过上限时整体清空重建。
+// 设置 NODE_COMPILE_CACHE 可改用其他目录（不清理），设置 NODE_DISABLE_COMPILE_CACHE=1 可关闭。
+const compileCache=process.env.NODE_COMPILE_CACHE??resolve(tmpdir(),`notalone-test-compile-cache-${process.getuid?.()??'user'}`);
+function pruneCompileCache(){
+ if(process.env.NODE_COMPILE_CACHE||!existsSync(compileCache))return;
+ for(const entry of readdirSync(compileCache)){
+  const versioned=resolve(compileCache,entry);
+  try{if(readdirSync(versioned).length>20000)rmSync(versioned,{recursive:true,force:true});}catch{/* 非目录或已被并行运行清理，忽略。 */}
+ }
+}
 if(args[0]==='--list'){
  console.log(JSON.stringify({current:files.length,executed:false}));
 }else{
+ pruneCompileCache();
  execFileSync('bash',[resolve(root,'native/skill-read/build.sh')],{stdio:'inherit'});
  const selected=args.filter(arg=>arg.endsWith('.test.mjs'));
  if(selected.some(file=>!files.includes(file.replace(/^test\//,''))))throw new Error('只能运行 test 目录下的现行测试文件');
  const flags=args.filter(arg=>!arg.endsWith('.test.mjs'));
- const child=spawn(process.execPath,['--test','--test-concurrency=4',...flags,...(selected.length?selected.map(file=>resolve(directory,file.replace(/^test\//,''))):files.map(file=>resolve(directory,file)))],{cwd:resolve(root,'backend-ts'),stdio:'inherit'});
+ const child=spawn(process.execPath,['--test','--test-concurrency=4',...flags,...(selected.length?selected.map(file=>resolve(directory,file.replace(/^test\//,''))):files.map(file=>resolve(directory,file)))],{cwd:resolve(root,'backend-ts'),stdio:'inherit',env:{...process.env,NODE_COMPILE_CACHE:compileCache}});
  child.once('error',error=>{console.error(error.message);process.exitCode=1;});
  child.once('exit',(code,signal)=>{process.exitCode=code??(signal?1:0);});
 }
