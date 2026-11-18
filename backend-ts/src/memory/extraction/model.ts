@@ -10,7 +10,7 @@ import type {MessagesBudgetBinding, MessagesBudgetProfile} from '../../platform/
 import type {ModelTaskClaim,ModelPermitPort,ModelPermitLease} from '../../platform/models/model-permit-port.ts';
 import {ModelLedgerError} from '../../platform/models/model-ledger-contract.ts';
 import {StorageFailure} from '../../storage/sqlite/contracts.ts';
-import {DEEPSEEK_STRICT_VERIFICATION_TOOL} from './verification/deepseek-strict.ts';
+import {DEEPSEEK_STRICT_VERIFICATION_TOOL} from '../../platform/models/deepseek-strict.ts';
 export type ExtractionPermitEndpoint=ModelPermitPort;
 export interface ExtractionProviderFailure {name:'LlmError'|'LlmFailure';code:string;status?:number;transport_category?:ModelTransportCategory;stage?:'before_send'|'awaiting_response'|'response_received';elapsed_ms?:number;request_bytes?:number;image_count?:number;}
 function providerFailureSnapshot(failure:LlmFailure,name:ExtractionProviderFailure['name']):ExtractionProviderFailure {

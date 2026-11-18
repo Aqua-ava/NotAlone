@@ -4,7 +4,7 @@ import {randomUUID,createHash} from 'node:crypto';
 import {resolveHostReplyConfiguration} from '../src/host/host-reply-config.ts';
 import {measureSerializedStrictChatCompletion} from '../src/platform/models/model-input-budget.ts';
 import {modelLedgerInputBudget} from '../src/platform/models/model-ledger-contract.ts';
-import {buildDeepSeekStrictVerificationRequest} from '../src/memory/extraction/verification/deepseek-strict.ts';
+import {buildDeepSeekStrictVerificationRequest} from '../src/platform/models/deepseek-strict.ts';
 import {installModelProvider} from '../src/platform/models/model-provider.ts';
 
 const configured=(extra={})=>resolveHostReplyConfiguration({NOTALONE_DEEPSEEK_API_KEY:'synthetic-output-configuration-key',NOTALONE_OPENCODE_API_KEY:'synthetic-opencode-output-key',...extra});

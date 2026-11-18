@@ -3,6 +3,7 @@ import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import { readHttpBody, HttpBodyError } from '../../platform/http/body.ts';
 import type { HistoryClearStatus } from './clear.ts';
 import type { HistoryResyncStatus } from './resync.ts';
+import { sendJson } from '../../platform/http/json.ts';
 
 interface ClearHttpService {
   clear(contactId: string, options?: { signal?: AbortSignal }): Promise<HistoryClearStatus>;
@@ -41,10 +42,6 @@ export function projectResyncStatus(status: HistoryResyncStatus) {
     } : null,
   };
 }
-function send(res: ServerResponse, status: number, value: unknown): void {
-  res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-  res.end(JSON.stringify(value));
-}
 /** 宿主查询门：只放行固定只读路径，避免任意路由穿越。 */
 export function clearQueryAllowed(method: string | undefined, url: URL): boolean {
   if (!/^\/api\/contacts\/[a-f0-9-]{36}\/history\/(clear|resync)$/.test(url.pathname)) return false;
@@ -60,10 +57,10 @@ export class SqliteHistoryClearHttp {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const route = /^\/api\/contacts\/([a-f0-9-]{36})\/history\/(clear|resync)$/.exec(url.pathname);
     if (!route) return false;
-    if (!uuid.test(route[1]!)) { send(res, 400, { error: 'history_request_invalid' }); return true; }
+    if (!uuid.test(route[1]!)) { sendJson(res, 400, { error: 'history_request_invalid' }); return true; }
     const contactId = route[1]!.toLowerCase();
     const operation = route[2]!;
-    if (!clearQueryAllowed(req.method,url)) { send(res, 400, { error: 'history_request_invalid' }); return true; }
+    if (!clearQueryAllowed(req.method,url)) { sendJson(res, 400, { error: 'history_request_invalid' }); return true; }
     const controller = new AbortController();
     const abort = () => controller.abort();
     req.once('aborted', abort);
@@ -83,13 +80,13 @@ export class SqliteHistoryClearHttp {
           || typeof raw.request_key !== 'string' || !requestKey.test(raw.request_key)) throw new StorageFailure('history_request_invalid');
         value = projectResyncStatus(await this.resync.resync(contactId, { requestKey: raw.request_key, signal: controller.signal }));
       }
-      send(res, 200, value);
+      sendJson(res, 200, value);
     } catch (error) {
       const code = error instanceof StorageFailure ? error.code : error instanceof HttpBodyError ? error.code
         : error instanceof SyntaxError ? 'history_request_invalid' : 'history_request_failed';
-      if (code === 'history_request_invalid') send(res, 400, { error: code });
-      else if (/not_found|not_authorized|unavailable|unverified/.test(code)) send(res, code.includes('not_found') ? 404 : 409, { error: code });
-      else send(res, 409, { error: code });
+      if (code === 'history_request_invalid') sendJson(res, 400, { error: code });
+      else if (/not_found|not_authorized|unavailable|unverified/.test(code)) sendJson(res, code.includes('not_found') ? 404 : 409, { error: code });
+      else sendJson(res, 409, { error: code });
     } finally { req.removeListener('aborted', abort); }
     return true;
   }

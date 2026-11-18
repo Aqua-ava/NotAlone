@@ -8,7 +8,7 @@ import {installModelProvider,type ModelProviderConfiguration} from '../../platfo
 import type {ExtractionInvocation} from '../extraction/flow.ts';
 import {createExtractionModelCaller,type ExtractionPermitEndpoint} from '../extraction/model.ts';
 import {DIRECT_EXTRACTION_SCHEMA} from '../extraction/prompts.ts';
-import {DEEPSEEK_STRICT_VERIFICATION_TOOL} from '../extraction/verification/deepseek-strict.ts';
+import {DEEPSEEK_STRICT_VERIFICATION_TOOL} from '../../platform/models/deepseek-strict.ts';
 import type {ModelImageManifest} from '../../platform/models/model-images.ts';
 
 export interface SqliteExtractionModelScope {owner_id:string;contact_id:string;}

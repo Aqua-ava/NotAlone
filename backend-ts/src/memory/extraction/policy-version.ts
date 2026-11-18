@@ -68,7 +68,7 @@ function dependencies(source:string):string[]{
 }
 export async function createExtractionPolicyVersion(options:{rootDirectory?:string;entrypoints?:readonly string[]}={}):Promise<ExtractionPolicyVersion>{
  const root=resolve(options.rootDirectory??resolve(dirname(fileURLToPath(import.meta.url)),'../..'));
- const entries=options.entrypoints??['memory/sqlite/service.ts','memory/extraction/verification/deepseek-strict.ts','memory/extraction/policy-version.ts'];
+ const entries=options.entrypoints??['memory/sqlite/service.ts','platform/models/deepseek-strict.ts','memory/extraction/policy-version.ts'];
  const metadata=[resolve(root,'../package.json'),resolve(root,'../../pnpm-lock.yaml')];
  async function capture():Promise<string>{
   const visited=new Set<string>(),files:{path:string;sha256:string}[]=[];

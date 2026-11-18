@@ -15,7 +15,7 @@ import {
 import {
   buildDeepSeekStrictVerificationRequest,decodeDeepSeekStrictVerificationResponse,
   DEEPSEEK_STRICT_VERIFICATION_ENDPOINT,type DeepSeekStrictVerificationResponse,
-} from '../../memory/extraction/verification/deepseek-strict.ts';
+} from './deepseek-strict.ts';
 export interface ModelProviderCall {
   sessionId: string; attempt_id: string; permit_id: string;
   contactPrefix?: string;

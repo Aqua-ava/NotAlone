@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {parseDirectExtraction} from '../src/memory/extraction/protocol.ts';
 import {prepareSourceVerification} from '../src/memory/extraction/verification/complete-claim.ts';
 import {assertCompleteClaimAdmission} from '../src/memory/extraction/verification/complete-claim.ts';
-import {deepSeekStrictVerificationSchema} from '../src/memory/extraction/verification/deepseek-strict.ts';
+import {deepSeekStrictVerificationSchema} from '../src/platform/models/deepseek-strict.ts';
 import {resolveExtractionPolicy} from '../src/memory/extraction/policy-version.ts';
 
 const owner = '11111111-1111-4111-8111-111111111111';

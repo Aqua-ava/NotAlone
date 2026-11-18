@@ -4,7 +4,7 @@ import {
   buildDeepSeekStrictVerificationRequest,
   decodeDeepSeekStrictVerificationResponse,
   deepSeekStrictVerificationSchema,
-} from '../src/memory/extraction/verification/deepseek-strict.ts';
+} from '../src/platform/models/deepseek-strict.ts';
 import {buildSourceVerificationContract} from '../src/memory/extraction/contract.ts';
 import {prepareSourceVerification} from '../src/memory/extraction/verification/complete-claim.ts';
 import {verificationPolicy,completeClaimRow} from './fixtures/complete-claim-response.mjs';

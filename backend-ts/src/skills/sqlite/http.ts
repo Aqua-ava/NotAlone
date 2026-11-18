@@ -5,6 +5,7 @@ import {SqliteSkillLibrary,SqliteSkillError} from './library.ts';
 import type {SkillPackageState} from './contracts.ts';
 import type {SkillGroupState} from './groups.ts';
 import {skillPresentation} from './presentation.ts';
+import { sendJson } from '../../platform/http/json.ts';
 
 const enabledLabels={enabled:'已启用',disabled:'已停用',unknown:'待核验启停'};
 const verificationLabels={verified:'场景文件已核验',pending:'场景文件待核验',missing:'场景文件缺失',conflict:'无法确认场景文件',invalid:'场景文件校验未通过'};
@@ -42,9 +43,6 @@ function head(value: unknown): bigint {
  if(typeof value!=='string' || !/^[1-9][0-9]{0,18}$/.test(value))throw new SqliteSkillError('skill_request_invalid');
  return BigInt(value);
 }
-function respond(res: ServerResponse,status: number,value: unknown): void {
- res.writeHead(status,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(value));
-}
 /** 复用共享宿主路由，唯一认证函数必须由宿主注入；不接收owner、目录根、SQL或模块地址。 */
 export class SqliteSkillHttp {
  private readonly library: SqliteSkillLibrary;
@@ -55,7 +53,7 @@ export class SqliteSkillHttp {
   try {url=new URL(raw,'http://localhost');}catch{return false;}
   const path=url.pathname;
   if(path!=='/api/skills' && !path.startsWith('/api/skills/'))return false;
-  if(!this.authorize(req)){respond(res,401,{error:'unauthorized'});return true;}
+  if(!this.authorize(req)){sendJson(res,401,{error:'unauthorized'});return true;}
   const controller=new AbortController(),abort=()=>controller.abort(new SqliteSkillError('skill_operation_cancelled'));
   req.once('aborted',abort);res.once('close',abort);
   try {
@@ -64,9 +62,9 @@ export class SqliteSkillHttp {
    if(groupRoute || contactRoute){await this.handleGroups(req,res,controller.signal,path,groupRoute,contactRoute);return true;}
    const match=/^\/api\/skills\/([a-f0-9-]{36})\/(verify|enable|disable)$/.exec(path);
    const query=path==='/api/skills';
-   if(!query && !match){respond(res,503,{error:'sqlite_skill_operation_unavailable'});return true;}
-   if(req.method!==(query?'GET':'POST')){respond(res,405,{error:'method_not_allowed'});return true;}
-   if(query){respond(res,200,{storage:'sqlite',mode:'minimal',skills:(await this.library.inspect(controller.signal)).map(skillManagementView)});return true;}
+   if(!query && !match){sendJson(res,503,{error:'sqlite_skill_operation_unavailable'});return true;}
+   if(req.method!==(query?'GET':'POST')){sendJson(res,405,{error:'method_not_allowed'});return true;}
+   if(query){sendJson(res,200,{storage:'sqlite',mode:'minimal',skills:(await this.library.inspect(controller.signal)).map(skillManagementView)});return true;}
    let parsed: unknown;
    try {parsed=JSON.parse((await readHttpBody(req,16_384,10_000)).toString('utf8'));}
    catch(error){if(error instanceof HttpBodyError)throw error;throw new SqliteSkillError('skill_request_invalid');}
@@ -75,18 +73,18 @@ export class SqliteSkillHttp {
    if(body.confirmed!==true)throw new SqliteSkillError('skill_request_invalid');
    const [,id,action]=match!;const expectedHead=head(body.expected_head_revision);
    const item=action==='verify'?await this.library.verify(id,expectedHead,controller.signal):await this.library.setEnabled(id,expectedHead,action==='enable'?'enabled':'disabled',controller.signal);
-   respond(res,200,{skill:skillManagementView(item)});
+   sendJson(res,200,{skill:skillManagementView(item)});
   }catch(error){
    const code=error instanceof StorageFailure || error instanceof SqliteSkillError?error.code:error instanceof HttpBodyError?error.code:'skill_operation_failed';
-   if(!controller.signal.aborted)respond(res,error instanceof HttpBodyError?error.status:code==='skill_request_invalid'||/_invalid$/.test(code)?400:409,{error:code});
+   if(!controller.signal.aborted)sendJson(res,error instanceof HttpBodyError?error.status:code==='skill_request_invalid'||/_invalid$/.test(code)?400:409,{error:code});
   }finally{req.removeListener('aborted',abort);res.removeListener('close',abort);}
   return true;
  }
  /** 分组管理：读取列表、创建、修改、删除，以及联系人分配；所有写入都要求确认和预期修订。 */
  private async handleGroups(req: IncomingMessage,res: ServerResponse,signal: AbortSignal,path: string,groupRoute: RegExpExecArray|null,contactRoute: RegExpExecArray|null): Promise<void> {
   const list=!contactRoute && path==='/api/skills/groups' && req.method==='GET';
-  if(list){await this.library.ensureBuiltinGroup(signal);respond(res,200,{storage:'sqlite',groups:(await this.library.listGroups(signal)).map(skillGroupView)});return;}
-  if(req.method!=='POST'){respond(res,405,{error:'method_not_allowed'});return;}
+  if(list){await this.library.ensureBuiltinGroup(signal);sendJson(res,200,{storage:'sqlite',groups:(await this.library.listGroups(signal)).map(skillGroupView)});return;}
+  if(req.method!=='POST'){sendJson(res,405,{error:'method_not_allowed'});return;}
   let parsed: unknown;
   try {parsed=JSON.parse((await readHttpBody(req,16_384,10_000)).toString('utf8'));}
   catch(error){if(error instanceof HttpBodyError)throw error;throw new SqliteSkillError('skill_request_invalid');}
@@ -96,21 +94,21 @@ export class SqliteSkillHttp {
    exact(body,['group_id','expected_group_id','confirmed']);
    const groupId=nullableUuid(body.group_id),expected=nullableUuid(body.expected_group_id);
    const result=await this.library.assignContactGroup(contactRoute[1],groupId,expected,signal);
-   respond(res,200,{contact_id:result.contactId,group_id:result.groupId});return;
+   sendJson(res,200,{contact_id:result.contactId,group_id:result.groupId});return;
   }
   const [,id,action]=groupRoute!;
   if(!id){
    exact(body,['name','package_ids','confirmed']);
    if(typeof body.name!=='string')throw new SqliteSkillError('skill_request_invalid');
-   respond(res,200,{group:skillGroupView(await this.library.createGroup(body.name,packageIds(body.package_ids),signal))});return;
+   sendJson(res,200,{group:skillGroupView(await this.library.createGroup(body.name,packageIds(body.package_ids),signal))});return;
   }
   if(action==='update'){
    exact(body,['expected_revision','name','package_ids','confirmed']);
    if(typeof body.name!=='string')throw new SqliteSkillError('skill_request_invalid');
-   respond(res,200,{group:skillGroupView(await this.library.updateGroup(id,head(body.expected_revision),body.name,packageIds(body.package_ids),signal))});return;
+   sendJson(res,200,{group:skillGroupView(await this.library.updateGroup(id,head(body.expected_revision),body.name,packageIds(body.package_ids),signal))});return;
   }
   exact(body,['expected_revision','confirmed']);
   await this.library.deleteGroup(id,head(body.expected_revision),signal);
-  respond(res,200,{deleted:true,group_id:id});
+  sendJson(res,200,{deleted:true,group_id:id});
  }
 }

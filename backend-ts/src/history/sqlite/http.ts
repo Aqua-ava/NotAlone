@@ -6,6 +6,7 @@ import type { HistoryCoverage, HistoryImageMedia, HistoryQuoteErrorCode, History
 import type { FirstHistoryCoordinatorState } from './coordinator.ts';
 import type { IncrementalHistoryCoordinatorState } from './incremental-coordinator.ts';
 import { displayMessageType, messagePlaceholder } from './message-types.ts';
+import { sendJson } from '../../platform/http/json.ts';
 
 interface HistoryHttpService {
   readChat(contactId: string, options?: { limit?: number; before?: string }): Promise<HistoryRead>;
@@ -136,10 +137,6 @@ export function projectHistorySyncStatus(base: Record<string, unknown>, persiste
     cli_backfill_total_non_text_count: coverages.reduce((sum, row) => sum + row.nonTextCount, 0),
   };
 }
-function send(res: ServerResponse, status: number, value: unknown): void {
-  res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-  res.end(JSON.stringify(value));
-}
 /** 全局查询门只放行现有消息分页形状，具体值仍由本处理器验证。 */
 export function historyQueryAllowed(method:string|undefined,url:URL):boolean {
  if(method!=='GET'||!/^\/api\/contacts\/[a-f0-9-]{36}\/history-messages$/.test(url.pathname))return false;
@@ -154,11 +151,11 @@ export class SqliteHistoryHttp {
     const url = new URL(req.url ?? '/', 'http://localhost');
     const route = /^\/api\/contacts\/([a-f0-9-]{36})\/(history-messages|history|history\/sync)$/.exec(url.pathname);
     if (!route) return false;
-    if (!uuid.test(route[1]!)) { send(res, 400, { error: 'history_request_invalid' }); return true; }
+    if (!uuid.test(route[1]!)) { sendJson(res, 400, { error: 'history_request_invalid' }); return true; }
     const contactId = route[1]!.toLowerCase();
     const operation = route[2];
     if (req.method !== (operation === 'history/sync' ? 'POST' : 'GET')) {
-      send(res, 405, { error: 'method_not_allowed' }); return true;
+      sendJson(res, 405, { error: 'method_not_allowed' }); return true;
     }
     const controller = new AbortController();
     const abort = () => controller.abort(); req.once('aborted', abort);
@@ -189,11 +186,11 @@ export class SqliteHistoryHttp {
           value = await this.service.synchronize(contactId, controller.signal);
         }
       }
-      send(res, 200, value);
+      sendJson(res, 200, value);
     } catch (error) {
       const code = error instanceof StorageFailure ? error.code : error instanceof HttpBodyError ? error.code : error instanceof SyntaxError ? 'history_request_invalid' : 'history_request_failed';
       const status = error instanceof HttpBodyError ? error.status : code === 'history_request_invalid' ? 400 : /not_found/.test(code) ? 404 : /unavailable|unverified|not_authorized/.test(code) ? 503 : 409;
-      send(res, status, { error: code });
+      sendJson(res, status, { error: code });
     } finally { req.removeListener('aborted', abort); }
     return true;
   }
