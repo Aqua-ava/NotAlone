@@ -84,8 +84,8 @@ void app.whenReady().then(async () => {
     };
     logPhase(backend.getState());app.once('will-quit',backend.onStateChanged(logPhase));
   }
-  installUsageBridge(windows, new UsageController(backend));
   const commands = electronPageCommands(windows);
+  installUsageBridge(commands, new UsageController(backend));
   const diagnosticRoot = app.getPath('userData');
   const diagnosticLog = configureDiagnosticLog(diagnosticRoot, { proc: 'main', development: !!development });
   process.env.NOTALONE_DIAGNOSTIC_ROOT = diagnosticRoot;
@@ -182,10 +182,10 @@ void app.whenReady().then(async () => {
     if (phase === 'started') dataLifecycle.withdraw('source-deletion');
   });
   backend.setConnectionChangePreparation(() => dataLifecycle.connectionChanging());
-  installSetupBridge(windows, new SetupController(backend));
+  installSetupBridge(commands, new SetupController(backend));
   installWechatSetupBridge(commands, new WechatSetupController(backend));
-  installBackendBridge(windows, backend, () => app.quit());
-  installStartupBridge(windows, diagnostics, backend, app.getPath('userData'));
+  installBackendBridge(commands, backend, () => app.quit());
+  installStartupBridge(windows, commands, diagnostics, backend, app.getPath('userData'));
   app.on('before-quit', () => { fixedMemoryProcessing.synchronize(); sqliteMemoryManagement.synchronize('application_quit','application_quit'); sqliteDiscussion.synchronize(true); foreground.stopContinuous(); diagnostics.cancel(); });
   app.on('will-quit', () => sqliteDiscussion.close());
   installQuitLifecycle(backend, windows, async () => {

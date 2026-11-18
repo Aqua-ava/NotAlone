@@ -162,10 +162,10 @@ test('状态读取本机语义模型是否就绪；旧后端不返回时保持�
 test('AI配置专用IPC与预加载桥复验管理窗口和严格参数，错误不包含凭据',async()=>{
  const handlers=new Map(),calls=[],invokes=[];
  globalThis.__setupIpc={ipcMain:{handle:(name,fn)=>handlers.set(name,fn)},ipcRenderer:{invoke:async(...args)=>{invokes.push(args);},on(){},removeListener(){}}};
- const built=await build({stdin:{contents:"export {installSetupBridge} from './src/main/setup/bridge';export {createSetupBridge} from './src/preload/setup';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false,plugins:[{name:'synthetic-electron',setup(plugin){plugin.onResolve({filter:/^electron$/},()=>({path:'electron',namespace:'synthetic'}));plugin.onLoad({filter:/.*/,namespace:'synthetic'},()=>({contents:'export const ipcMain=globalThis.__setupIpc.ipcMain;export const ipcRenderer=globalThis.__setupIpc.ipcRenderer;'}));}}]});
- const {installSetupBridge,createSetupBridge}=await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
+ const built=await build({stdin:{contents:"export {installSetupBridge} from './src/main/setup/bridge';export {electronPageCommands} from './src/main/electron-page-commands';export {createSetupBridge} from './src/preload/setup';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false,plugins:[{name:'synthetic-electron',setup(plugin){plugin.onResolve({filter:/^electron$/},()=>({path:'electron',namespace:'synthetic'}));plugin.onLoad({filter:/.*/,namespace:'synthetic'},()=>({contents:'export const ipcMain=globalThis.__setupIpc.ipcMain;export const ipcRenderer=globalThis.__setupIpc.ipcRenderer;'}));}}]});
+ const {installSetupBridge,electronPageCommands,createSetupBridge}=await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
  let url='notalone://app/index.html#manager';
- installSetupBridge({validateCaller:()=>({webContents:{getURL:()=>url}}),publish(){}},{onStateChanged(){},saveDeepSeekConfiguration:async value=>calls.push(value)});
+ installSetupBridge(electronPageCommands({validateCaller:()=>({webContents:{getURL:()=>url}}),publish(){}}),{onStateChanged(){},saveDeepSeekConfiguration:async value=>calls.push(value)});
  const save=handlers.get('setup:save-deepseek-configuration'),value={baseUrl:'https://synthetic.example',apiKey:'synthetic-ipc-key'};
  await save({},value);assert.deepEqual(calls,[value]);
  url='notalone://app/index.html#assistant';assert.throws(()=>save({},value),error=>!error.message.includes(value.apiKey));url='notalone://app/index.html#manager';

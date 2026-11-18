@@ -153,14 +153,14 @@ test('参数保存 IPC 仅允许管理窗口且复验严格合同，预加载不
   globalThis.__modelParametersIpc = {ipcMain: {handle: (name, fn) => handlers.set(name, fn)},
     ipcRenderer: {invoke: async (...args) => {invokes.push(args);}, on() {}, removeListener() {}}};
   try {
-    const buildResult = await build({stdin: {contents: "export {installSetupBridge} from './src/main/setup/bridge'; export {createSetupBridge} from './src/preload/setup';", resolveDir: process.cwd()}, bundle: true, platform: 'node', format: 'esm', write: false,
+    const buildResult = await build({stdin: {contents: "export {installSetupBridge} from './src/main/setup/bridge'; export {electronPageCommands} from './src/main/electron-page-commands'; export {createSetupBridge} from './src/preload/setup';", resolveDir: process.cwd()}, bundle: true, platform: 'node', format: 'esm', write: false,
       plugins: [{name: 'synthetic-electron', setup(plugin) {
         plugin.onResolve({filter: /^electron$/}, () => ({path: 'electron', namespace: 'synthetic'}));
         plugin.onLoad({filter: /.*/, namespace: 'synthetic'}, () => ({contents: 'export const ipcMain=globalThis.__modelParametersIpc.ipcMain; export const ipcRenderer=globalThis.__modelParametersIpc.ipcRenderer;'}));
       }}]});
-    const {installSetupBridge, createSetupBridge} = await import(`data:text/javascript;base64,${Buffer.from(buildResult.outputFiles[0].text).toString('base64')}`);
+    const {installSetupBridge, electronPageCommands, createSetupBridge} = await import(`data:text/javascript;base64,${Buffer.from(buildResult.outputFiles[0].text).toString('base64')}`);
     let url = 'notalone://app/index.html#manager';
-    installSetupBridge({validateCaller: () => ({webContents: {getURL: () => url}}), publish() {}},
+    installSetupBridge(electronPageCommands({validateCaller: () => ({webContents: {getURL: () => url}}), publish() {}}),
       {onStateChanged() {}, saveModelParameters: async value => calls.push(value)});
     const save = handlers.get('setup:save-model-parameters');
     assert.equal(typeof save, 'function');

@@ -11,7 +11,7 @@ import { build } from 'esbuild';
 
 const require = createRequire(path.resolve('package.json'));
 const result = await build({
-  stdin: { contents: "export { createStartupBridge } from './src/preload/startup'; export { StartupReadiness, StartupSettings } from './src/renderer/StartupSettings'; export { BackendConnectionNote } from './src/renderer/backend-status'; export { UpdateBackupCleanupRecovery } from './src/renderer/UpdateBackupDeletionNotice'; export { installStartupBridge } from './src/main/startup/bridge'; export { handlers, opened, dialogResults, dialogCalls } from 'electron';", resolveDir: process.cwd() },
+  stdin: { contents: "export { createStartupBridge } from './src/preload/startup'; export { StartupReadiness, StartupSettings } from './src/renderer/StartupSettings'; export { BackendConnectionNote } from './src/renderer/backend-status'; export { UpdateBackupCleanupRecovery } from './src/renderer/UpdateBackupDeletionNotice'; export { installStartupBridge } from './src/main/startup/bridge'; export { electronPageCommands } from './src/main/electron-page-commands'; export { handlers, opened, dialogResults, dialogCalls } from 'electron';", resolveDir: process.cwd() },
   bundle: true, platform: 'node', format: 'esm', write: false, loader: { '.css': 'empty' },
   plugins: [{ name: 'shared-react', setup(builder) {
     builder.onResolve({ filter: /^react(?:\/.*)?$/ }, args => ({ path: pathToFileURL(require.resolve(args.path)).href, external: true }));
@@ -25,7 +25,7 @@ const result = await build({
     ` }));
   } }],
 });
-const { createStartupBridge, StartupReadiness, StartupSettings, BackendConnectionNote, UpdateBackupCleanupRecovery, installStartupBridge, handlers, opened, dialogResults, dialogCalls } = await import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString('base64')}`);
+const { createStartupBridge, StartupReadiness, StartupSettings, BackendConnectionNote, UpdateBackupCleanupRecovery, installStartupBridge, electronPageCommands, handlers, opened, dialogResults, dialogCalls } = await import(`data:text/javascript;base64,${Buffer.from(result.outputFiles[0].text).toString('base64')}`);
 
 test('启动公开接口只保留原库连接与首次初始化，不提供备份或搬库操作', async () => {
   const calls = [];
@@ -225,15 +225,15 @@ test('历史副本恢复入口只打开既有固定位置，不创建备份、�
     handlers.clear(); opened.length = 0;
     const windows = { validateCaller(event, args) {
       if (args.length) throw new Error('参数不可用');
-      return { webContents: { getURL: () => `notalone://app/#${event.role}` } };
+      return { webContents: { getURL: () => `notalone://app/index.html#${event.role}` } };
     }, publish() {} };
     const unexpected = () => { throw new Error('历史恢复入口不得启动服务或写配置'); };
-    installStartupBridge(windows, { onStateChanged() {} }, { connect: unexpected, saveStartupConfiguration: unexpected }, userData);
+    installStartupBridge(windows, electronPageCommands(windows), { onStateChanged() {} }, { connect: unexpected, saveStartupConfiguration: unexpected }, userData);
     for (const channel of ['startup:backup-and-update', 'startup:get-data-update-state', 'startup:recheck-data-update', 'startup:reveal-update-recovery']) {
       assert.equal(handlers.has(channel), false);
     }
     const revealBackup = handlers.get('startup:reveal-update-backup');
-    await assert.rejects(revealBackup({ role: 'manager' }));
+    await assert.rejects(async () => revealBackup({ role: 'manager' }));
     assert.deepEqual(await readdir(userData), []);
     const backupDirectory = path.join(userData, 'updates');
     await mkdir(backupDirectory);
@@ -242,8 +242,8 @@ test('历史副本恢复入口只打开既有固定位置，不创建备份、�
     assert.deepEqual(opened, [backupDirectory]);
     assert.equal(await readFile(path.join(userData, 'backend-launch.json'), 'utf8'), '{"synthetic":"original"}');
     assert.deepEqual(await readdir(backupDirectory), []);
-    await assert.rejects(revealBackup({ role: 'helper' }));
-    await assert.rejects(revealBackup({ role: 'manager' }, '/synthetic/other-path'));
+    await assert.rejects(async () => revealBackup({ role: 'helper' }));
+    await assert.rejects(async () => revealBackup({ role: 'manager' }, '/synthetic/other-path'));
     assert.equal(opened.length, 1);
   } finally { await rm(userData, { recursive: true, force: true }); }
 });
@@ -255,9 +255,9 @@ test('管理页公开IPC必须先预览，取消与写失败可安全重试且�
     let connections = 0;
     const windows = { validateCaller(event, args) {
       if (args.length) throw new Error('参数不可用');
-      return { webContents: { getURL: () => `notalone://app/#${event.role}` } };
+      return { webContents: { getURL: () => `notalone://app/index.html#${event.role}` } };
     }, publish() {} };
-    installStartupBridge(windows, { getState: () => ({ phase: 'blocked', code: 'sqlite_storage_failed', helperWarnings: [], revision: 0 }), onStateChanged() {} },
+    installStartupBridge(windows, electronPageCommands(windows), { getState: () => ({ phase: 'blocked', code: 'sqlite_storage_failed', helperWarnings: [], revision: 0 }), onStateChanged() {} },
       { getState: () => ({ phase: 'disconnected', canRetryConnection: true }), connect() { connections++; } }, userData);
     const inspect = handlers.get('startup:preview-diagnostics');
     const save = handlers.get('startup:export-diagnostics');

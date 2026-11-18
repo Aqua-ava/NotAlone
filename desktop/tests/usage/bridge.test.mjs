@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { build } from 'esbuild';
-const built = await build({ stdin: { contents: `export { installUsageBridge } from './src/main/usage/bridge'; export { createUsageBridge } from './src/preload/usage';`, resolveDir: process.cwd() },
+const built = await build({ stdin: { contents: `export { installUsageBridge } from './src/main/usage/bridge'; export { electronPageCommands } from './src/main/electron-page-commands'; export { createUsageBridge } from './src/preload/usage';`, resolveDir: process.cwd() },
   bundle: true, platform: 'node', format: 'esm', write: false,
   plugins: [{ name: 'synthetic-ipc', setup(plugin) {
     plugin.onResolve({ filter: /^electron$/ }, () => ({ path: 'electron', namespace: 'synthetic' }));
@@ -9,15 +9,15 @@ const built = await build({ stdin: { contents: `export { installUsageBridge } fr
   } }] });
 const handlers = new Map();
 globalThis.__usageIpc = { handle: (channel, handler) => handlers.set(channel, handler) };
-const { installUsageBridge, createUsageBridge } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
+const { installUsageBridge, electronPageCommands, createUsageBridge } = await import(`data:text/javascript;base64,${Buffer.from(built.outputFiles[0].text).toString('base64')}`);
 delete globalThis.__usageIpc;
 test('固定管理页IPC拒绝helper、子框架和多余参数，只暴露具名读取操作', async () => {
   let reads = 0, refreshes = 0, listener;
   const published = [], manager = { role: 'manager', trusted: true }, helper = { role: 'helper', trusted: true };
-  installUsageBridge({ validateCaller(event, args) {
+  installUsageBridge(electronPageCommands({ validateCaller(event, args) {
     if (!event.trusted || args.length) throw Error('untrusted');
     return { webContents: { getURL: () => `notalone://app/index.html#${event.role}` } };
-  }, publish: (...args) => published.push(args) }, { getState: () => { ++reads; return { phase: 'idle' }; },
+  }, publish: (...args) => published.push(args) }), { getState: () => { ++reads; return { phase: 'idle' }; },
     refresh: async () => { ++refreshes; }, onStateChanged: fn => { listener = fn; } });
   assert.deepEqual([...handlers.keys()], ['usage:get-state', 'usage:refresh']);
   for (const handler of handlers.values()) {

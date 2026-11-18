@@ -1,13 +1,7 @@
-import { ipcMain } from 'electron';
-import type { AppWindows } from '../windows';
+import { noArguments, type PageCommands } from '../page-commands';
 import type { UsageController } from './controller';
-export function installUsageBridge(windows: AppWindows, usage: UsageController): void {
-  for (const channel of ['usage:get-state', 'usage:refresh'] as const) {
-    ipcMain.handle(channel, (event, ...args: unknown[]) => {
-      const window = windows.validateCaller(event, args);
-      if (!window.webContents.getURL().endsWith('#manager')) throw new Error('用量读取不可用。');
-      return channel === 'usage:get-state' ? usage.getState() : usage.refresh();
-    });
-  }
-  usage.onStateChanged((state) => windows.publish('usage:state-changed', state, 'manager'));
+export function installUsageBridge(commands: PageCommands, usage: UsageController): void {
+  commands.handle('usage:get-state', (...args) => { noArguments(args); return usage.getState(); }, 'manager');
+  commands.handle('usage:refresh', (...args) => { noArguments(args); return usage.refresh(); }, 'manager');
+  usage.onStateChanged((state) => commands.publish('usage:state-changed', state, 'manager'));
 }
