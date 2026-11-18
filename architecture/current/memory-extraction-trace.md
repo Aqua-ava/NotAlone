@@ -1,6 +1,6 @@
 # 记忆提取完整追踪
 
-本文规定每次实际记忆提取的追踪、查询、留存与删除合同。默认记录实际执行的协议和图文输入；旧语用／置信度／维度门、固定 20 + 20 + 20 窗口及 Python 实现记录见[历史协议与实施记录](../history/memory-trace-implementation-notes.md)，不作为当前默认流水线。
+本文规定每次实际记忆提取的追踪、查询、留存与删除合同。默认记录实际执行的协议和图文输入；旧语用／置信度／维度门、固定 20 + 20 + 20 窗口及 Python 实现记录见历史协议与实施记录（本机 `architecture/history/memory-trace-implementation-notes.md`），不作为当前默认流水线。
 
 ## 1. 目标与默认边界
 
@@ -168,7 +168,7 @@ HTTP 追踪响应使用 `Cache-Control: no-store`，查询与展示不得跨范�
 
 ## 6. 实现与验证入口
 
-当前 TypeScript／SQLite 承接入口见[执行与追踪](../../backend-ts/src/memory/sqlite/execution.ts)、[追踪 HTTP](../../backend-ts/src/memory/sqlite/http.ts)及[图文内容适配](../../backend-ts/src/memory/content/README.md)。旧迁移、固定 Git 源码与页面验收仅供[历史追溯](../history/memory-trace-implementation-notes.md)。本轮文档整理不构成新的模型、桌面或真实微信验收。
+当前 TypeScript／SQLite 承接入口见[执行与追踪](../../backend-ts/src/memory/sqlite/execution.ts)、[追踪 HTTP](../../backend-ts/src/memory/sqlite/http.ts)及[图文内容适配](../../backend-ts/src/memory/content/README.md)。旧迁移、固定 Git 源码与页面验收仅供历史追溯（本机 `architecture/history/memory-trace-implementation-notes.md`）。本轮文档整理不构成新的模型、桌面或真实微信验收。
 
 最小验证范围：
 

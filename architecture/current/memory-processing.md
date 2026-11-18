@@ -117,4 +117,4 @@
 
 ## 实现与验收入口
 
-实现从 [SQLite 记忆模块](../../backend-ts/src/memory/sqlite/README.md)和[存储合同](../../backend-ts/src/storage/sqlite/README.md)核验。历史／增量调度、图文输入、内容拒绝、真实模型质量和实际 App／微信分别按各自证据判断；本次文档收敛不新增运行结论。旧协议与阶段实现说明见[历史流程记录](../history/core-flow-implementation-notes.md)。
+实现从 [SQLite 记忆模块](../../backend-ts/src/memory/sqlite/README.md)和[存储合同](../../backend-ts/src/storage/sqlite/README.md)核验。历史／增量调度、图文输入、内容拒绝、真实模型质量和实际 App／微信分别按各自证据判断；本次文档收敛不新增运行结论。旧协议与阶段实现说明见历史流程记录（本机 `architecture/history/core-flow-implementation-notes.md`）。

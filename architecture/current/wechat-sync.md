@@ -58,7 +58,7 @@
 
 每次新增来源围栏，提交后在应用目录的有界本机日志记录实际入口、联系人编号前 8 位和固定分支编号；不保存姓名或正文，不参与认证或放行。日志轮转、留存及删除规则见[围栏诊断](../../docs/guides/history-continuity-diagnostics.md)，历史事件未复现时不得据假设补写根因。
 
-依据：首次历史（ADR-100）、来源合同（ADR-113）、变化页（ADR-133）、共享读取进程（ADR-151）、原地恢复（ADR-176）。旧 `sessions --follow`／逐次 tail 与固定轮询参数保留为[历史实现说明](../history/core-flow-implementation-notes.md)，不作为新读取器的强制接口。
+依据：首次历史（ADR-100）、来源合同（ADR-113）、变化页（ADR-133）、共享读取进程（ADR-151）、原地恢复（ADR-176）。旧 `sessions --follow`／逐次 tail 与固定轮询参数保留为历史实现说明（本机 `architecture/history/core-flow-implementation-notes.md`），不作为新读取器的强制接口。
 
 ## 图片、引用与消息状态
 

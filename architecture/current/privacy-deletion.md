@@ -1,6 +1,6 @@
 # 现行隐私、模型调用与删除
 
-本文保存已采纳的数据处理边界，不证明对应功能或真实渠道已验收。身份与数据契约见[领域规格](domain-data.md)，业务步骤见[核心流程](core-flows.md)。仅在核对旧实现或阶段结论时阅读[历史实施记录](../history/privacy-implementation-notes.md)；撤回新规则等暂缓目标见文末。
+本文保存已采纳的数据处理边界，不证明对应功能或真实渠道已验收。身份与数据契约见[领域规格](domain-data.md)，业务步骤见[核心流程](core-flows.md)。仅在核对旧实现或阶段结论时阅读历史实施记录（本机 `architecture/history/privacy-implementation-notes.md`）；撤回新规则等暂缓目标见文末。
 
 ## 本机存储与模型凭据
 

@@ -1,6 +1,6 @@
 # Skill Library（Skill 库）
 
-本文定义当前回复 Skill 的目录、读取、范围与生命周期合同。正常 SQLite 入口使用授权目录中的只读包、受核验的内容修订和 DSH 受控 provider；已采纳但尚未在该入口开放的学习与发布合同单列在后文。旧框架、旧表结构和阶段验收记录见[历史记录](../history/skill-implementation-notes.md)。
+本文定义当前回复 Skill 的目录、读取、范围与生命周期合同。正常 SQLite 入口使用授权目录中的只读包、受核验的内容修订和 DSH 受控 provider；已采纳但尚未在该入口开放的学习与发布合同单列在后文。旧框架、旧表结构和阶段验收记录见历史记录（本机 `architecture/history/skill-implementation-notes.md`）。
 
 ## 1. 作用与范围
 
@@ -173,7 +173,7 @@ SQLite 管理包／修订的业务资格，原目录负责当前内容来源，�
 
 删除清除受影响的全部版本正文、资源、来源定位、工作／暂存／发布副本、索引、缓存、使用与恢复副本，最小内部关联不能恢复正文。导出仅含当前明确允许的包内容和必要元数据，不含联系人范围、聊天、候选、关系记忆或使用日志。试用只产生应用内预览，不发送、不创建表达样本、不改关系记忆或长期偏好。
 
-以上目标依据 ADR-048 与已确认的演进规格（本机 `.scratch/memory-skill-evolution/spec.md`）；旧实施阶段和迁移编码不作为当前 SQLite 接口要求，追溯见[历史记录](../history/skill-implementation-notes.md)。
+以上目标依据 ADR-048 与已确认的演进规格（本机 `.scratch/memory-skill-evolution/spec.md`）；旧实施阶段和迁移编码不作为当前 SQLite 接口要求，追溯见历史记录（本机 `architecture/history/skill-implementation-notes.md`）。
 
 ## 7. 实现与验证入口
 
