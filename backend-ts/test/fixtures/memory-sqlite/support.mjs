@@ -12,7 +12,8 @@ export const record=(id,extra={})=>({partition:'shard-a',table:'table-instance-1
 export async function fixture(t,options={}){
  const root=await realpath(await mkdtemp(join(tmpdir(),'notalone-history-')));
  const storage=await SqliteStorage.open({userData:root,intent:'create',role:'test',...options});
- t.after(async()=>{await storage.close();await rm(root,{recursive:true,force:true});});
+ // 关闭后偶有晚到的媒体写入使 rmdir 报 ENOTEMPTY（并发或机器繁忙时出现）；清理只重试，不改变任何断言。
+ t.after(async()=>{await storage.close();await rm(root,{recursive:true,force:true,maxRetries:5,retryDelay:100});});
  // 产品默认关闭记忆自动处理；本夹具验证提取与调度行为，创建后明确开启。开关本身由专门用例覆盖。
  if(storage.status.schemaVersion<42){
   // 迁移 42 之前的旧结构夹具没有开关列（正式库总是先迁移再打开）；按开关出现前的行为让旧结构上的提取照常运行。
