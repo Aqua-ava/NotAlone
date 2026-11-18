@@ -1,5 +1,5 @@
 {
- "note": "ADR-170（不保存缩略图、取消原图分类）之后通过公开存储动作采集的结果黄金样例：已有可查看图片的消息不再入选；messageId 已归一为 <message>。由 backend-ts/scripts/perf/image-sync-query-baseline.mjs --emit-golden 生成。",
+ "note": "ADR-170（不保存缩略图、取消原图分类）之后通过公开存储动作采集的结果黄金样例：已有可查看图片的消息不再入选；messageId 已归一为 <message>。原由一次性脚本生成（脚本已移除），现仅作为 sqlite-image-sync-linearization.test.mjs 的固定比对样例。",
  "scenarioNow": 1800000000000,
  "source": {
   "workSql": "linearized work query after ADR-170",
