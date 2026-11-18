@@ -38,14 +38,12 @@ test('实际 DDL 与 111 表结构基线逐表一致（含 CHECK、触发器 bod
   assert.deepEqual(actual.metadata.migrationVersions, registry.migrations.map(migration => migration.version));
   assert.equal(actual.metadata.userVersion, baseline.metadata.schemaVersion);
   assert.deepEqual(Object.keys(actual.tables), EXPECTED_TABLES, '实际表集合必须等于实现表基线');
-  for (const [name, expected] of Object.entries(baseline.tables)) {
-    const table = actual.tables[name];
-    assert.ok(table, `缺少表 ${name}`);
-    assert.deepEqual(table.columns, expected.columns, `${name} 字段／默认值不一致`);
-    assert.deepEqual(table.foreignKeys.map(fk => JSON.stringify(fk)).sort(), expected.foreignKeys.map(fk => JSON.stringify(fk)).sort(), `${name} 外键列／action 不一致`);
-    assert.deepEqual(table.indexes.map(index => JSON.stringify(index)).sort(), expected.indexes.map(index => JSON.stringify(index)).sort(), `${name} 索引定义不一致`);
-    assert.equal(table.sql, expected.sql, `${name} 建表 SQL（含 CHECK 与约束）不一致`);
+  // 字段、默认值、外键 action 与自动索引都由建表 SQL 派生；sql 逐表相等即派生信息相等，数量另由 metadata 核对。
+  for (const [name, expectedSql] of Object.entries(baseline.tables)) {
+    assert.ok(actual.tables[name], `缺少表 ${name}`);
+    assert.equal(actual.tables[name], expectedSql, `${name} 建表 SQL（含 CHECK 与约束）不一致`);
   }
+  assert.deepEqual(actual.indexes, baseline.indexes, '显式索引名称与定义（含唯一、部分索引条件）与基线不一致');
   assert.deepEqual(actual.triggers, baseline.triggers, '范围触发器 body 与基线不一致');
   assert.deepEqual(actual.views, baseline.views, '视图与基线不一致');
   const db = openDatabase(f.database, { readOnly: true });

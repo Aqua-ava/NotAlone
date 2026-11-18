@@ -18,35 +18,31 @@ export function dumpSchema(database) {
   loadRetrievalExtension(db);
   try {
     const tables = {};
+    let fieldCount = 0, foreignKeyGroups = 0;
     for (const { name } of db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT GLOB 'sqlite_*' ORDER BY name").all()) {
-      tables[name] = {
-        columns: db.prepare(`PRAGMA table_info(${JSON.stringify(name)})`).all().map(c => ({ name: c.name, type: c.type, notnull: Number(c.notnull), dflt_value: c.dflt_value ?? null, pk: Number(c.pk) })),
-        foreignKeys: db.prepare(`PRAGMA foreign_key_list(${JSON.stringify(name)})`).all().map(f => ({ id: Number(f.id), seq: Number(f.seq), table: f.table, from: f.from, to: f.to, on_update: f.on_update, on_delete: f.on_delete, match: f.match })),
-        indexes: db.prepare(`PRAGMA index_list(${JSON.stringify(name)})`).all().map(i => ({
-          name: i.name, unique: Number(i.unique), partial: Number(i.partial), origin: i.origin,
-          columns: db.prepare(`PRAGMA index_info(${JSON.stringify(i.name)})`).all().map(c => c.name),
-          sql: db.prepare("SELECT sql FROM sqlite_master WHERE type='index' AND name=?").all(i.name)[0]?.sql ?? null,
-        })),
-        sql: normalizeSql(db.prepare('SELECT sql FROM sqlite_master WHERE type=\'table\' AND name=?').all(name)[0]?.sql ?? ''),
-      };
+      // 字段、外键与自动索引由建表 SQL 派生，只统计数量，不逐项存入基线。
+      fieldCount += db.prepare(`PRAGMA table_info(${JSON.stringify(name)})`).all().length;
+      foreignKeyGroups += new Set(db.prepare(`PRAGMA foreign_key_list(${JSON.stringify(name)})`).all().map(f => Number(f.id))).size;
+      tables[name] = normalizeSql(db.prepare('SELECT sql FROM sqlite_master WHERE type=\'table\' AND name=?').all(name)[0]?.sql ?? '');
     }
+    // 显式索引直接取自 sqlite_master（自动索引由建表 SQL 派生，无独立 SQL）。
+    const indexes = Object.fromEntries(db.prepare("SELECT name,sql FROM sqlite_master WHERE type='index' AND sql IS NOT NULL ORDER BY name").all().map(row => [row.name, row.sql]));
     const triggers = db.prepare("SELECT name,tbl_name AS tableName,sql FROM sqlite_master WHERE type='trigger' ORDER BY name").all()
       .map(row => ({ name: row.name, table: row.tableName, sql: normalizeSql(row.sql) }));
     const views = db.prepare("SELECT name,sql FROM sqlite_master WHERE type='view' ORDER BY name").all()
       .map(row => ({ name: row.name, sql: normalizeSql(row.sql) }));
     const ledger = db.prepare('SELECT version FROM schema_migration ORDER BY version').all().map(row => Number(row.version));
-    const checks = Object.values(tables).reduce((sum, table) => sum + (table.sql.match(/CHECK\s*\(/g) ?? []).length, 0);
+    const checks = Object.values(tables).reduce((sum, sql) => sum + (sql.match(/CHECK\s*\(/g) ?? []).length, 0);
     return {
       metadata: {
         schemaVersion: ledger.length, migrationVersions: ledger,
         userVersion: Number(db.prepare('PRAGMA user_version').all()[0].user_version),
         sqliteVersion: db.prepare('SELECT sqlite_version() AS v').all()[0].v,
         tableCount: Object.keys(tables).length,
-        fieldCount: Object.values(tables).reduce((sum, table) => sum + table.columns.length, 0),
-        foreignKeyGroups: Object.values(tables).reduce((sum, table) => sum + new Set(table.foreignKeys.map(fk => fk.id)).size, 0),
+        fieldCount, foreignKeyGroups,
         triggerCount: triggers.length, checkCount: checks, viewCount: views.length,
       },
-      tables, triggers, views,
+      tables, indexes, triggers, views,
     };
   } finally { db.close(); }
 }

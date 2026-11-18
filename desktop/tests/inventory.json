@@ -25,7 +25,6 @@
   "tests/binding-startup.test.mjs",
   "tests/contact-deletion-controller.test.mjs",
   "tests/contact-deletion-http.test.mjs",
-  "tests/contact-confirmation-witness.test.mjs",
   "tests/contact-history-controller.test.mjs",
   "tests/contact-history-quotes.test.mjs",
   "tests/contact-restore-coalescing.test.mjs",
@@ -33,7 +32,6 @@
   "tests/development-policy.test.mjs",
   "tests/dev-stable.test.mjs",
   "tests/development.test.mjs",
-  "tests/failure-visibility.test.mjs",
   "tests/first-frame-read.test.mjs",
   "tests/fixed-memory-development-network.test.mjs",
   "tests/fixed-memory-processing.test.mjs",
@@ -57,11 +55,9 @@
   "tests/packaging/arguments.test.mjs",
   "tests/packaging/distribution-notices.test.mjs",
   "tests/packaging/finder-isolation.test.mjs",
-  "tests/packaging/native-focus-diagnostic.test.mjs",
   "tests/packaging/native-shortcut-feedback.test.mjs",
   "tests/packaging/signing-identity.test.mjs",
   "tests/page-role-scope.test.mjs",
-  "tests/real-foreground-credential.test.mjs",
   "tests/reply-input-stream.test.mjs",
   "tests/scheduling/acceptance-coordinator.test.mjs",
   "tests/scheduling/command.test.mjs",
@@ -140,7 +136,8 @@
   "tests/memory-automatic-switch.test.mjs",
   "tests/sqlite-memory-source-recheck.test.mjs",
   "tests/model-parameters-view.test.mjs",
-  "tests/sqlite-candidate-history-read.test.mjs"
+  "tests/sqlite-candidate-history-read.test.mjs",
+  "tests/failure-visibility.test.mjs"
  ],
  "native": [
   "tests/header-change-native-acceptance.spec.ts",

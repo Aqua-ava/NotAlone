@@ -13,7 +13,6 @@ const built = await build({ entryPoints: ['src/main/startup/sqlite-development.t
 await writeFile(path.join(directory, 'subject.mjs'), built.outputFiles[0].text);
 const { SqliteDevelopmentProbe } = await import(path.join(directory, 'subject.mjs'));
 const project = path.resolve('..');
-const structureBaseline = JSON.parse(await readFile(path.join(project, 'backend-ts/test/fixtures/cutover/structure-baseline.json'), 'utf8'));
 
 async function fixture(name) {
   const userData = await realpath(await mkdtemp(path.join(tmpdir(), `notalone-${name}-`)));

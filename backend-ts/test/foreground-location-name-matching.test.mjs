@@ -36,7 +36,14 @@ test('质量、类型和全名单元数据失败关闭；取消向调用方传�
 });
 test('冻结旧实现预期：合成名称、尾部、Unicode 与边界', async () => {
   const {readFile} = await import('node:fs/promises');
-  const {names, expected} = JSON.parse(await readFile(new URL('./fixtures/foreground-name-matching-frozen.json', import.meta.url), 'utf8'));
+  const {names, expectedRows} = JSON.parse(await readFile(new URL('./fixtures/foreground-name-matching-frozen.json', import.meta.url), 'utf8'));
+  // 预期按短码存储（编码见夹具 encoding 字段），此处还原为完整结果对象。
+  const KINDS = {u:'unique', q:'quality-unverified', g:'group', a:'ambiguous', n:'unmatched'}, METHODS = {x:'exact', t:'tail', e:'edit', m:'normalized'};
+  const decodeExpected = token => {
+    const [, kind, candidate, method, plausible] = /^([uqgan])(\d*)([xtem]?):([\d,]*)$/.exec(token);
+    return {kind:KINDS[kind], candidateIndex:candidate === '' ? null : Number(candidate), method:method === '' ? null : METHODS[method], plausibleIndices:plausible === '' ? [] : plausible.split(',').map(Number)};
+  };
+  const expected = expectedRows.flatMap(row => row.split(' ').map(decodeExpected));
   const cases = [];
   for (let i=0;i<names.length;i++) for(let j=0;j<names.length;j++) {
     cases.push([names[i],.5,privateNames(names[j]),{}]);
