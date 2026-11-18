@@ -6,7 +6,7 @@ import {StorageFailure} from '../../../storage/sqlite/contracts.ts';
 import type {ModelLedgerReceipt} from '../../../platform/models/model-ledger-contract.ts';
 import {validateModelLedgerReceipt} from '../../../platform/models/model-ledger-contract.ts';
 import type {ModelTaskClaim} from '../../../platform/models/model-permit-port.ts';
-import type {L2ScenarioMemory} from '../../scenarios/document.ts';
+import type {L2ScenarioMemory} from '../../scenarios/index.ts';
 import {actualInputSources,taskSceneVersions,memoryBasis,frozenMemories,eligiblePriorMembers,publicationMembers,publicationDigest,renderDocuments,sourceStillValid,withDocumentSourceQualifications} from './basis.ts';
 import {documentActualInputs} from './inputs.ts';
 import {preconditions,revisions,task} from './actions.ts';

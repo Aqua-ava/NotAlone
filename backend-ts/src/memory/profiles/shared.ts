@@ -1,6 +1,6 @@
 /** profiles 内部共用的小工具；不属于对外入口。 */
 import type {GenerateOptions} from '@deepseek-ai/dsh-llm';
-import type {L2ScenarioBudget} from '../scenarios/document.ts';
+import type {L2ScenarioBudget} from '../scenarios/index.ts';
 import {invalid} from './document.ts';
 
 export function errorMessage(error: unknown): string {

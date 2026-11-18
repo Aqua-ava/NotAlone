@@ -1,7 +1,7 @@
 /** L3 长期背景的内存工作区：只读冻结场景、只写 profile.md，暂存后即时编译校验；不调用模型、不发布版本。 */
 import type {ToolDefinition} from '@deepseek-ai/dsh-tools';
 import {applyExactTextEdits, createDocumentWorkspaceTools} from '../document-workspace-tools.ts';
-import type {L2ScenarioBudget, L2ScenarioMemory, L2ScenarioVersion} from '../scenarios/document.ts';
+import type {L2ScenarioBudget, L2ScenarioMemory, L2ScenarioVersion} from '../scenarios/index.ts';
 import {
   UUID,
   object,

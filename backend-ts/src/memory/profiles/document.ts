@@ -14,7 +14,7 @@ import {
   type L2ScenarioMemory,
   type L2ScenarioReference,
   type L2ScenarioVersion,
-} from '../scenarios/document.ts';
+} from '../scenarios/index.ts';
 
 // profiles/workspace.ts 与测试沿用本模块导出的名字。
 export {UUID, clone, count, exactKeys, object, readToolCalls};

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {existsSync, readdirSync, readFileSync, statSync} from 'node:fs';
 import {join, relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {L2ScenarioError} from '../src/memory/scenarios/document.ts';
+import {L2ScenarioError} from '../src/memory/scenarios/index.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const profilesDir = join(root, 'src/memory/profiles');

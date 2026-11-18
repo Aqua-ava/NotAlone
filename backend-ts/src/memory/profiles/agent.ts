@@ -10,8 +10,7 @@ import {
 } from '@deepseek-ai/dsh-llm';
 import {defineTool} from '@deepseek-ai/dsh-tools';
 import type {MessagesBudgetProfile} from '../../platform/models/model-input-budget.ts';
-import {L2ScenarioError, type L2ScenarioBudget} from '../scenarios/document.ts';
-import type {ScenarioDocumentCall, ScenarioDocumentCallPort} from '../scenarios/workspace.ts';
+import {L2ScenarioError, type L2ScenarioBudget, type ScenarioDocumentCall, type ScenarioDocumentCallPort} from '../scenarios/index.ts';
 import {
   ENTRY_FIELDS,
   KIND_VALUES,

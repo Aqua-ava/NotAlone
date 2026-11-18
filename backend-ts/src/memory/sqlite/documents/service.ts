@@ -7,8 +7,7 @@ import type {LaterScheduleSnapshot} from './later-schedule.ts';
 import type {ModelTaskClaim} from '../../../platform/models/model-permit-port.ts';
 import type {ModelLedgerReceipt} from '../../../platform/models/model-ledger-contract.ts';
 import type {SqliteExtractionModelPreparation} from '../model-port.ts';
-import {DEFAULT_L2_SCENARIO_BUDGET,L2ScenarioError,L2ScenarioVerificationError,scenarioVerificationFeedback} from '../../scenarios/document.ts';
-import {L2ScenarioDocumentWorkspace,runScenarioDocumentAgent,verifyScenarioProposal,type ScenarioDocumentCallPort} from '../../scenarios/workspace.ts';
+import {DEFAULT_L2_SCENARIO_BUDGET,L2ScenarioError,L2ScenarioVerificationError,L2ScenarioDocumentWorkspace,runScenarioDocumentAgent,scenarioVerificationFeedback,verifyScenarioProposal,type ScenarioDocumentCallPort} from '../../scenarios/index.ts';
 import {L3ProfileWorkspace,runProfileDocumentAgent,verifyProfileProposal} from '../../profiles/index.ts';
 import type {DocumentClaim,DocumentWork} from './stages.ts';
 
