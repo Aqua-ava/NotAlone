@@ -59,22 +59,32 @@ export const goalRetentionSupersededGraceMs=3_600_000;
  * 在创建新读取目标的事务里，顺带清理同一联系人已无用的旧目标及其空抓取页。
  * 只清理同时满足下列条件的目标：已作废、有顺序号、不是该联系人最新的一个，
  * 也不是同类型或同来源／授权／代次范围内最新的一个；名下没有任何 capture_record；
- * 没有被恢复操作或后继目标（handoff）引用。其余一律保留。
+ * 没有被恢复操作引用，不是当前续读基线，也没有被保留集合内的后继目标（handoff）引用。其余一律保留。
  * 返回删除的目标数。
  */
 export function purgeStaleGoals(tx:StorageTransaction,ownerId:string,contactId:string,now:number=Date.now()):number{
  // 迁移 40／41 的索引齐备才清理：旧版本库缺少相关表，且没有索引时会退化成全表扫描。
  const ready=tx.get("SELECT COUNT(*) AS n FROM sqlite_schema WHERE type='index' AND name IN ('sync_capture_goal','capture_record_capture')");
  if(Number(ready?.n)!==2)return 0;
- const ids=tx.all(`SELECT g.id FROM read_goal g JOIN (
+ // 恢复基线：与 history.beginIncremental 的 resumable 同一判据的最新一行，续读依赖它，不得清理。
+ const ids=tx.all(`WITH ranked AS MATERIALIZED (
    SELECT id,
     row_number() OVER (ORDER BY creation_no DESC,created_at DESC,id DESC) r_contact,
     row_number() OVER (PARTITION BY kind ORDER BY creation_no DESC,created_at DESC,id DESC) r_kind,
     row_number() OVER (PARTITION BY binding_id,grant_id,accepted_data_generation,accepted_barrier_generation ORDER BY creation_no DESC,created_at DESC,id DESC) r_scope
-   FROM read_goal WHERE owner_id=? AND contact_id=? AND creation_no IS NOT NULL) k ON k.id=g.id
+   FROM read_goal WHERE owner_id=? AND contact_id=? AND creation_no IS NOT NULL),
+  -- 预先一次性求出受保护的交接来源集合（只扫该联系人的目标）；写成逐候选相关子查询时 handoff_from_goal_id 无索引，会退化为平方级。
+  protected_handoff AS MATERIALIZED (
+   SELECT n.handoff_from_goal_id id FROM read_goal n LEFT JOIN ranked kn ON kn.id=n.id
+   WHERE n.owner_id=? AND n.contact_id=? AND n.handoff_from_goal_id IS NOT NULL
+    AND (kn.id IS NULL OR kn.r_contact=1 OR kn.r_kind=1 OR kn.r_scope=1 OR n.state IN ('running','incomplete')
+     OR n.created_at>=CASE WHEN n.kind='incremental' AND n.failure_code='history_snapshot_replaced' AND n.pages_accepted=0 THEN ? ELSE ? END
+     OR EXISTS (SELECT 1 FROM sync_capture nc WHERE nc.owner_id=n.owner_id AND nc.goal_id=n.id
+      AND EXISTS (SELECT 1 FROM capture_record nr WHERE nr.owner_id=nc.owner_id AND nr.capture_id=nc.id))))
+  SELECT g.id FROM read_goal g JOIN ranked k ON k.id=g.id
   WHERE g.owner_id=? AND g.contact_id=? AND g.kind IN ('history','incremental') AND (
     (g.state='invalidated' AND g.created_at<CASE WHEN g.kind='incremental' AND g.failure_code='history_snapshot_replaced' AND g.pages_accepted=0 THEN ? ELSE ? END)
-    -- 共用读取器轮转产生的无进展历史目标：开始后未结束的孤儿，或已被后继完成目标取代的空历史目标（含运行代次换代时作废的）。
+    -- 共用读取器轮转产生的无进展历史目标：开始后未结束的孤儿，或已被后继完成目标取代的空历史目标（含运行代次换代作废的）。
     OR (g.kind='history' AND g.cursor IS NULL AND g.created_at<? AND (g.state IN ('running','complete') OR (g.state='invalidated' AND g.failure_code='history_runtime_revalidated'))
      AND EXISTS (SELECT 1 FROM read_goal n WHERE n.owner_id=g.owner_id AND n.contact_id=g.contact_id AND n.kind='history'
       AND n.creation_no>g.creation_no AND n.state='complete' AND n.failure_code IS NULL AND n.cursor IS NULL AND n.resume_cursor IS NOT NULL
@@ -84,8 +94,13 @@ export function purgeStaleGoals(tx:StorageTransaction,ownerId:string,contactId:s
    AND NOT EXISTS (SELECT 1 FROM sync_capture c WHERE c.owner_id=g.owner_id AND c.goal_id=g.id
     AND EXISTS (SELECT 1 FROM capture_record r WHERE r.owner_id=c.owner_id AND r.capture_id=c.id))
    AND g.id NOT IN (SELECT goal_id FROM history_restore WHERE owner_id=? AND contact_id=? AND goal_id IS NOT NULL)
-   AND g.id NOT IN (SELECT handoff_from_goal_id FROM read_goal WHERE owner_id=? AND contact_id=? AND handoff_from_goal_id IS NOT NULL)
-  ORDER BY g.creation_no LIMIT ${goalRetentionBatch}`,[ownerId,contactId,ownerId,contactId,BigInt(now-goalRetentionSupersededGraceMs),BigInt(now-goalRetentionGraceMs),BigInt(now-goalRetentionSupersededGraceMs),ownerId,contactId,ownerId,contactId]);
+   AND g.id IS NOT (SELECT b.id FROM read_goal b WHERE b.owner_id=? AND b.contact_id=? AND b.creation_no IS NOT NULL AND b.cursor_scope_digest IS NOT NULL
+    AND ((b.kind='incremental' AND b.cursor IS NOT NULL AND (b.failure_code IS NULL OR b.failure_code<>'history_snapshot_replaced')) OR (b.kind='history' AND b.resume_cursor IS NOT NULL AND b.state='complete'))
+    ORDER BY b.creation_no DESC,b.created_at DESC,b.id DESC LIMIT 1)
+   -- 交接来源只被“保留集合”内的目标引用才保护：保留集合＝最新一行（联系人／类型／范围）、仍有效、没有 creation_no 的旧版行、名下有记录的目标。
+   -- 被另一个同样可清理的目标引用不构成保护，否则连续交接的增量目标会互相钉住，整条链永远无法清理。
+   AND g.id NOT IN (SELECT id FROM protected_handoff)
+  ORDER BY g.creation_no LIMIT ${goalRetentionBatch}`,[ownerId,contactId,ownerId,contactId,BigInt(now-goalRetentionSupersededGraceMs),BigInt(now-goalRetentionGraceMs),ownerId,contactId,BigInt(now-goalRetentionSupersededGraceMs),BigInt(now-goalRetentionGraceMs),BigInt(now-goalRetentionSupersededGraceMs),ownerId,contactId,ownerId,contactId]);
  for(const row of ids){
   tx.run('DELETE FROM sync_capture WHERE owner_id=? AND goal_id=?',[ownerId,row.id as string]);
   tx.run('DELETE FROM read_goal WHERE owner_id=? AND id=?',[ownerId,row.id as string]);
