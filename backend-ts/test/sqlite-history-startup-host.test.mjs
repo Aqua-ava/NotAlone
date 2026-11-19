@@ -124,11 +124,11 @@ test('正式appReady按持久开关首次派发，未知支持保持缺口且零
 test('manual正式profile不自动派发历史或记忆，重启后仍只执行具名单联系人请求',{timeout:45000},async t=>{
  const f=await fixture(t),h=await start(f,{manual:true,memory:true}),selected=await authorize(h);
  assert.equal((await h.request('/api/runtime/status')).body.background_processing,'manual');
- assert.equal((await h.request('/api/sync/enable','POST',{})).status,200);
+ {const enabled=await h.request('/api/sync/enable','POST',{});assert.equal(enabled.status,200,JSON.stringify(enabled.body));}
  assert.equal((await h.request(`/api/contacts/${selected.contactId}/history`)).body.phase,'not_started');
  assert.equal((await h.request('/api/memory-processing/runs/current')).body,null);
  assert.equal((await requests(f)).some(row=>row.op==='target'||row.op==='page'),false,'开启读取不唤醒后台控制器');
- const synced=await h.request(`/api/contacts/${selected.contactId}/history/sync`,'POST',{});assert.equal(synced.status,200);
+ const synced=await h.request(`/api/contacts/${selected.contactId}/history/sync`,'POST',{});assert.equal(synced.status,200,JSON.stringify(synced.body));
  assert.equal((await h.request(`/api/contacts/${selected.contactId}/history-messages`)).body.messages.length,1);
  assert.equal((await h.request('/api/memory-processing/runs/current')).body,null,'手动同步成功也不自动提取');
  // manual只控制宿主自动派发；显式处理仍须先通过产品默认关闭的记忆总开关。
@@ -139,7 +139,7 @@ test('manual正式profile不自动派发历史或记忆，重启后仍只执行�
  const started=await h.request(`/api/memory-processing/contacts/${selected.contactId}/history`,'POST',{request_key:randomUUID()});assert.equal(started.status,200,JSON.stringify(started.body));
  assert.ok(started.body.run.inputs.every(input=>input.contactId===selected.contactId));
  const blocked=await ready(async()=>h.request(`/api/memory-processing/runs/${started.body.run.runId}`),value=>value.body.status==='blocked'||value.body.status==='paused','synthetic_manual_memory_unconfigured');
- const continued=await h.request(`/api/memory-processing/runs/${started.body.run.runId}/continue`,'POST',{action_version:blocked.body.controlVersion,operation_id:randomUUID()});assert.equal(continued.status,200);assert.ok(continued.body.inputs.every(input=>input.contactId===selected.contactId));
+ const continued=await h.request(`/api/memory-processing/runs/${started.body.run.runId}/continue`,'POST',{action_version:blocked.body.controlVersion,operation_id:randomUUID()});assert.equal(continued.status,200,JSON.stringify(continued.body));assert.ok(continued.body.inputs.every(input=>input.contactId===selected.contactId));
  await ready(async()=>h.request(`/api/memory-processing/runs/${started.body.run.runId}`),value=>value.body.status==='blocked'||value.body.status==='paused','synthetic_manual_continue_unconfigured');
  await h.shutdown();const offset=(await requests(f)).length,reopened=await start(f,{manual:true,memory:true});
  assert.equal((await reopened.request('/api/runtime/status')).body.background_processing,'manual');
