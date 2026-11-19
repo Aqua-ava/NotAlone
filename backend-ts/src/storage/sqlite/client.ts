@@ -38,7 +38,8 @@ export class SqliteStorage {
   private failed = false;
   private closing?: Promise<void>;
   private diagnostic: Readonly<StorageFailureDiagnostic> | null = null;
-  private readonly pending = new Map<number, { name: string; input: unknown; lease: StorageLease; traceId:string; started: boolean; enqueuedAt:number; startedAt?:number; resolve: (value: any) => void; reject: (error: Error) => void; timer?: NodeJS.Timeout }>();
+  private writeGeneration = 0;
+  private readonly pending = new Map<number, { name: string; input: unknown; lease: StorageLease; traceId:string; started: boolean; mutates?: boolean; enqueuedAt:number; startedAt?:number; resolve: (value: any) => void; reject: (error: Error) => void; timer?: NodeJS.Timeout }>();
   // 一次只放一个动作进入 Worker，其余在此按通道排队：前台动作最多等待当前正在执行的那一个。
   private readonly foregroundQueue:number[]=[];
   private readonly backgroundQueue:number[]=[];
@@ -49,6 +50,16 @@ export class SqliteStorage {
   private readonly files:ReturnType<typeof controlledFiles>;
   private readonly options:OpenStorageOptions;
   get failureDiagnostic(): Readonly<StorageFailureDiagnostic> | null { return this.diagnostic; }
+  /**
+   * 库内容代次：本连接打开以来开始执行过的可写动作数。动作在唯一 Worker 内串行，只读动作以 query_only 执行，
+   * 所以两次取到相同代次时，其间库内容未变。有可写动作或尚未确认模式的动作在途、或存储已失效时返回 undefined。
+   */
+  get quiescentWriteGeneration(): number | undefined {
+    if (this.failed || this.closing) return undefined;
+    const active = this.inFlight === undefined ? undefined : this.pending.get(this.inFlight);
+    if (active && (!active.started || active.mutates !== false)) return undefined;
+    return this.writeGeneration;
+  }
   get timingDiagnostic(): {pendingCount:number;queuedCount:number;active:{action:string;executionMs:number}|null;recent:StorageActionTiming[]} {
     const now=monotonicMs(),pending=[...this.pending.values()],active=pending.find(row=>row.started);
     // 只保留动作名称与时间；既不收集输入，也不扩大状态接口的运输预算。
@@ -69,6 +80,8 @@ export class SqliteStorage {
         if (!pending.started) {
           pending.started = true;
           pending.startedAt=message.startedAt;
+          pending.mutates = message.mutates !== false;
+          if (pending.mutates) this.writeGeneration++;
           pending.timer = setTimeout(() => { this.fail('action_timeout', pending.name); void this.worker.terminate(); },
             message.maintenance === true ? this.maintenanceBudget() : (this.options.actionTimeoutMs ?? sqliteActionTimeoutMs));
         }

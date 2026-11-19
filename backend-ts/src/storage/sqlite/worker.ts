@@ -191,7 +191,9 @@ try {
     let diagnosticObservation:{diagnosticObservedAt:number;diagnosticObservedMonotonicNs:bigint}|undefined;
     const respond=(value:Record<string,unknown>)=>{const diagnostics=[...(Array.isArray(value.diagnostics)?value.diagnostics:[]),...sqlSummary!.events()];sqlSummary=undefined;port.postMessage({id,...value,diagnostics,...(diagnosticObservation??{diagnosticObservedAt:Date.now(),diagnosticObservedMonotonicNs:process.hrtime.bigint()}),startedAt,finishedAt:Number(process.hrtime.bigint())/1e6});};
     // 开始确认带上动作模式：主线程据此选择执行预算，维护动作与普通动作不共用15秒上限。
-    port.postMessage({id, started: true, startedAt, maintenance: actions.get(name)?.mode === 'maintenance'});
+    // 同时告知是否可能写库：只读动作在下方以 query_only 执行，其余（含内置入口与未知动作）一律按可写计。
+    const mode=actions.get(name)?.mode;
+    port.postMessage({id, started: true, startedAt, maintenance: mode === 'maintenance', mutates: mode !== 'read' && name !== 'storage.check'});
     try {
       if (name === 'storage.close') { connection.close(); respond({value: null}); port.close(); return; }
       files.verify();

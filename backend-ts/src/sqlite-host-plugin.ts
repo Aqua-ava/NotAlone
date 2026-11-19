@@ -50,7 +50,7 @@ import { FirstHistoryCoordinator } from './history/sqlite/coordinator.ts';
 import { IncrementalHistoryCoordinator } from './history/sqlite/incremental-coordinator.ts';
 import { installedDeletionScopes } from './storage/sqlite/deletion/registration.ts';
 import {SqliteForeground} from './foreground/sqlite-foreground.ts';
-import {readStatusCoverages} from './history/sqlite/status-coverage.ts';
+import {StatusCoverageMemo} from './history/sqlite/status-coverage.ts';
 import {readHttpBody} from './platform/http/body.ts';
 import {PureTsEvents} from './host/pure-ts-events.ts';
 import {WechatHistoryCheckpointCache} from './history/wechat/checkpoint-cache.ts';
@@ -245,13 +245,15 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
     if(history&&process.env.NOTALONE_SYNC_PROBE&&path.isAbsolute(process.env.NOTALONE_SYNC_PROBE)) foreground=SqliteForeground.create(ownerId,process.env.NOTALONE_SYNC_PROBE,sqlite.wechatCliPath??'',()=>contacts!.foregroundSnapshot());
     const historyHttp=history?new SqliteHistoryHttp(history,(contactId,messageIds)=>{if(automaticImages)imageSync?.retryViewed(contactId,messageIds);}):undefined;
     let historyStatusInFlight:Promise<Record<string,unknown>>|undefined;
+    // 库自上次读取后没有任何可写动作时复用覆盖（与重算结果相同）；轮询间隔内增量与记忆写入照常使其重算。
+    const statusCoverages=new StatusCoverageMemo(()=>storage?.quiescentWriteGeneration);
     const readHistoryStatus=async()=>{
       const {directory,status}=await contacts!.syncSnapshot();
-      const coverage=await readStatusCoverages(directory.bindings,contactId=>history!.coverage(contactId),contactIds=>history!.coverages(contactIds));
+      const coverage=await statusCoverages.read(directory.bindings,contactId=>history!.coverage(contactId),contactIds=>history!.coverages(contactIds));
       return projectHistorySyncStatus(status,coverage,firstHistory?.getState(),incremental?.getState(),
         await history!.bodyAvailable(coverage.map(row=>row.contactId)));
     };
-    // 多个界面同时刷新只共享在途读取；完成后下次查询仍重新核验，不保留状态缓存。
+    // 多个界面同时刷新只共享在途读取；完成后下次查询仍重新核验授权目录，覆盖仅在库未变时复用。
     const historyStatus=()=>historyStatusInFlight??=(readHistoryStatus().finally(()=>{historyStatusInFlight=undefined;}));
     library=capabilities.skillPackageRoot?new SqliteSkillLibrary(storage,ownerId,capabilities.skillPackageRoot):undefined;
     const skills=library?new SqliteSkillHttp(library,req=>authorizeSqliteRequest(req,token)):undefined;
