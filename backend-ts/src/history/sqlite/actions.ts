@@ -16,6 +16,7 @@ import { assertHistoryCursor, historyCursorScheme, historyCursorScopeDigest } fr
 import { isPartitionGrowthReportChange, isPartitionGrowthTargetChange } from '../partition-growth.ts';
 import { assertHistoryReadBoundary } from './suppression.ts';
 import { purgeStaleGoals, retireResumedEmptyGoals } from './goal-retention.ts';
+import { compactGoals, goalCompactionBatch } from './goal-compaction.ts';
 // 规范化与空目标复用判据集中在 goal-reuse.ts；这里 re-export 保持既有导入点不变。
 import { serializeSupport, reusableEmptyGoals } from './goal-reuse.ts';
 import { assertSourceContinuity, assertCheckpointSourceContinuity, assertLiveGuard, fenceContinuity, isSourceContinuityLost, normalUseContinuity, normalUseRevalidationCandidate, prepareNormalUseTarget, preflightGeneration, preflightTarget } from './continuity.ts';
@@ -271,6 +272,8 @@ export const historyActions:StorageAction[]=[
  }),
  action('history.interrupt','write',(tx,i)=>{const goal=currentGoal(tx,i.token,i.goalId);if(goal.state==='running'||goal.state==='incomplete')tx.run("UPDATE read_goal SET state='incomplete',failure_code=? WHERE owner_id=? AND id=?",[i.code,i.token.owner_id,goal.id]);return readCoverage(tx,i.token.owner_id,i.token.contact_id);}),
  action('history.incrementalPending','read',(tx,i)=>{assertReadEligibility(tx,i.token);const goal=currentIncremental(tx,i.token,i.report);return goal?{id:String(goal.id),target:JSON.parse(String(goal.target_json)),cursor:String(goal.cursor)}:null;}),
+ // 离线维护排空（scripts/maintenance/compact-read-goals.mjs）：不由任何服务、IPC 或 HTTP 路径调用。
+ action('history.compactGoals','write',(tx,i)=>compactGoals(tx,{ownerId:i.ownerId,contactId:i.contactId,dryRun:i.dryRun,limit:i.limit??goalCompactionBatch})),
  action('history.retireResumedEmptyGoals','write',(tx,i)=>{assertReadEligibility(tx,i.token);return retireResumedEmptyGoals(tx,i.token,i.replacementGoalId,i.checkpoint);}),
  action('history.beginIncremental','write',(tx,i)=>{
   const token=i.token as ReadEligibility;const report=i.report as HistorySupportReport;assertReadEligibility(tx,token);assertSupport(report);

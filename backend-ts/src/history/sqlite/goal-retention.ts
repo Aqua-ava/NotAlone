@@ -63,9 +63,21 @@ export const goalRetentionSupersededGraceMs=3_600_000;
  * 返回删除的目标数。
  */
 export function purgeStaleGoals(tx:StorageTransaction,ownerId:string,contactId:string,now:number=Date.now()):number{
- // 迁移 40／41 的索引齐备才清理：旧版本库缺少相关表，且没有索引时会退化成全表扫描。
+ const ids=staleGoalIds(tx,ownerId,contactId,now,goalRetentionBatch);
+ deleteGoals(tx,ownerId,ids);
+ return ids.length;
+}
+
+/** 迁移 40／41 的索引齐备才清理：旧版本库缺少相关表，且没有索引时会退化成全表扫描。 */
+export function goalRetentionReady(tx:StorageTransaction):boolean{
  const ready=tx.get("SELECT COUNT(*) AS n FROM sqlite_schema WHERE type='index' AND name IN ('sync_capture_goal','capture_record_capture')");
- if(Number(ready?.n)!==2)return 0;
+ return Number(ready?.n)===2;
+}
+
+/** 按创建顺序返回至多 limit 个可清理的目标（只读）；规则同 purgeStaleGoals，供离线排空复用同一保留集合。 */
+export function staleGoalIds(tx:StorageTransaction,ownerId:string,contactId:string,now:number,limit:number):string[]{
+ if(!goalRetentionReady(tx))return [];
+ if(!Number.isInteger(limit)||limit<1)return [];
  // 恢复基线：与 history.beginIncremental 的 resumable 同一判据的最新一行，续读依赖它，不得清理。
  const ids=tx.all(`WITH ranked AS MATERIALIZED (
    SELECT id,
@@ -100,10 +112,14 @@ export function purgeStaleGoals(tx:StorageTransaction,ownerId:string,contactId:s
    -- 交接来源只被“保留集合”内的目标引用才保护：保留集合＝最新一行（联系人／类型／范围）、仍有效、没有 creation_no 的旧版行、名下有记录的目标。
    -- 被另一个同样可清理的目标引用不构成保护，否则连续交接的增量目标会互相钉住，整条链永远无法清理。
    AND g.id NOT IN (SELECT id FROM protected_handoff)
-  ORDER BY g.creation_no LIMIT ${goalRetentionBatch}`,[ownerId,contactId,ownerId,contactId,BigInt(now-goalRetentionSupersededGraceMs),BigInt(now-goalRetentionGraceMs),ownerId,contactId,BigInt(now-goalRetentionSupersededGraceMs),BigInt(now-goalRetentionGraceMs),BigInt(now-goalRetentionSupersededGraceMs),ownerId,contactId,ownerId,contactId]);
- for(const row of ids){
-  tx.run('DELETE FROM sync_capture WHERE owner_id=? AND goal_id=?',[ownerId,row.id as string]);
-  tx.run('DELETE FROM read_goal WHERE owner_id=? AND id=?',[ownerId,row.id as string]);
+  ORDER BY g.creation_no LIMIT ${limit}`,[ownerId,contactId,ownerId,contactId,BigInt(now-goalRetentionSupersededGraceMs),BigInt(now-goalRetentionGraceMs),ownerId,contactId,BigInt(now-goalRetentionSupersededGraceMs),BigInt(now-goalRetentionGraceMs),BigInt(now-goalRetentionSupersededGraceMs),ownerId,contactId,ownerId,contactId]);
+ return ids.map(row=>row.id as string);
+}
+
+/** 删除目标及其（无记录的）抓取页；调用方已按 staleGoalIds 的条件选出。 */
+export function deleteGoals(tx:StorageTransaction,ownerId:string,ids:readonly string[]):void{
+ for(const id of ids){
+  tx.run('DELETE FROM sync_capture WHERE owner_id=? AND goal_id=?',[ownerId,id]);
+  tx.run('DELETE FROM read_goal WHERE owner_id=? AND id=?',[ownerId,id]);
  }
- return ids.length;
 }

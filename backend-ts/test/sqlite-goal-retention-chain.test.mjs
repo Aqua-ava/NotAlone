@@ -41,7 +41,7 @@ async function round(f,contactId){await f.contacts.setReading(false);await f.con
 async function prepared(t,names=['a']){
  const f=await fixture(t,names);f.state.historyRecords=[record('1')];
  const bindings=[];const binding=await select(f);
- for(const b of (await f.contacts.directory()).bindings){await f.history.synchronize(b.contact_id);bindings.push(b);}
+ for(const b of [...(await f.contacts.directory()).bindings].sort((x,y)=>String(x.display_name).localeCompare(String(y.display_name)))){await f.history.synchronize(b.contact_id);bindings.push(b);}
  return {f,binding,bindings};
 }
 
