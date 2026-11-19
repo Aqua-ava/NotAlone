@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "schemaVersion": 57,
+  "schemaVersion": 58,
   "migrationVersions": [
    1,
    2,
@@ -58,9 +58,10 @@
    54,
    55,
    56,
-   57
+   57,
+   58
   ],
-  "userVersion": 57,
+  "userVersion": 58,
   "sqliteVersion": "3.53.4",
   "tableCount": 111,
   "fieldCount": 1000,
@@ -248,6 +249,7 @@
   "publication_contact_no": "CREATE UNIQUE INDEX publication_contact_no ON document_publication(owner_id,contact_id,publication_no) WHERE scope_kind='contact'",
   "publication_self_no": "CREATE UNIQUE INDEX publication_self_no ON document_publication(owner_id,publication_no) WHERE scope_kind='self'",
   "read_goal_contact": "CREATE INDEX read_goal_contact ON read_goal(owner_id,contact_id,created_at)",
+  "read_goal_contact_kind_order": "CREATE INDEX read_goal_contact_kind_order ON read_goal(owner_id,contact_id,kind,creation_no DESC) WHERE creation_no IS NOT NULL",
   "read_goal_creation_order": "CREATE UNIQUE INDEX read_goal_creation_order ON read_goal(creation_no) WHERE creation_no IS NOT NULL",
   "reply_one_live_attempt": "CREATE UNIQUE INDEX reply_one_live_attempt ON reply_attempt(owner_id,request_id) WHERE state='running'",
   "retrieval_document_scope": "CREATE INDEX retrieval_document_scope ON retrieval_document(owner_id,contact_id,kind,id)",

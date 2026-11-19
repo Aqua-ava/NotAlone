@@ -1,18 +1,30 @@
 import {incompleteLegacySource} from './source-proof.ts';
 
+/**
+ * 联系人当前历史目标：绑定仍有效的最新一个（按 creation_no）。
+ * 沿索引 read_goal_contact_kind_order 倒序取首个满足绑定条件的目标，耗时与该联系人累计的目标总数无关；
+ * 此前对全部历史目标做 row_number 窗口排序，目标累积到数万时每次范围解析需数十毫秒。
+ */
+function latestLiveHistory(owner:string,contact:string,saved:boolean):string{
+ return `(SELECT g.rowid FROM read_goal g WHERE g.owner_id=${owner}.owner_id AND g.contact_id=${contact}.contact_id AND g.kind='history' AND g.creation_no IS NOT NULL
+  AND EXISTS(SELECT 1 FROM conversation_binding live WHERE live.owner_id=g.owner_id AND live.id=g.binding_id AND ${saved?"live.state<>'revoked'":"live.state='verified'"})
+  ORDER BY g.creation_no DESC LIMIT 1)`;
+}
+
 /** 每条查询只解析一次当前固定目标；出现键保留来源索引。 */
 function sourceScopeCTE(saved:boolean):string{return `history_scope_request AS MATERIALIZED (
  SELECT ? owner_id,? contact_scope,? contact_id
 ), retired_provisional_scope AS MATERIALIZED (
  SELECT p.owner_id,p.contact_id FROM source_proof p JOIN history_scope_request q ON q.owner_id=p.owner_id WHERE p.reason='${incompleteLegacySource}'
 ), current_history_ranked AS MATERIALIZED (
- SELECT h.owner_id,h.contact_id,h.binding_id,h.target_json,row_number() OVER(PARTITION BY h.owner_id,h.contact_id ORDER BY h.creation_no DESC) position
- FROM read_goal h JOIN history_scope_request q ON q.owner_id=h.owner_id AND q.contact_scope IS NOT NULL AND h.contact_id=q.contact_id
- WHERE NOT EXISTS(SELECT 1 FROM retired_provisional_scope p WHERE p.owner_id=h.owner_id AND p.contact_id=h.contact_id) AND h.kind='history' AND h.creation_no IS NOT NULL AND EXISTS(SELECT 1 FROM conversation_binding live WHERE live.owner_id=h.owner_id AND live.id=h.binding_id AND ${saved?"live.state<>'revoked'":"live.state='verified'"})
+ SELECT h.owner_id,h.contact_id,h.binding_id,h.target_json,1 position
+ FROM history_scope_request q JOIN read_goal h ON h.rowid=${latestLiveHistory('q','q',saved)}
+ WHERE q.contact_scope IS NOT NULL AND NOT EXISTS(SELECT 1 FROM retired_provisional_scope p WHERE p.owner_id=h.owner_id AND p.contact_id=h.contact_id)
  UNION ALL
- SELECT h.owner_id,h.contact_id,h.binding_id,h.target_json,row_number() OVER(PARTITION BY h.owner_id,h.contact_id ORDER BY h.creation_no DESC) position
- FROM read_goal h JOIN history_scope_request q ON q.owner_id=h.owner_id AND q.contact_scope IS NULL
- WHERE NOT EXISTS(SELECT 1 FROM retired_provisional_scope p WHERE p.owner_id=h.owner_id AND p.contact_id=h.contact_id) AND h.kind='history' AND h.creation_no IS NOT NULL AND EXISTS(SELECT 1 FROM conversation_binding live WHERE live.owner_id=h.owner_id AND live.id=h.binding_id AND ${saved?"live.state<>'revoked'":"live.state='verified'"})
+ SELECT h.owner_id,h.contact_id,h.binding_id,h.target_json,1 position
+ FROM history_scope_request q JOIN (SELECT DISTINCT owner_id,contact_id FROM read_goal WHERE kind='history' AND creation_no IS NOT NULL) k ON k.owner_id=q.owner_id
+ JOIN read_goal h ON h.rowid=${latestLiveHistory('k','k',saved)}
+ WHERE q.contact_scope IS NULL AND NOT EXISTS(SELECT 1 FROM retired_provisional_scope p WHERE p.owner_id=h.owner_id AND p.contact_id=h.contact_id)
 ), current_history_scope AS MATERIALIZED (
  SELECT owner_id,contact_id,binding_id,target_json FROM current_history_ranked WHERE position=1
  UNION ALL
