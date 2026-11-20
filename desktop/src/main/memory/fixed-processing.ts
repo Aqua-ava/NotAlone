@@ -255,7 +255,7 @@ export class FixedMemoryProcessingController {
   }
 }
 
-/** 调用方将所有来源删除、联系人取消及连接变化接到同一 synchronize。 */
+/** 调用方将资料撤下、联系人取消及连接变化接到同一 synchronize。 */
 export function installFixedMemoryProcessingBridge(commands: PageCommands, backend: BackendHost, contacts:ContactSelection): FixedMemoryProcessingController {
   const controller = new FixedMemoryProcessingController(backend, () => commands.publish('memory:fixed-processing-invalidated', {}, 'manager'),contacts);
   let connectionGeneration=backend.getConnectionGeneration();

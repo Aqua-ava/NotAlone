@@ -15,6 +15,7 @@ async function loadController(t, root) {
   t.after(() => rm(output, { force: true }));
   return (await import(pathToFileURL(output).href)).HistoryClearController;
 }
+const lifecycle = { beginHistoryClear: () => async () => {}, historyResyncCompleted: () => {} };
 class FakeBackend {
   constructor(base) { this.base = base; this.generation = 1; this.listeners = new Set(); this.calls = []; }
   getConnectionGeneration() { return this.generation; }
@@ -45,6 +46,9 @@ test('桌面清空控制器消费真实SQLite清空/重读HTTP状态并提示bou
   f.state.pageRecords = [record('shard-a', '1'), record('shard-a', '2')];
   f.state.boundaryMembers = [identity('shard-a', '1'), identity('shard-a', '2')];
   await f.current.history.synchronize(contact);
+  await f.current.history.synchronize(f.contactB);
+  const independent = (await f.current.history.read(f.contactB)).messages.map(message => message.id);
+  assert.equal(independent.length, 2);
   const http = new SqliteHistoryClearHttp(f.current.clear, f.current.resync);
   const server = createServer(async (req, res) => {
     if (req.headers.authorization !== 'Bearer synthetic-clear-token') { res.writeHead(401); res.end(); return; }
@@ -53,7 +57,7 @@ test('桌面清空控制器消费真实SQLite清空/重读HTTP状态并提示bou
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
   const backend = new FakeBackend(`http://127.0.0.1:${server.address().port}`);
-  const controller = new HistoryClearController(backend, new FakeContacts(contact));
+  const controller = new HistoryClearController(backend, new FakeContacts(contact), lifecycle);
   t.after(() => controller.dispose());
   await waitFor(() => controller.getState().phase === 'ready', '桌面控制器首读');
   const initial = controller.getState();
@@ -67,6 +71,7 @@ test('桌面清空控制器消费真实SQLite清空/重读HTTP状态并提示bou
   assert.equal(cleared.clear.boundary.memberCount, 2);
   assert.equal(cleared.clear.boundaryPending, false);
   assert.equal((await f.current.history.read(contact)).messages.length, 0);
+  assert.deepEqual((await f.current.history.read(f.contactB)).messages.map(message => message.id), independent);
   f.state.pageRecords = [record('shard-a', '1'), record('shard-a', '2'), record('shard-b', '8')];
   await controller.resync({ contactId: contact, scopeRevision: 7, requestKey: 'desktop-resync-1', confirmed: true });
   const restored = controller.getState();
@@ -94,7 +99,7 @@ test('桌面清空控制器把未认证边界显示为boundary_pending而非完�
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
   const backend = new FakeBackend(`http://127.0.0.1:${server.address().port}`);
-  const controller = new HistoryClearController(backend, new FakeContacts(contact));
+  const controller = new HistoryClearController(backend, new FakeContacts(contact), lifecycle);
   t.after(() => controller.dispose());
   await waitFor(() => controller.getState().phase === 'ready', '桌面控制器首读');
   await controller.clear({ contactId: contact, scopeRevision: 7 });

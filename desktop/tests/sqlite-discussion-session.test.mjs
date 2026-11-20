@@ -6,33 +6,6 @@ import {sqliteAssistantFixture} from './fixtures/sqlite-assistant-session.mjs';
 const output=await build({stdin:{contents:"export {ContactSession} from './src/main/contacts/session';export {ReplySession} from './src/main/reply/session';",resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false});
 const {ContactSession,ReplySession}=await import(`data:text/javascript;base64,${Buffer.from(output.outputFiles[0].text).toString('base64')}`);
 
-test('既有ReplySession来源失效同步擦除实际发言快照，旧快照不能继续持有正文',async t=>{
- const contactId=randomUUID(),sessionId=randomUUID(),requestId=randomUUID(),body='必须从旧快照撤下的合成发言';
- let messageGate;
- const backend={getConnectionGeneration:()=>7,onStateChanged:()=>()=>{},subscribeMessages:()=>{},requestJson:async request=>{
-  let data;
-  if(request.path.startsWith('/api/deletions?'))data={operations:[]};
-  else if(request.path.endsWith('/assistant-sessions'))data={sessions:[{session_id:sessionId,is_current:true}],current_session_id:sessionId};
-  else if(request.path.endsWith('/assistant-session/default'))data={session_id:sessionId};
-  else if(request.path.endsWith('/assistant-session/binding'))data={confirmed:true};
-  else if(request.path.includes('/history-messages?')){if(messageGate)await messageGate;data={messages:[],next_cursor:null};}
-  else if(request.path.endsWith('/assistant-sessions/'+sessionId)){
-   data={mode:'sqlite',session_id:sessionId,runtime_recovery:'ready',entries:[{entry_id:randomUUID(),position:'1',role:'user',text:body,request_id:requestId,call_id:null,content_state:'available'}]};
-  }else throw new Error('未安排的合成端口');return {generation:7,data};
- }};
- const contacts=new ContactSession(async()=>({generation:7,contacts:[{contactId,displayName:'合成联系人',messageCount:0,sourceCount:0}]}));
- contacts.setConnection(7);await contacts.refreshContacts();const session=new ReplySession(contacts,backend);t.after(()=>contacts.setConnection(undefined));
- contacts.selectContact({contactId,scopeRevision:contacts.getState().scopeRevision});const scope={contactId,scopeRevision:contacts.getState().scopeRevision};
- await session.readSavedSession(scope);assert.equal(session.getState().savedSession.discussionEntries[0].text,body);
- const release=Promise.withResolvers();messageGate=release.promise;
- const withdrawn=[];const off=session.onStateChanged(state=>withdrawn.push(state));t.after(off);
- const invalidating=session.revalidateDeletedSource(contactId);
- assert.equal(JSON.stringify(session.getState()).includes(body),false);
- release.resolve();await invalidating;assert.equal(JSON.stringify(session.getState()).includes(body),false);
- assert.ok(withdrawn.length>0);
- assert.ok(withdrawn.every(state=>state.savedSession.phase==='idle'),'没有实际读取时只撤下讨论，不发布虚假的加载阶段');
-});
-
 test('SQLite讨论切换甲乙再回甲不读取旧候选选择端口，独立草稿仍按原联系人恢复',async t=>{
  const contactIds=[randomUUID(),randomUUID()],sessionIds=contactIds.map(()=>randomUUID()),requests=[],emptySessions=new Set();
  const backend={getConnectionGeneration:()=>7,onStateChanged:()=>()=>{},subscribeMessages:()=>{},requestJson:async request=>{
@@ -99,12 +72,12 @@ test('小窗同范围重新聚焦保留已核验讨论，恢复读取在后台�
  assert.ok(seen.every(state=>state.savedSession?.phase==='ready'));
 });
 
-test('小窗后台恢复期间连接、联系人或来源失效立即清除，迟到读取不能复活正文',async t=>{
- for(const boundary of ['connection','contact','source']){
+test('小窗后台恢复期间连接、联系人或聊天清空立即清除，迟到读取不能复活正文',async t=>{
+ for(const boundary of ['connection','contact','history-clear']){
   const f=await helperFixture(t),gate=f.hold();
   f.session.notifyHelperLifecycle('hidden');f.session.notifyHelperLifecycle('focused');
   assert.equal(f.session.getState().savedSession.discussionEntries?.[0]?.text,f.body);
-  if(boundary==='connection')f.disconnect();else if(boundary==='contact')f.contacts.selectContact({contactId:f.otherContactId,scopeRevision:f.contacts.getState().scopeRevision});else f.session.beginOwnerContextChange();
+  if(boundary==='connection')f.disconnect();else if(boundary==='contact')f.contacts.selectContact({contactId:f.otherContactId,scopeRevision:f.contacts.getState().scopeRevision});else f.session.beginHistoryClear();
   assert.equal(JSON.stringify(f.session.getState()).includes(f.body),false,boundary);
   gate.resolve();await new Promise(resolve=>setImmediate(resolve));
   assert.equal(JSON.stringify(f.session.getState()).includes(f.body),false,boundary);

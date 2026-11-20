@@ -13,7 +13,6 @@ const cases = [
   ['history-clear', 'createHistoryClearBridge', 'history-clear:state-changed', '清空操作不可用。'],
   ['screen-permission', 'createScreenPermissionBridge', 'screen-permission:state-changed', '屏幕录制授权操作不可用。'],
   ['setup', 'createSetupBridge', 'setup:state-changed', '首次配置操作不可用'],
-  ['source-deletion', 'createSourceDeletionBridge', 'sources:state-changed', '来源操作不可用。'],
   ['startup', 'createStartupBridge', 'startup:state-changed', '启动诊断不可用'],
   ['sync-control', 'createSyncControlBridge', 'sync-control:state-changed', '同步操作不可用。'],
   ['usage', 'createUsageBridge', 'usage:state-changed', '用量读取不可用。'],

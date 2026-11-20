@@ -5,7 +5,7 @@ import { build } from 'esbuild';
 
 const ports = build({ stdin: { contents: `
   export { ContactSession } from './src/main/contacts/session';
-  export { SourceDeletionController } from './src/main/sources/controller';
+  export { HistoryClearController } from './src/main/history-clear/controller';
   export { ReplySession } from './src/main/reply/session';
   export { BackendRequestFailure } from './src/main/backend/json-client';
 `, resolveDir: process.cwd() }, bundle: true, platform: 'node', format: 'esm', write: false })
@@ -99,26 +99,37 @@ test('切回 A 复用草稿缓存，但已删除讨论不会恢复旧输入', as
 });
 
 
-test('授权变化保留已选联系人和手工草稿，旧来源读取及删除提交失效', async t => {
+test('授权变化保留已选联系人和手工草稿，旧清空状态及提交失效', async t => {
   const f = await fixture(t);
-  const { SourceDeletionController } = await ports;
+  const { HistoryClearController } = await ports;
   const scope = f.select(f.ids[0]);
   f.contacts.setDraft({ ...scope, text: '合成手工草稿' });
-  const sources = new SourceDeletionController(f.backend, f.contacts, async () => {});
-  let release;
-  const gate = new Promise(resolve => { release = resolve; });
-  f.control.barrier = request => request.path.endsWith('/sources') ? gate : undefined;
-  f.control.respond = request => request.path.endsWith('/sources') ? { sources: [] } : undefined;
-  const reading = sources.refresh(scope);
+  const gate = Promise.withResolvers();
+  let heldRequest;
+  f.control.barrier = request => {
+    if (heldRequest || !request.path.endsWith('/history/clear')) return;
+    heldRequest = request;
+    return gate.promise;
+  };
+  f.control.respond = request => request.path.endsWith('/history/clear')
+    ? { contact_id: scope.contactId, phase: 'none', completed: false, boundary_pending: false }
+    : request.path.endsWith('/history/resync') ? { contact_id: scope.contactId, state: 'none', request_key: null, completed: false } : undefined;
+  const history = new HistoryClearController(f.backend, f.contacts, {
+    beginHistoryClear() { assert.fail('旧范围不能开始清空'); },
+    historyResyncCompleted() { assert.fail('没有重读完成事件'); },
+  });
+  t.after(() => { gate.resolve(); history.dispose(); });
+  assert.ok(heldRequest);
   f.contacts.invalidateReadingScope();
   assert.equal(f.contacts.getState().selectedContactId, scope.contactId);
   assert.equal(f.contacts.getState().draft, '合成手工草稿');
-  release(); await reading;
-  assert.equal(sources.getState().phase, 'idle');
-  await assert.rejects(sources.delete({ ...scope, sourceId: randomUUID() }), /来源范围已变化/);
+  assert.equal(heldRequest.signal.aborted, true);
+  await assert.rejects(history.clear(scope), /联系人范围已变化/);
   const fresh = { ...scope, scopeRevision: f.contacts.getState().scopeRevision };
-  await sources.refresh(fresh);
-  assert.equal(sources.getState().phase, 'ready');
+  await history.refresh(fresh);
+  gate.resolve(); await new Promise(setImmediate);
+  assert.equal(history.getState().phase, 'ready');
+  assert.equal(history.getState().scopeRevision, fresh.scopeRevision);
 });
 
 test('授权变化打断目录刷新时重新读取，不停留在旧加载态', async t => {

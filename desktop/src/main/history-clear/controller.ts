@@ -1,6 +1,7 @@
 import { type HistoryBoundaryView, type HistoryClearRequest, type HistoryClearState, type HistoryClearView, type HistoryResyncView, type HistoryResyncRequest } from '../../shared/history-clear-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
+import type { DesktopDataLifecycle } from '../data-lifecycle';
 import { StateStore } from '../state-store';
 
 type Scope = { generation: number; contactId: string; scopeRevision: number };
@@ -10,9 +11,9 @@ const resyncStates = new Set(['none', 'authorized', 'active', 'completed']);
 const goalPhases = new Set(['not_started', 'syncing', 'complete', 'incomplete']);
 const text = (value: unknown, max = 512): string | null => typeof value === 'string' && value.length <= max ? value : null;
 const count = (value: unknown): number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : 0;
-function clearView(value: unknown): HistoryClearView {
+function clearView(value: unknown, contactId: string): HistoryClearView {
   const row = value as Record<string, unknown> | null;
-  if (!row || typeof row !== 'object' || typeof row.contact_id !== 'string' || !phases.has(String(row.phase))
+  if (!row || typeof row !== 'object' || row.contact_id !== contactId || !phases.has(String(row.phase))
     || typeof row.completed !== 'boolean' || typeof row.boundary_pending !== 'boolean') throw new Error('清空状态格式无法确认。');
   let boundary: HistoryBoundaryView | null = null;
   const raw = row.boundary as Record<string, unknown> | null | undefined;
@@ -26,9 +27,9 @@ function clearView(value: unknown): HistoryClearView {
     boundary, boundaryPending: row.boundary_pending, failureCode: text(row.failure_code), boundaryReason: text(row.boundary_reason),
     storedMessages: count(row.stored_messages), storedSources: count(row.stored_sources), openGoals: count(row.open_goals) };
 }
-function resyncView(value: unknown): HistoryResyncView {
+function resyncView(value: unknown, contactId: string): HistoryResyncView {
   const row = value as Record<string, unknown> | null;
-  if (!row || typeof row !== 'object' || typeof row.contact_id !== 'string' || (row.request_key !== null && typeof row.request_key !== 'string')
+  if (!row || typeof row !== 'object' || row.contact_id !== contactId || (row.request_key !== null && typeof row.request_key !== 'string')
     || !resyncStates.has(String(row.state)) || typeof row.completed !== 'boolean') throw new Error('重读状态格式无法确认。');
   let goalPhase: HistoryResyncView['goalPhase'] = null;
   let messageCount = 0, nonTextCount = 0, failureCode: string | null = null;
@@ -43,10 +44,10 @@ function resyncView(value: unknown): HistoryResyncView {
 }
 export class HistoryClearController extends StateStore<HistoryClearState> {
   private scope: Scope | undefined;
-  private revision = 0;
   private pending: AbortController | undefined;
   private disposed = false;
-  constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession) {
+  constructor(private readonly backend: BackendHost, private readonly contacts: ContactSession,
+    private readonly lifecycle: Pick<DesktopDataLifecycle, 'beginHistoryClear' | 'historyResyncCompleted'>) {
     super({ revision: 0, contactId: null, scopeRevision: 0, phase: 'idle', clear: null, resync: null, busy: null, error: null });
     contacts.onStateChanged(() => this.synchronizeScope());
     backend.onStateChanged(() => this.synchronizeScope());
@@ -57,7 +58,7 @@ export class HistoryClearController extends StateStore<HistoryClearState> {
     if (this.disposed) return;
     this.disposed = true; this.cancel(); this.clearListeners();
   }
-  private cancel(): void { this.pending?.abort(); this.pending = undefined; ++this.revision; }
+  private cancel(): void { this.pending?.abort(); this.pending = undefined; }
   private synchronizeScope(): void {
     if (this.disposed) return;
     const generation = this.backend.getConnectionGeneration();
@@ -79,23 +80,32 @@ export class HistoryClearController extends StateStore<HistoryClearState> {
       || this.scope.generation !== this.backend.getConnectionGeneration()) throw new Error('联系人范围已变化，请重新确认联系人。');
     return this.scope;
   }
-  async refresh(request: HistoryClearRequest): Promise<void> { await this.read(this.assertScope(request)); }
+  async refresh(request: HistoryClearRequest): Promise<void> {
+    const scope = this.assertScope(request);
+    // 定时或手动补读不得撤销仍在结算的变更请求。
+    if (!this.state.busy) await this.read(scope);
+  }
   async clear(request: HistoryClearRequest): Promise<void> {
     const scope = this.assertScope(request);
     if (this.state.busy || this.state.phase !== 'ready' || !this.state.clear) throw new Error('清空状态已变化，请刷新后确认。');
     this.cancel(); const pending = new AbortController(); this.pending = pending;
     const current = () => !this.disposed && this.scope === scope && this.pending === pending;
+    const settle = this.lifecycle.beginHistoryClear();
     try {
       this.publish({ busy: 'clear', error: null });
       // 清空是用户明确操作：请求体为空，范围只由已核验联系人与当前同步选择决定。
       const response = await this.backend.requestJson({ method: 'POST', path: `/api/contacts/${scope.contactId}/history/clear`, body: {}, signal: pending.signal, timeoutMs: 120_000 });
       if (!current() || response.generation !== scope.generation) throw new Error('连接已变化。');
-      const clear = clearView(response.data);
+      const clear = clearView(response.data, scope.contactId);
       this.publish({ clear, busy: null });
       await this.read(scope);
     } catch {
       if (current()) this.publish({ busy: null, error: '清空结果尚未确认，请刷新核对；请求失败不等于未执行。' });
-    } finally { if (this.pending === pending) this.pending = undefined; }
+    } finally {
+      if (this.pending === pending) this.pending = undefined;
+      // 讨论复验失败时仍保留清空的实际回执或未知提示。
+      await settle().catch(() => {});
+    }
   }
   async resync(request: HistoryResyncRequest): Promise<void> {
     const scope = this.assertScope(request);
@@ -107,8 +117,8 @@ export class HistoryClearController extends StateStore<HistoryClearState> {
       const response = await this.backend.requestJson({ method: 'POST', path: `/api/contacts/${scope.contactId}/history/resync`,
         body: { request_key: request.requestKey }, signal: pending.signal, timeoutMs: 120_000 });
       if (!current() || response.generation !== scope.generation) throw new Error('连接已变化。');
-      const resync = resyncView(response.data);
-      this.publish({ resync, busy: null });
+      const resync = resyncView(response.data, scope.contactId);
+      this.publishResync({ resync, busy: null });
       await this.read(scope);
     } catch {
       if (current()) this.publish({ busy: null, error: '重新同步结果尚未确认，请刷新核对；请求失败不等于未执行。' });
@@ -124,9 +134,16 @@ export class HistoryClearController extends StateStore<HistoryClearState> {
         this.backend.requestJson({ method: 'GET', path: `/api/contacts/${scope.contactId}/history/resync`, signal: pending.signal }),
       ]);
       if (!current() || clear.generation !== scope.generation || resync.generation !== scope.generation) return;
-      this.publish({ phase: 'ready', clear: clearView(clear.data), resync: resyncView(resync.data), error: null });
+      this.publishResync({ phase: 'ready', clear: clearView(clear.data, scope.contactId),
+        resync: resyncView(resync.data, scope.contactId), error: null });
     } catch {
       if (current()) this.publish({ phase: 'failed', error: '暂时无法读取聊天清空与重新同步状态，请重试。' });
     } finally { if (this.pending === pending) this.pending = undefined; }
+  }
+
+  private publishResync(patch: Partial<HistoryClearState> & { resync: HistoryResyncView }): void {
+    const newlyCompleted = patch.resync.completed && !this.state.resync?.completed;
+    this.publish(patch);
+    if (newlyCompleted) this.lifecycle.historyResyncCompleted(patch.resync.contactId);
   }
 }

@@ -28,10 +28,10 @@
 | 保留要求 | 当前测试入口 |
 | --- | --- |
 | 只读目录与历史，不隐式创建、继续或生成；明确继续后切换当前讨论 | `assistant-session-catalog`、`assistant-session-recovery`、`sqlite-first-session-regression`、`sqlite-discussion-panel`、`sqlite-candidate-history-read` |
-| 回看乱序、连接换代、联系人切换与来源撤下后，迟到正文不能复活 | `contact-restore-coalescing`、`manual-confirm-session-recovery`、`sqlite-discussion-session`、`sqlite-discussion-source-lifecycle` |
+| 回看乱序、连接换代、联系人切换与资料撤下后，迟到正文不能复活 | `contact-restore-coalescing`、`manual-confirm-session-recovery`、`sqlite-discussion-session`、`data-lifecycle` |
 | 删除须核实操作终态，404 不冒充完成；失败可重试，旧连接不能确认新范围 | `assistant-session-deletion-guards`；后台 `sqlite-discussion-deletion` |
 | 候选完整消息版本、手工编辑、明确选择、回看与显式携入 | `sqlite-reply-candidate-bridge`、`sqlite-reply-candidates`、`sqlite-candidate-history-read`；后台 `sqlite-reply-candidates` |
-| 来源失效同时撤下候选、依据、选稿、草稿与实际 Skill；迟到读取不能恢复 | `sqlite-reply-candidates`、`sqlite-discussion-source-lifecycle`；后台 `sqlite-reply-candidates`、`sqlite-reply-candidate-input-regressions` |
+| 聊天清空撤下旧视图，失败或丢失回执按原状态复验；单份来源的后端删除继续传播到受影响资料 | `data-lifecycle`、`sqlite-history-clear-contract`；后台 `sqlite-history-host`、`sqlite-discussion-integration`、`sqlite-reply-candidate-input-regressions` |
 | 独立想法在准备、读取失败、新开与合法范围往返时保留；删除及范围失效清除旧副本 | `sqlite-first-session-regression`、`workspace-local-draft-transition`、`workspace-draft-sqlite-handoff`、`desktop-state-optimization` |
 | 编辑独立想法不随累计讨论重传正文；IPC 断档只发一次权威补读 | `reply-input-stream`（10／100／1000 条 SQLite 发言） |
 | 历史设置与要求保持原实际输入，不用当前资料补造历史证明 | 后台 `sqlite-reply-input-materials`；桌面 `sqlite-reply-candidates` |

@@ -73,17 +73,17 @@ test('只读回看失败不会冒充会话变更待确认，重新核对保留�
   assert.equal(f.requests.some(request => request.method === 'POST'), false, '恢复不得续期、创建会话或生成');
 });
 
-test('资料变更开始即撤销在途回看，迟到的旧正文不能在结算前复活', { timeout: 5000 }, async t => {
+test('聊天清空开始即撤销在途回看，迟到的旧正文不能在结算前复活', { timeout: 5000 }, async t => {
   const f = await fixture(t);
   f.control.text = '必须撤下的合成讨论正文';
   const gate = { entered: Promise.withResolvers(), release: Promise.withResolvers() };
   t.after(() => gate.release.resolve()); f.control.snapshotGate = gate;
   const viewing = f.replies.viewSavedSession({ ...f.scope, sessionId: f.sessionId }); await gate.entered.promise;
-  f.replies.beginOwnerContextChange();
-  assert.equal(f.requests.at(-1).signal.aborted, true, '资料变更开始即撤销旧读取');
+  const settle = f.replies.beginHistoryClear();
+  assert.equal(f.requests.at(-1).signal.aborted, true, '聊天清空开始即撤销旧读取');
   f.control.text = null; gate.release.resolve(); await viewing;
   assert.equal(JSON.stringify(f.replies.getState()).includes('必须撤下的合成讨论正文'), false);
-  await f.replies.revalidateOwnerContextChange();
+  await settle();
   assert.equal(f.replies.getState().savedSession.phase, 'ready');
   assert.deepEqual(f.replies.getState().savedSession.discussionEntries, []);
   assert.equal(f.replies.getState().sessionCatalog.selectionPending, false);
@@ -94,7 +94,7 @@ test('真正继续操作结果不明仍阻止生成，刷新或失败的回看�
   const gate = { entered: Promise.withResolvers(), release: Promise.withResolvers() };
   t.after(() => gate.release.resolve()); f.control.continueGate = gate;
   const continuing = f.replies.resumeSavedSession({ ...f.scope, sessionId: f.sessionId }); await gate.entered.promise;
-  await f.replies.revalidateDeletedSource(f.scope.contactId);
+  await f.replies.beginHistoryClear()();
   gate.release.resolve(); await continuing;
   assert.equal(f.replies.getState().sessionCatalog.selectionPending, true);
   await f.replies.listSavedSessions(f.scope);
@@ -109,7 +109,7 @@ test('真正继续操作结果不明仍阻止生成，刷新或失败的回看�
   assert.equal(f.requests.filter(request => request.method === 'POST').length, 1, '恢复不得自动重发写请求');
 });
 
-test('来源复验后权威读取失败保持旧正文撤下，允许直接只读重试', { timeout: 5000 }, async t => {
+test('聊天清空后权威读取失败保持旧正文撤下，允许直接只读重试', { timeout: 5000 }, async t => {
   const f = await fixture(t);
   f.control.text = '来源复验前的合成旧正文';
   await f.replies.readSavedSession(f.scope);
@@ -117,7 +117,7 @@ test('来源复验后权威读取失败保持旧正文撤下，允许直接只�
   t.after(() => gate.release.resolve()); f.control.catalogGate = gate;
   const listing = f.replies.listSavedSessions(f.scope); await gate.entered.promise;
   f.control.failSnapshot = true;
-  await f.replies.revalidateDeletedSource(f.scope.contactId);
+  await f.replies.beginHistoryClear()();
   gate.release.resolve(); await listing;
   assert.equal(JSON.stringify(f.replies.getState()).includes('来源复验前的合成旧正文'), false);
   assert.equal(f.replies.getState().savedSession.phase, 'failed');
@@ -135,10 +135,10 @@ test('自动恢复正文等待时断开连接，旧复验正常结算且不发�
   t.after(() => { catalogGate.release.resolve(); snapshotGate.release.resolve(); });
   f.control.catalogGate = catalogGate;
   const listing = f.replies.listSavedSessions(f.scope); await catalogGate.entered.promise;
-  f.replies.beginOwnerContextChange();
+  const settle = f.replies.beginHistoryClear();
   f.control.snapshotGate = snapshotGate;
   f.control.snapshotGateAt = f.control.snapshotReads + 1;
-  const settling = f.replies.revalidateOwnerContextChange(); await snapshotGate.entered.promise;
+  const settling = settle(); await snapshotGate.entered.promise;
   f.contacts.setConnection(undefined);
   const before = f.requests.length;
   snapshotGate.release.resolve();
@@ -148,14 +148,14 @@ test('自动恢复正文等待时断开连接，旧复验正常结算且不发�
   assert.equal(f.replies.getState().contactId, null);
 });
 
-test('本人资料复验打断只读列表后自动重读目录与正文，不留下待确认锁', { timeout: 5000 }, async t => {
+test('聊天清空打断只读列表后自动重读目录与正文，不留下待确认锁', { timeout: 5000 }, async t => {
   const f = await fixture(t);
   f.contacts.setDraft({ ...f.scope, text: '资料更新期间保留的合成想法' });
   const gate = { entered: Promise.withResolvers(), release: Promise.withResolvers() };
   t.after(() => gate.release.resolve()); f.control.catalogGate = gate;
   const listing = f.replies.listSavedSessions(f.scope); await gate.entered.promise;
-  f.replies.beginOwnerContextChange();
-  await f.replies.revalidateOwnerContextChange();
+  const settle = f.replies.beginHistoryClear();
+  await settle();
   gate.release.resolve(); await listing;
   assert.equal(f.replies.getState().sessionCatalog.selectionPending, false, '只读被取消不代表选择结果未知');
   assert.equal(f.replies.getState().sessionCatalog.phase, 'ready');

@@ -26,7 +26,7 @@ export class SqliteDiscussionController {
  constructor(backend:Backend,contacts:Contacts){this.backend=backend;this.contacts=contacts;this.scope=this.capture();this.unsubscribe=[contacts.onStateChanged(()=>this.synchronize()),backend.onStateChanged(()=>this.synchronize())];}
  private capture():Scope {const s=this.contacts.getState();return {contactId:s.selectedContactId,scopeRevision:s.scopeRevision,generation:this.backend.getConnectionGeneration(),ready:s.directoryPhase==='ready'&&!!s.selectedContactId&&s.contacts.some(c=>c.contactId===s.selectedContactId)};}
  onInvalidated(listener:(event:SqliteDiscussionInvalidation)=>void):()=>void {this.listeners.add(listener);return()=>this.listeners.delete(listener);}
- /** 来源删除调用synchronize(true)，即使联系人和连接标识未变化也撤销旧正文与在途操作。 */
+ /** 资料撤下调用 synchronize(true)，即使联系人和连接标识未变化也撤销旧正文与在途操作。 */
  synchronize(force=false):void {
   const next=this.capture();if(!force&&JSON.stringify(next)===JSON.stringify(this.scope))return;
   this.scope=next;++this.revision;for(const c of this.active)c.abort();this.active.clear();

@@ -8,7 +8,6 @@ import { installUsageBridge } from './usage/bridge';
 import { WechatSetupController } from './setup/wechat-controller';
 import { installWechatSetupBridge } from './setup/wechat-bridge';
 import { installForegroundBridge } from './foreground/bridge';
-import { coordinateSourceContextChanges } from './reply/owner-context-changes';
 import { NativeHeaderChangeSource } from './foreground/native-change-source';
 import { createHeaderChangeDiagnosticSink,openHeaderChangeDiagnostics } from './foreground/header-change-diagnostics';
 import { resolveHeaderChangeSourcePath } from './backend/bundled-helpers';
@@ -31,7 +30,6 @@ import { installReplyBridge } from './reply/bridge';
 import { installSqliteDiscussionBridge } from './reply/sqlite-discussion-bridge';
 import { installSkillLearningBridge } from './skill-learning/bridge';
 import { installFixedMemoryProcessingBridge } from './memory/fixed-processing';
-import { installSourceDeletionBridge } from './sources/bridge';
 import { installBindingConsentBridge } from './bindings/bridge';
 import { installSyncControlBridge } from './sync/bridge';
 import { installHistoryClearBridge } from './history-clear/bridge';
@@ -150,8 +148,6 @@ void app.whenReady().then(async () => {
   const bindings = installBindingConsentBridge(commands, backend, contacts, beginReadingScopeChange, contactDeletionQuiet);
   const sync = installSyncControlBridge(commands, backend, contacts, beginReadingScopeChange, contactDeletionQuiet);
   const contactHistory = installContactHistoryBridge(commands, backend, contacts);
-  const historyClear = installHistoryClearBridge(commands, backend, contacts);
-  app.on('before-quit', () => { bindings.dispose(); sync.dispose(); historyClear.dispose(); contactHistory.dispose(); });
   sync.onStateChanged((state) => foreground.setSyncControlState(state));
   foreground.setSyncControlState(sync.getState());
   const replies = installReplyBridge(commands, backend, contacts, () => foreground.getGenerationBlock());
@@ -160,27 +156,11 @@ void app.whenReady().then(async () => {
   installSkillLearningBridge(commands, backend,()=>sqliteDiscussion.synchronize(true));
   dataLifecycle = new DesktopDataLifecycle({history: contactHistory, media,
     processing: fixedMemoryProcessing, management: sqliteMemoryManagement, discussion: sqliteDiscussion, replies});
-  let settleHistoryClear: (() => Promise<void>) | undefined;
-  let resyncWasComplete = false;
-  historyClear.onStateChanged(state => {
-    const clearing = state.busy === 'clear';
-    if (clearing && !settleHistoryClear && state.contactId) settleHistoryClear = dataLifecycle.beginHistoryClear(state.contactId);
-    if (!clearing && settleHistoryClear) {
-      const settle = settleHistoryClear; settleHistoryClear = undefined;
-      void settle().catch(() => {});
-    }
-    const completed = state.resync?.completed === true;
-    if (completed && !resyncWasComplete && !clearing) void contactHistory.refreshCurrent();
-    resyncWasComplete = completed;
-  });
+  const historyClear = installHistoryClearBridge(commands, backend, contacts, dataLifecycle);
+  app.on('before-quit', () => { bindings.dispose(); sync.dispose(); historyClear.dispose(); contactHistory.dispose(); });
   let candidateGenerationBlock=foreground.getGenerationBlock();
   foreground.onStateChanged(() => { replies.refreshGenerationEligibility(); const next=foreground.getGenerationBlock();
     if(next!==candidateGenerationBlock){candidateGenerationBlock=next;sqliteDiscussion.synchronize(true);} });
-  const sources = installSourceDeletionBridge(commands, backend, contacts, contactId => dataLifecycle.sourceChanged(contactId));
-  coordinateSourceContextChanges(sources, replies);
-  sources.onDeletion((phase) => {
-    if (phase === 'started') dataLifecycle.withdraw('source-deletion');
-  });
   backend.setConnectionChangePreparation(() => dataLifecycle.connectionChanging());
   installSetupBridge(commands, new SetupController(backend));
   installWechatSetupBridge(commands, new WechatSetupController(backend));

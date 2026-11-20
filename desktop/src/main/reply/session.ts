@@ -27,7 +27,7 @@ export class ReplySession {
   private readonly retainedContent = new Map<string, WorkspaceContent>();
   private contentGeneration: number | undefined;
   private pendingContent: WorkspaceContent | undefined;
-  private pendingOwnerContextChanges = 0;
+  private pendingHistoryClears = 0;
 
   constructor(private readonly contacts: ContactSession, private readonly backend: BackendHost,
     private readonly generationBlock: () => ReplyGenerationBlock = () => null) {
@@ -52,7 +52,7 @@ export class ReplySession {
   }
   getState(): ReplySessionState { return structuredClone(this.projectState()); }
   private projectState(): ReplySessionState {
-    if (!this.pendingOwnerContextChanges) return this.state;
+    if (!this.pendingHistoryClears) return this.state;
     return { ...this.state, savedSession: this.state.savedSession ? { ...this.state.savedSession,
       ...invalidatedSqliteDiscussion(), phase: 'loading' } : undefined };
   }
@@ -89,7 +89,7 @@ export class ReplySession {
 
   async readSavedSession(selection: ContactSelection, retainVerifiedDisplay = false): Promise<void> {
     this.assertScope(selection); this.cancelContactRestore();
-    if (this.pendingOwnerContextChanges || this.state.sessionDeletion === 'deleting'
+    if (this.pendingHistoryClears || this.state.sessionDeletion === 'deleting'
       || this.catalogPending || this.state.sessionCatalog?.selectionPending) return;
     this.cancelSavedRead();
     const pending = new AbortController(); this.savedRead = pending;
@@ -153,7 +153,7 @@ export class ReplySession {
   async listSavedSessions(selection: ContactSelection): Promise<void> {
     this.assertScope(selection);
     if (this.catalogPending || this.state.sessionDeletion === 'deleting'
-      || this.pendingOwnerContextChanges > 0) return;
+      || this.pendingHistoryClears > 0) return;
     const previous = this.state.sessionCatalog;
     const pending = new AbortController(); this.catalogPending = pending;
     const generation = this.backend.getConnectionGeneration();
@@ -177,7 +177,7 @@ export class ReplySession {
   private async switchSavedSession(selection: ContactSelection & { sessionId?: string }, viewOnly = false): Promise<void> {
     this.assertScope(selection);
     if (this.catalogPending || this.state.savedSession?.phase === 'loading' || this.state.sessionDeletion === 'deleting'
-      || this.state.sessionDeletion === 'failed' || this.pendingOwnerContextChanges) throw new Error('请等待当前操作完成后再切换助手会话。');
+      || this.state.sessionDeletion === 'failed' || this.pendingHistoryClears) throw new Error('请等待当前操作完成后再切换助手会话。');
     const previous = this.state.sessionCatalog;
     this.cancelPending();
     const pending = new AbortController(); this.catalogPending = pending;
@@ -259,40 +259,36 @@ export class ReplySession {
   private retainWorkspace(): WorkspaceContent {
     return { sessionId: this.state.savedSession?.sessionId ?? null, draft: this.draft };
   }
-  beginOwnerContextChange(): void {
+  beginHistoryClear(): () => Promise<void> {
     if (this.state.contactId) this.retainedContent.set(this.state.contactId, this.pendingContent ?? this.retainWorkspace());
     this.pendingContent = this.state.contactId ? this.retainedContent.get(this.state.contactId) : undefined;
-    ++this.pendingOwnerContextChanges;
+    ++this.pendingHistoryClears;
     this.withdrawDiscussion();
-  }
-  async revalidateOwnerContextChange(): Promise<void> {
-    this.pendingOwnerContextChanges = Math.max(0, this.pendingOwnerContextChanges - 1);
-    if (!this.pendingOwnerContextChanges) await this.revalidateDeletedSource('');
-  }
-  beginHistoryClear(_contactId: string): () => Promise<void> {
-    this.beginOwnerContextChange();
     let settlement: Promise<void> | undefined;
-    return () => settlement ??= this.revalidateOwnerContextChange();
+    return () => settlement ??= this.finishHistoryClear();
   }
+
+  private async finishHistoryClear(): Promise<void> {
+    if (--this.pendingHistoryClears === 0) await this.revalidateAfterHistoryClear();
+  }
+
   private withdrawDiscussion(): void {
     this.cancelSavedRead(); this.invalidateSessionCatalog(); this.cancelPending();
     if (this.state.savedSession) this.publish({ savedSession: { ...this.state.savedSession,
       ...invalidatedSqliteDiscussion(), phase: 'idle' }, sourceAvailability: 'checking' });
   }
-  async revalidateDeletedSource(_contactId: string): Promise<void> {
+  private async revalidateAfterHistoryClear(): Promise<void> {
     const contactId = this.state.contactId, scopeRevision = this.state.scopeRevision;
     const generation = this.backend.getConnectionGeneration();
-    this.withdrawDiscussion();
-    const restoreContent = this.pendingContent;
     const refreshCatalog = this.state.sessionCatalog?.phase === 'idle' && !this.state.sessionCatalog.selectionPending;
     this.publish({ sourceAvailability: undefined });
-    if (!contactId || generation === undefined || this.pendingOwnerContextChanges
+    if (!contactId || generation === undefined || this.pendingHistoryClears
       || contactId !== this.state.contactId || scopeRevision !== this.state.scopeRevision
       || generation !== this.backend.getConnectionGeneration()) return;
     // 缓存只恢复独立想法；目录与讨论正文仍由正式只读入口重新核验。
     const selection = { contactId, scopeRevision };
     if (refreshCatalog) await this.listSavedSessions(selection);
-    if ((restoreContent || refreshCatalog) && contactId === this.state.contactId && scopeRevision === this.state.scopeRevision
+    if (this.contactRestoreTimer === undefined && contactId === this.state.contactId && scopeRevision === this.state.scopeRevision
       && generation === this.backend.getConnectionGeneration()) await this.readSavedSession(selection);
   }
 

@@ -42,7 +42,7 @@ export class ContactHistoryController {
     this.disposed = true; this.cancel(); this.stopStream(); this.unsubscribeContacts(); this.unsubscribeBackend(); this.listeners.clear();
   }
 
-  /** 在正文来源删除或聊天清空开始时立即撤下旧正文，避免它留在页面上。 */
+  /** 删除联系人或清空聊天开始时立即撤下旧正文。 */
   invalidate(error = '聊天记录已变化，请刷新后核对。'): void {
     this.synchronizeScope();
     this.cancel(); this.stopStream();
@@ -50,7 +50,7 @@ export class ContactHistoryController {
     this.publish({ messages: { phase: 'failed', items: [], nextCursor: null }, error });
   }
 
-  /** 当前有效联系人经过删除复验后重读第一页。 */
+  /** 确认重读完成后，在仍处于对应联系人时重新读取第一页。 */
   async refreshCurrent(contactId?: string): Promise<void> {
     this.synchronizeScope();
     const scope = this.scope;

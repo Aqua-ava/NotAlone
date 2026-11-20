@@ -1,6 +1,7 @@
 import type { HistoryClearRequest, HistoryResyncRequest } from '../../shared/history-clear-bridge';
 import type { BackendHost } from '../backend/host';
 import type { ContactSession } from '../contacts/session';
+import type { DesktopDataLifecycle } from '../data-lifecycle';
 import { noArguments, type PageCommands } from '../page-commands';
 import { isUuid } from '../uuid';
 import { HistoryClearController } from './controller';
@@ -24,8 +25,9 @@ function resyncRequest(args: unknown[], message = '重新同步需要明确确�
   }
   return { ...request([{ contactId: fields.contactId, scopeRevision: fields.scopeRevision }]), requestKey: fields.requestKey, confirmed: true };
 }
-export function installHistoryClearBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession): HistoryClearController {
-  const controller = new HistoryClearController(backend, contacts);
+export function installHistoryClearBridge(commands: PageCommands, backend: BackendHost, contacts: ContactSession,
+  lifecycle: Pick<DesktopDataLifecycle, 'beginHistoryClear' | 'historyResyncCompleted'>): HistoryClearController {
+  const controller = new HistoryClearController(backend, contacts, lifecycle);
   controller.onStateChanged(state => commands.publish('history-clear:state-changed', state));
   commands.handle('history-clear:get-state', (...args: unknown[]) => { noArguments(args); return controller.getState(); }, 'manager');
   commands.handle('history-clear:refresh', (...args: unknown[]) => controller.refresh(request(args)), 'manager');

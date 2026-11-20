@@ -4,7 +4,6 @@ import type { MessageMediaBridge } from './media-bridge';
 import type { UsageBridge } from './usage-bridge';
 import type { WechatSetupBridge } from './wechat-setup-bridge';
 import type { ForegroundBridge } from './foreground-bridge';
-import type { SourceDeletionBridge } from './source-deletion-bridge';
 import type { BackendBridge } from './backend-bridge';
 import type { DesktopBridge } from './desktop-bridge';
 import type { WindowBridge } from './window-bridge';
@@ -31,7 +30,7 @@ export type AppBridge = WindowBridge & DesktopBridge & {
   contacts: ContactSessionBridge; bindings: BindingConsentBridge; replies: ReplyBridge;
   sqliteDiscussion: SqliteDiscussionBridge;
   skillLearning: SkillLibraryBridge;
-  sources: SourceDeletionBridge; syncControl: SyncControlBridge; foreground: ForegroundBridge;
+  syncControl: SyncControlBridge; foreground: ForegroundBridge;
   fixedMemoryProcessing: FixedMemoryProcessingBridge;
   sqliteMemoryManagement: SqliteMemoryManagementBridge;
   historyClear: HistoryClearBridge;

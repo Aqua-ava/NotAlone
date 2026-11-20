@@ -4,7 +4,6 @@ import { createMessageMediaBridge } from './media';
 import { createUsageBridge } from './usage';
 import { createWechatSetupBridge } from './wechat-setup';
 import { createForegroundBridge } from './foreground';
-import { createSourceDeletionBridge } from './source-deletion';
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import type { AppBridge } from '../shared/app-bridge';
 import { createBackendBridge } from './backend';
@@ -38,7 +37,6 @@ export function createAppBridge(renderer: RendererTransport): AppBridge {
     replies: createReplyBridge(renderer),
     sqliteDiscussion: createSqliteDiscussionBridge(renderer),
     skillLearning: createSkillLearningBridge(renderer),
-    sources: createSourceDeletionBridge(renderer),
     fixedMemoryProcessing: createFixedMemoryProcessingBridge(renderer),
     sqliteMemoryManagement: createSqliteMemoryManagementBridge(renderer),
     bindings: createBindingConsentBridge(renderer),
