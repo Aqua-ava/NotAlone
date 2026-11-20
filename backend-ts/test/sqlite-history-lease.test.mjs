@@ -89,10 +89,13 @@ test('共享租约包含真实关闭，下一联系人不会抢在关闭完成�
  assert.deepEqual(f.counts,{created:2,closed:2,pages:2});
 });
 
-test('上一共享租约关闭失败时先排空原条目，再让另一联系人取得新通道',async t=>{
+for(const sameContact of [true,false])test(`上一共享租约关闭失败时先排空，再让${sameContact?'原':'另一'}联系人取得新通道`,async t=>{
  let closes=0;
  const f=await leaseFixture(t,{shared:serialShared(),onClose:async()=>{if(++closes===1)throw new StorageFailure('history_native_unavailable');}});
  await assert.rejects(f.history.synchronize(f.contactId),{code:'history_native_unavailable'});
- await f.history.synchronize(f.saved[1].contact_id);
+ const next=sameContact?f.contactId:f.saved[1].contact_id;
+ await f.history.synchronize(next);
  assert.deepEqual(f.counts,{created:2,closed:2,pages:2});assert.equal(closes,3);
+ assert.equal((await f.history.read(f.contactId)).messages.length,1);
+ assert.equal((await f.history.read(f.saved[1].contact_id)).messages.length,sameContact?0:1);
 });

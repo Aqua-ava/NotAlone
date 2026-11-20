@@ -21,7 +21,11 @@ export interface HistoryContactGateway {
  eligibility(contactId:string):Promise<ReadEligibility>;
  validate(token:ReadEligibility):Promise<unknown>;
 }
-interface ActiveHistoryRead { done:Promise<void>; stop():Promise<void> }
+interface HistoryReadActivity {
+ request?:{controller:AbortController;done:Promise<void>};
+ // 请求可能已返回，关闭失败的实际租约仍须保留供排空重试。
+ releaseLease?:()=>Promise<void>;
+}
 interface GuardProof {report:HistorySupportReport;target:HistoryTarget}
 interface GuardResult {guardId?:string;revalidated:boolean;resumedGoalId?:string}
 interface HistoryLease {
@@ -52,13 +56,12 @@ export class SqliteHistoryService {
  private readonly onMessageChange?: (contactId:string,messageId:string,kind:MessageChangeKind)=>void;
  private readonly onAcceptedPage?: (contactId:string)=>void;
  private firstHistoryWake?: (contactId:string)=>void;
- private readonly active=new Map<string,ActiveHistoryRead>();
+ private readonly reads=new Map<string,HistoryReadActivity>();
  private readonly bodySupport=new Map<string,ReadEligibility>();
  private readonly recoveries=new WeakMap<HistoryTarget,{planDigest:string;recovery:HistoryRecoveryResult}>();
  private readonly resumedTargets=new WeakMap<HistoryTarget,ResumedCheckpoint>();
  private closed=false;
  private readonly shared?:SharedWechatClient;
- private readonly queued=new Map<string,{controller:AbortController;done:Promise<void>}>();
  private readonly sourcePreparations=new Set<{contactId:string;controller:AbortController;done:Promise<void>}>();
  constructor(storage:SqliteStorage,contacts:HistoryContactGateway,channel:HistoryChannel|(()=>HistoryChannel),holders:ActiveHolders=new ActiveHolders(),onMessageChange?:(contactId:string,messageId:string,kind:MessageChangeKind)=>void,onAcceptedPage?:(contactId:string)=>void,shared?:SharedWechatClient){
   this.storage=storage;this.contacts=contacts;this.createChannel=typeof channel==='function'?channel:()=>channel;this.holders=holders;this.onMessageChange=onMessageChange;this.onAcceptedPage=onAcceptedPage;this.shared=shared;
@@ -89,24 +92,30 @@ export class SqliteHistoryService {
  }
  private async withChannel<T>(contactId:string,signal:AbortSignal|undefined,run:(lease:HistoryLease)=>Promise<T>):Promise<T>{
   if(this.closed)throw new StorageFailure('history_closed');
-  if(this.queued.has(contactId))throw new StorageFailure('history_already_running');
-  const controller=new AbortController();let finish!:()=>void;const done=new Promise<void>(resolve=>{finish=resolve;});this.queued.set(contactId,{controller,done});
+  const activity=this.reads.get(contactId)??{};
+  if(activity.request)throw new StorageFailure('history_already_running');
+  const controller=new AbortController(),finished=Promise.withResolvers<void>();
+  activity.request={controller,done:finished.promise};this.reads.set(contactId,activity);
   const combined=signal?AbortSignal.any([controller.signal,signal]):controller.signal;
   try{
-   if(!this.shared)return await this.withExclusiveChannel(contactId,combined,run);
+   if(!this.shared)return await this.withExclusiveChannel(contactId,activity,combined,run);
    return await this.shared.run(contactId,async()=>{
-   // 上轮真实关闭失败时先重试排空，再允许同一共享进程进入下一轮。
-   for(const entry of [...this.active.values()])await entry.stop();
-   return this.withExclusiveChannel(contactId,combined,run);
+    // 上轮真实关闭失败时先重试排空，再允许同一共享进程进入下一轮。
+    const previousLeases=[...this.reads.values()].flatMap(read=>read.releaseLease?[read.releaseLease]:[]);
+    for(const release of previousLeases)await release();
+    return this.withExclusiveChannel(contactId,activity,combined,run);
    },undefined,combined);
   }
-  finally{this.queued.delete(contactId);finish();}
+  finally{activity.request=undefined;this.forgetReleasedRead(contactId,activity);finished.resolve();}
  }
- /** 守卫、渠道与删除持有者属于同一次读取；关闭失败的条目保留在 active 供停读重试。 */
- private async withExclusiveChannel<T>(contactId:string,signal:AbortSignal|undefined,run:(lease:HistoryLease)=>Promise<T>):Promise<T>{
+ private forgetReleasedRead(contactId:string,activity:HistoryReadActivity):void{
+  if(!activity.request&&!activity.releaseLease)this.reads.delete(contactId);
+ }
+ /** 守卫、渠道与删除持有者属于本轮租约；释放失败时保留排空操作。 */
+ private async withExclusiveChannel<T>(contactId:string,activity:HistoryReadActivity,signal:AbortSignal,run:(lease:HistoryLease)=>Promise<T>):Promise<T>{
   if(this.closed)throw new StorageFailure('history_closed');
-  if(this.active.has(contactId))throw new StorageFailure('history_already_running');
-  const controller=new AbortController(),work=Promise.withResolvers<void>(),done=Promise.withResolvers<void>();
+  if(activity.releaseLease)throw new StorageFailure('history_already_running');
+  const controller=new AbortController(),work=Promise.withResolvers<void>();
   let workFinished=false,workSucceeded=false,leaseSettled=false,intentionalClose=false,sourceLost=false;
   let channel:HistoryChannel|undefined,token:ReadEligibility|undefined,guardId:string|undefined,lossCode:string|undefined;
   let channelClosed=false,releaseFailed=false,storageClosed=false;
@@ -135,7 +144,10 @@ export class SqliteHistoryService {
    let failure:unknown;
    try{await releaseGuard();}catch(error){failure=error;}
    try{await closeChannel();}catch(error){failure??=error;}
-   if(drained())this.active.delete(contactId);
+   if(drained()){
+    activity.releaseLease=undefined;
+    this.forgetReleasedRead(contactId,activity);
+   }
    if(failure)throw failure;
   })().catch(error=>{cleaning=undefined;throw error;});
   const stop=async()=>{
@@ -149,7 +161,7 @@ export class SqliteHistoryService {
    const release=this.holders.register(resource);releases.push(release);return release;
   };
   let releaseReader:(()=>Promise<void>)|undefined;
-  this.active.set(contactId,{done:done.promise,stop:()=>releaseReader?releaseReader():stop()});
+  activity.releaseLease=()=>releaseReader?releaseReader():stop();
   const abort=()=>{controller.abort();void closeChannel().catch(()=>{});};signal?.addEventListener('abort',abort,{once:true});if(signal?.aborted)abort();
   try{
    token=await this.contacts.eligibility(contactId);const scope=await this.storage.execute<HistoryScope>('history.scope',{token});
@@ -187,12 +199,10 @@ export class SqliteHistoryService {
    throw actual;
   }finally{
    leaseSettled=true;signal?.removeEventListener('abort',abort);workFinished=true;work.resolve();
-   try{
-    if(releases.length){const results=await Promise.allSettled(releases.reverse().map(release=>release()));const failure=results.find(result=>result.status==='rejected');if(failure?.status==='rejected')throw failure.reason;}
-    else await cleanup();
-    // 新恢复点已接受且真实读者已关闭后，才退役本轮替换的空事实；失败与取消保留原恢复点。
-    if(workSucceeded&&!controller.signal.aborted)for(const [goalId,checkpoint] of retiredCheckpoints)await this.storage.execute('history.retireResumedEmptyGoals',{token,replacementGoalId:goalId,checkpoint});
-   }finally{done.resolve();}
+   if(releases.length){const results=await Promise.allSettled(releases.reverse().map(release=>release()));const failure=results.find(result=>result.status==='rejected');if(failure?.status==='rejected')throw failure.reason;}
+   else await cleanup();
+   // 新恢复点已接受且真实读者已关闭后，才退役本轮替换的空事实；失败与取消保留原恢复点。
+   if(workSucceeded&&!controller.signal.aborted)for(const [goalId,checkpoint] of retiredCheckpoints)await this.storage.execute('history.retireResumedEmptyGoals',{token,replacementGoalId:goalId,checkpoint});
   }
  }
  private async check(scope:HistoryScope,controller:AbortController):Promise<void>{
@@ -242,13 +252,7 @@ export class SqliteHistoryService {
   if(report.status==='supported'&&bodyCapabilities.every(key=>report.capabilities?.[key]==='supported'))this.bodySupport.set(contactId,token);
   else this.bodySupport.delete(contactId);
  }
- /** 同联系人读者结束后，用新通道复验来源元数据，不重读正文。 */
- /** 读者工作已结束但真实关闭失败时，先按停读入口重试真实排空，不循环等待已结束的工作。 */
- private async waitForDrainedReader(contactId:string,pending:Promise<void>,combined:AbortSignal,deadline:number):Promise<void>{
-  await waitForSourceReader(pending,combined,deadline-Date.now());
-  const leftover=this.active.get(contactId);
-  if(leftover)await leftover.stop();
- }
+ /** 同联系人请求结束且实际租约排空后，再用新通道核对来源元数据。 */
  async prepareSource(contactId:string,signal?:AbortSignal):Promise<void>{
   if(this.closed)throw new StorageFailure('history_closed');
   const controller=new AbortController(),combined=signal?AbortSignal.any([controller.signal,signal]):controller.signal;
@@ -260,14 +264,13 @@ export class SqliteHistoryService {
   try{
    for(;;){
     check();
-    const pending=this.queued.get(contactId)?.done??this.active.get(contactId)?.done;
-    if(pending){await this.waitForDrainedReader(contactId,pending,combined,deadline);continue;}
+    const activity=this.reads.get(contactId);
+    if(activity?.request){await waitForSourceReader(activity.request.done,combined,deadline-Date.now());continue;}
+    if(activity?.releaseLease){await activity.releaseLease();continue;}
     try{await this.ensureSourceReady(contactId,combined);check();return;}
     catch(error){
      if(!(error instanceof StorageFailure)||error.code!=='history_already_running')throw error;
-     const raced=this.queued.get(contactId)?.done??this.active.get(contactId)?.done;
-     if(!raced)throw error;
-     await this.waitForDrainedReader(contactId,raced,combined,deadline);
+     if(!this.reads.has(contactId))throw error;
     }
    }
   }catch(error){if(timedOut)throw new StorageFailure('history_native_timeout');throw error;}
@@ -361,7 +364,7 @@ export class SqliteHistoryService {
   return summaries;
  }
  source(contactId:string,recordId:string):Promise<HistorySource>{return this.storage.execute('history.source',{ownerId:this.contacts.ownerId,contactId,recordId});}
- waitForReadIdle(contactId:string):Promise<void>{return this.queued.get(contactId)?.done??this.active.get(contactId)?.done??Promise.resolve();}
+ waitForReadIdle(contactId:string):Promise<void>{return this.reads.get(contactId)?.request?.done??Promise.resolve();}
  coverage(contactId:string):Promise<HistoryCoverage>{return this.storage.execute('history.coverage',{ownerId:this.contacts.ownerId,contactId});}
  private async resumeOrTarget(scope:HistoryScope,channel:HistoryChannel,report:HistorySupportReport,signal:AbortSignal):Promise<HistoryTarget>{
   let plan=await this.storage.execute<SourceRecoveryPlan|null>('history.sourceRecoveryPlan',{token:scope.token,report});
@@ -522,9 +525,11 @@ export class SqliteHistoryService {
  async stop(contactId?:string):Promise<void>{
   if(contactId)this.bodySupport.delete(contactId);else this.bodySupport.clear();
   const preparations=[...this.sourcePreparations].filter(entry=>!contactId||entry.contactId===contactId);for(const entry of preparations)entry.controller.abort();
-  const queued=[...this.queued.entries()].filter(([id])=>!contactId||id===contactId).map(([,entry])=>entry);for(const entry of queued)entry.controller.abort();
-  const entries=[...this.active.entries()].filter(([id])=>!contactId||id===contactId).map(([,entry])=>entry);
-  const results=await Promise.allSettled([...entries.map(entry=>entry.stop()),...queued.map(entry=>entry.done),...preparations.map(entry=>entry.done)]);
+  const reads=[...this.reads.entries()].filter(([id])=>!contactId||id===contactId).map(([,activity])=>activity);
+  for(const activity of reads)activity.request?.controller.abort();
+  const results=await Promise.allSettled([
+   ...reads.map(activity=>activity.releaseLease?.()),...reads.map(activity=>activity.request?.done),...preparations.map(entry=>entry.done),
+  ]);
   const failure=results.find(result=>result.status==='rejected');if(failure?.status==='rejected')throw failure.reason;
  }
  async close():Promise<void>{this.closed=true;await this.stop();}
