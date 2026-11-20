@@ -146,6 +146,22 @@ test('模型已返回但输出无效的失败已发送却不是自动放弃，�
  assert.equal((await service.status(f.ids[0],d.id,randomUUID())).abandoned,false,'未找到的请求不是已放弃');
 });
 
+test('工作区汇总输入超过执行上限时结清未出站调用，新请求可正常生成',async t=>{
+ const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');
+ const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');
+ const f=await realFixture(t,{content:JSON.stringify({candidates:[{parts:['合成新候选'],basis:[1]}]})});
+ const contactId=f.ids[0],d=await f.discussions.newDiscussion(contactId),service=new SqliteReplyCandidateService(f.storage,f.owner);
+ const turns=new SqliteReplyTurns({...f,service,authorize:async()=>{}});t.after(()=>turns.close());
+ const text='合成'.repeat(49_900);
+ const input={contactId,discussionId:d.id,requestKey:randomUUID(),text,confirmedContact:true,workspace:{action:'express',draftText:text,contextText:'背景',includeRelationshipContext:true}};
+ await assert.rejects(turns.generate(input),{code:'discussion_input_invalid'});
+ const status=await service.status(contactId,d.id,input.requestKey);
+ assert.equal(status.phase,'failed');assert.equal(status.sent,false);assert.equal(status.retryable,true);assert.equal(f.requests.length,0);
+ const fresh={...input,requestKey:randomUUID(),text:'合成新请求',workspace:{...input.workspace,draftText:'合成新请求'}};
+ await turns.generate(fresh);
+ assert.equal((await service.status(contactId,d.id,fresh.requestKey)).phase,'committed');assert.equal(f.requests.length,1);
+});
+
 test('真实Skill加载独立于选择记录，资格失效后候选正文、依据和实际Skill快照一起撤下',async t=>{
  const {fixture:realFixture}=await import('./fixtures/sqlite-reply-candidates/support.mjs');const {SqliteReplyTurns}=await import('../src/reply/sqlite/candidates/turns.ts');const {mkdir,writeFile}=await import('node:fs/promises');
  const f=await realFixture(t,{onRequest:(_req,res,_body,n)=>n===1&&modelToolResponse(res,'skill',{name:'gentle'}),content:JSON.stringify({candidates:[{parts:['合成Skill候选'],basis:[1]}]})});await mkdir(join(f.skillRoot,'gentle'));await writeFile(join(f.skillRoot,'gentle/SKILL.md'),'---\nname: gentle\ndescription: 合成温和表达\n---\n先回应感受，再说明情况。\n');let skill=await f.library.discover('gentle');skill=await f.library.setEnabled(skill.id,skill.headRevision,'enabled');

@@ -39,7 +39,7 @@ export async function createSqliteDiscussionHost(options:{
  const embedding=options.projectDirectory?createLocalEmbeddingLifecycle(createBusinessEmbeddingFactory(options.projectDirectory,projectEmbeddingCache(options.projectDirectory))):undefined;
  const retrieval=createRetrievalIndex({storage:options.storage,ownerId:options.ownerId,holders:options.holders,...(embedding?{embed:embedding.embed}:{})});
  const candidates=new SqliteReplyCandidateService(options.storage,options.ownerId,options.reader);
- const candidateTurns=options.model?new SqliteReplyTurns({storage:options.storage,service:candidates,discussions:service,runtime,model:options.model.configuration,provider:options.model.provider,arbiter:options.model.arbiter,library:options.library,retrieval,authorize:async()=>{if(stopping)throw new StorageFailure('reply_runtime_closed');}}):undefined;
+ const candidateTurns=options.model?new SqliteReplyTurns({storage:options.storage,service:candidates,runtime,model:options.model.configuration,provider:options.model.provider,arbiter:options.model.arbiter,library:options.library,retrieval,authorize:async()=>{if(stopping)throw new StorageFailure('reply_runtime_closed');}}):undefined;
  const candidateHttp=new SqliteReplyCandidateHttp({storage:options.storage,service:candidates,turns:candidateTurns,authorize:options.authorizeRequest});
  const handler=new SqliteDiscussionHttp(service,options.authorizeRequest,turns),requests=new Set<Promise<boolean>>();
  const http={handle(request:IncomingMessage,response:ServerResponse):Promise<boolean>{

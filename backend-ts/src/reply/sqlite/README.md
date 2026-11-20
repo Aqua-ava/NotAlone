@@ -24,7 +24,7 @@
 
 空闲分段只在 `discussion.begin` 的身份、幂等和受理事务内执行；不提供单独预选或分段的写入口。回看、目录与明确新开／继续沿各自正式入口执行。
 
-请求幂等命名空间固定为 `databaseId:discussion.begin`，request_key在同owner内唯一。相同key重送仅回查原contact/原讨论/原请求，跨contact、正文冲突、取消或失效均拒绝；空闲分段前先检查该键，不能因十二小时或换段重送模型。统一删除以相同 namespace/key写删除墓碑，来源闭包清理后仍不可重受理。
+请求幂等命名空间固定为 `databaseId:discussion.begin`，request_key在同owner内唯一。相同key重送仅回查原contact/原讨论/原请求，跨contact、请求类型或正文冲突、取消或失效均拒绝；空闲分段前先检查该键，不能因十二小时或换段重送模型。统一删除以相同 namespace/key写删除墓碑，来源闭包清理后仍不可重受理。
 
 删除fence先把受影响实际发言从available不可逆转为cleared，擦除正文并断开实际call/event引用（请求身份保留到后续清行）。available状态始终要求真实成功call和原始事件，不允许更新旧正文；cleared不能复活。这样共享调用域可在排空后先清追踪，讨论域随后清请求闭环，blocked期间产品读口也不会返回旧正文。文件目标仅在官方所有者排空、完整manifest登记后产生，不能提前冻结活动writer的旧清单。
 
@@ -33,6 +33,10 @@
 ## 正常业务端口与验证边界
 
 `SqliteDiscussionService` 提供list/view/newDiscussion/continueDiscussion/begin/trace；回看与继续不触发模型。`SqliteDiscussionRuntime` 将真实官方副本、活动holder、目录创建意图和完整关闭清单串联；`SqliteDiscussionTurns` 接受一次明确的联系人与文字请求，冻结实际entry及显式选取的同联系人message，执行有界讨论，并与候选生成共用 `generation.ts` 的官方 DSH 执行、Skill 目录按需读取和物理调用预算。候选另负责冻结编号材料、依据及结构输出；两种动作不另建模型账本。新请求均拒绝显式选包，历史材料按 ADR-193 保留原只读合同。
+
+两种动作直接调用同事务的共同受理、冻结及出站／结算实现。具名出站和提交动作根据尝试对应的已保存请求类型选择各自校验。`discussion.settleStep` 持久化物理调用的实际用量和回执，`commitModelResponse` 核验同轮末次成功终止的回执并保存输出追踪、关闭整轮。业务投影在同一事务写入，候选只写候选及依据，普通讨论才创建助手发言。历史 `dsh-assistant-event-v1` 回执继续用于已有用量统计。
+
+初始发现的 Skill 不可用状态随模型调用准备事务登记。准备后由统一执行流程从输入预检开始负责失败结算，预检拒绝时结束原请求并标记未出站。
 
 `SqliteDiscussionSkillProtection` 的assertCurrent、recordSelection、recordInput均通过具名动作复验真实call/attempt/context/来源；实际Skill输入写事务同时requireSkillRun及requireSkillRevision。`selected`事件不产生loaded输入。实际读取经 Skill 域官方 provider，原目录不改写、不复制为新来源。
 

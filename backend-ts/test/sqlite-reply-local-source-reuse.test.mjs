@@ -41,7 +41,7 @@ async function committedRuntime(t,sourceCount){
  await f.storage.execute('reply.dispatchCall',{...input,skillRun,budget,requestPayload:{messages:['园艺合成请求']}});
  await f.storage.execute('discussion.settleStep',{...input,usage:{inputTokens:5,outputTokens:3},reason:'stop'});
  const text=JSON.stringify({candidates:[{parts:['合成园艺候选'],basis:[1]}]});
- await f.storage.execute('reply.commitCandidates',{...input,skillRun,text,sessionEvent:{type:'assistant/message',seq:1,data:{message:{source:{provider:budget.provider,model:budget.model},content:[{type:'text',text}]},usage:{inputTokens:5,outputTokens:3},interrupted:false}}});
+ await f.storage.execute('reply.commitCandidates',{...input,physicalCallId:input.callId,skillRun,text,sessionEvent:{type:'assistant/message',seq:1,data:{message:{source:{provider:budget.provider,model:budget.model},content:[{type:'text',text}]},usage:{inputTokens:5,outputTokens:3},interrupted:false}}});
  await f.storage.execute('runtime.manifest',{...input,rootAbsent:false,files:[address]});
  input.eventBoundary=JSON.stringify({formatVersion:4,eventCount:1,lastSeq:1,eventSha256:'d'.repeat(64)});
  const db=new DatabaseSync(join(f.root,'managed/sqlite/notalone.sqlite'));t.after(()=>db.close());

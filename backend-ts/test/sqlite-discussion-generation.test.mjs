@@ -47,7 +47,7 @@ async function fixture(t,reply){
   finally{await driver.close();}
  }};
  const checks=[];const skillProtection={assertCurrent:async(scope,revision)=>{checks.push({scope,revision});},recordSelection:async()=>{},recordInput:async()=>{}};
- const options={runtime,storage,attempt,contextId:'context-synthetic',callId:'call-synthetic',configurationDigest:'synthetic-config',prompt:'这是合成用户发言。',systemPrompt:'请围绕已确认联系人讨论，消息由用户亲自发送。',
+ const options={kind:'discussion',runtime,storage,attempt,contextId:'context-synthetic',callId:'call-synthetic',configurationDigest:'synthetic-config',prompt:'这是合成用户发言。',systemPrompt:'请围绕已确认联系人讨论，消息由用户亲自发送。',
   model:{provider:'synthetic-official',model:'synthetic-model',maxTokens:512,temperature:0,reasoningEffort:'off',physical_limit:1,deadline_ms:5000,warning_ratio:0.8,budgetProfile:{context_window_tokens:8192,safety_margin_tokens:512}},
   provider,arbiter,skillProtection,skillRevision:{packages:[],eligible:[]},configurationForRevision:()=>'synthetic-config',assertAuthorized:async()=>{}};
  return {options,requests,actions,checks,arbiter,ctx};

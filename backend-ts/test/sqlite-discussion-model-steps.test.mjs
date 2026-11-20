@@ -50,27 +50,43 @@ async function preparedReply(t,options={}){
  const f=await fixture(t,options),contactId=f.ids[0],d=await f.discussions.newDiscussion(contactId),requestKey=randomUUID();
  if(options.knowledge)await f.storage.execute('synthetic.publishReplyKnowledge',{ownerId:f.owner,contactId,sourceContactId:contactId,mode:'document'});
  const service=new SqliteReplyCandidateService(f.storage,f.owner),confirmationId=await f.storage.execute('identity.manualConfirm',{ownerId:f.owner,contactId,contextToken:requestKey,id:randomUUID(),at:Date.now()});
- const {attempt}=await service.begin({contactId,discussionId:d.id,requestKey,text:'合成候选降级请求',identity:{kind:'manual',confirmationId}});
+ const text='合成候选降级请求',identity={kind:'manual',confirmationId};
+ const {attempt}=await service.begin({contactId,discussionId:d.id,requestKey,text,identity});
  const input={...attempt,contextId:randomUUID(),callId:randomUUID()},skillRun={packages:[],eligible:[]};
  const messages=await f.storage.execute('discussion.messages',{...attempt,messageIds:f.messages[0].map(message=>message.id)});
  await f.storage.execute('reply.freezeInput',{...input,skillRun,items:messages.map(message=>({kind:'message',sourceContactId:contactId,messageId:message.id,recordId:message.record_id,acceptedRevision:message.interpretation_revision})),at:Date.now()});
  await f.storage.execute('discussion.prepareCall',{...input,operationId:randomUUID(),provider:budget.provider,requestKey:input.callId,inputSeal:'b'.repeat(64),model:budget.model,configurationId:'c'.repeat(64),inputCap:1024,outputCap:512});
- return {...f,input,skillRun,service};
+ return {...f,input,skillRun,service,requestKey,text,identity};
 }
 
 test('候选降级复制原编号资料与来源，新候选依据仍可核验且通用入口不能绕过候选保护',async t=>{
  const f=await preparedReply(t);
+ await assert.rejects(f.discussions.begin(f.input.contactId,f.requestKey,f.text,f.identity,f.input.discussionId),{code:'discussion_request_conflict'});
  await assert.rejects(f.storage.execute('discussion.dropSkill',f.input),{code:'discussion_skill_fallback_scope'});
  const fallback=await f.storage.execute('reply.dropSkill',f.input);f.input={...f.input,contextId:fallback.contextId};f.skillRun=fallback.newRevision;
  await f.storage.execute('reply.assertInput',{...f.input});
  await withinRuntime(f,async input=>{
   const text=JSON.stringify({candidates:[{parts:['无Skill的合成候选'],basis:[1]}]});
-  await f.storage.execute('discussion.dispatchCall',{...input,skillRun:f.skillRun,budget,requestPayload:{messages:['仅含仍合法的合成资料']}});
-  await f.storage.execute('discussion.settleStep',{...input,usage:{inputTokens:5,outputTokens:3},reason:'stop'});
-  await f.storage.execute('reply.commitCandidates',{...input,skillRun:f.skillRun,text,sessionEvent:{type:'assistant/message',seq:1,data:{message:{source:{provider:budget.provider,model:budget.model},content:[{type:'text',text}]},usage:{inputTokens:5,outputTokens:3},interrupted:false}}});
+  const dispatch={...input,skillRun:f.skillRun,budget,requestPayload:{messages:['仅含仍合法的合成资料']}};
+  await assert.rejects(f.storage.execute('discussion.dispatchCall',dispatch),{code:'discussion_request_kind_mismatch'});
+  await f.storage.execute('reply.dispatchCall',dispatch);
+  const usage={inputTokens:5,outputTokens:3};
+  const result={...input,physicalCallId:input.callId,skillRun:f.skillRun,text,sessionEvent:{type:'assistant/message',seq:1,data:{message:{source:{provider:budget.provider,model:budget.model},content:[{type:'text',text}]},usage,interrupted:false}}};
+  await assert.rejects(f.storage.execute('discussion.commitAssistant',result),{code:'discussion_request_kind_mismatch'});
+  const missingId={...result};delete missingId.physicalCallId;
+  await assert.rejects(f.storage.execute('reply.commitCandidates',missingId),{code:'discussion_input_invalid'});
+  await assert.rejects(f.storage.execute('reply.commitCandidates',result),{code:'discussion_assistant_event_invalid'});
+  await f.storage.execute('discussion.settleStep',{...input,physicalCallId:input.callId,usage,reason:'stop'});
+  const invalidBasis=JSON.stringify({candidates:[{parts:['无实际依据的合成候选'],basis:[999]}]});
+  const invalidEvent={...result.sessionEvent,data:{...result.sessionEvent.data,message:{...result.sessionEvent.data.message,content:[{type:'text',text:invalidBasis}]}}};
+  await assert.rejects(f.storage.execute('reply.commitCandidates',{...result,text:invalidBasis,sessionEvent:invalidEvent}),{code:'reply_basis_not_actual_input'});
+  assert.equal((await f.service.status(input.contactId,input.discussionId,f.requestKey)).phase,'preparing');
+  await f.storage.execute('reply.commitCandidates',result);
  });
  const view=(await f.service.view(f.input.contactId,f.input.discussionId))[0];
  assert.equal(view.candidates[0].basis[0].itemNo,1);assert.equal(view.candidates[0].basis[0].verification,'actual_input');
+ const discussion=await f.discussions.view(f.input.contactId,f.input.discussionId);
+ assert.deepEqual(discussion.entries.map(entry=>entry.role),['user']);
  assert.match(view.candidates[0].basis[0].text,/已保存聊天/);assert.equal(f.requests.length,0);
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });

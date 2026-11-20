@@ -32,7 +32,7 @@ async function commitCandidates(f,candidateCount){
  await f.storage.execute('reply.dispatchCall',{...input,skillRun,budget,requestPayload:{messages:['园艺合成请求']}});
  await f.storage.execute('discussion.settleStep',{...input,usage:{inputTokens:5,outputTokens:3},reason:'stop'});
  const text=JSON.stringify({candidates:Array.from({length:candidateCount},(_,index)=>({parts:[`园艺合成候选${index+1}`],basis:[1]}))});
- await f.storage.execute('reply.commitCandidates',{...input,skillRun,text,sessionEvent:{type:'assistant/message',seq:1,data:{message:{source:{provider:budget.provider,model:budget.model},content:[{type:'text',text}]},usage:{inputTokens:5,outputTokens:3},interrupted:false}}});
+ await f.storage.execute('reply.commitCandidates',{...input,physicalCallId:input.callId,skillRun,text,sessionEvent:{type:'assistant/message',seq:1,data:{message:{source:{provider:budget.provider,model:budget.model},content:[{type:'text',text}]},usage:{inputTokens:5,outputTokens:3},interrupted:false}}});
  return input;
 }
 

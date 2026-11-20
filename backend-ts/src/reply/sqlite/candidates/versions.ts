@@ -6,11 +6,12 @@ import type {DiscussionScope} from '../contracts.ts';
 import type {ReplyCandidateVersion,ReplyKnowledgeReader} from './contracts.ts';
 import {inputMaterialMetadata} from './input-material-metadata.ts';
 function fail(code:string):never{throw new StorageFailure(code);}
+type ModelCandidate={parts:string[];basis:number[]};
 export function readParts(value:unknown):string[]{
  if(!Array.isArray(value)||!value.length||value.length>8||value.some(p=>typeof p!=='string'||!p.trim()||p.length>10000)||value.join('').length>30000)fail('reply_content_invalid');
  return value as string[];
 }
-export function parseReplyOutput(text:string):{parts:string[];basis:number[]}[]{
+export function parseReplyOutput(text:string):ModelCandidate[]{
  let result;try{result=JSON.parse(text);}catch{fail('reply_output_invalid');}
  // 顶层多出的说明字段（如 note）不入库、不展示，直接忽略；候选内部字段仍严格校验。
  if(!result||typeof result!=='object'||Array.isArray(result)||!Array.isArray(result.candidates)||!result.candidates.length||result.candidates.length>5)fail('reply_output_invalid');
@@ -35,8 +36,7 @@ export function versionView(tx:StorageTransaction,ownerId:string,candidateId:str
   parts:tx.all('SELECT text_body FROM reply_version_part WHERE owner_id=? AND candidate_id=? AND version_no=? ORDER BY part_no',[ownerId,candidateId,versionNo]).map(p=>String(p.text_body)),
   basis:tx.all('SELECT b.*,x.kind,x.text_body,x.identity_json FROM reply_basis b JOIN reply_candidate_input x ON x.owner_id=b.owner_id AND x.context_id=b.context_id AND x.item_no=b.item_no WHERE b.owner_id=? AND b.candidate_id=? AND b.version_no=? ORDER BY basis_no',[ownerId,candidateId,versionNo]).map(b=>({itemNo:Number(b.item_no),kind:String(b.kind),text:String(b.text_body),verification:b.verification_state as 'actual_input'|'inherited_unverified',...inputMaterialMetadata(String(b.identity_json))}))};
 }
-export function insertModelCandidates(tx:StorageTransaction,i:{ownerId:string;requestId:string;contextId:string;callId:string;physicalCallId?:string;text:string}):void{
- const output=parseReplyOutput(i.text),physicalCallId=i.physicalCallId??i.callId;
+export function insertModelCandidates(tx:StorageTransaction,i:{ownerId:string;requestId:string;contextId:string},physicalCallId:string,output:ModelCandidate[]):void{
  for(const [index,c] of output.entries()){
   for(const itemNo of c.basis)if(!tx.get(`SELECT 1 FROM reply_execution_input x JOIN execution_event e ON e.owner_id=x.owner_id AND e.id=x.event_id WHERE x.owner_id=? AND x.context_id=? AND x.item_no=? AND e.kind='model_request' AND e.originated_call_id=?`,[i.ownerId,i.contextId,itemNo,physicalCallId]))fail('reply_basis_not_actual_input');
   const id=randomUUID();tx.run('INSERT INTO reply_candidate VALUES(?,?,?,?)',[i.ownerId,id,i.requestId,index+1]);

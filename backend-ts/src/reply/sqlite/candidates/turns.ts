@@ -11,8 +11,7 @@ import type {ModelPermitArbiter} from '../../../platform/models/model-permits.ts
 import {SqliteSkillLibrary,skillAnchor} from '../../../skills/sqlite/library.ts';
 import {openSqliteSkillRun} from '../../../skills/sqlite/provider.ts';
 import {inSkillGroup,skillRunGroup} from '../../../skills/sqlite/groups.ts';
-import type {SkillRunProtection,SkillRunRevision} from '../../../skills/sqlite/contracts.ts';
-import type {SqliteDiscussionService} from '../service.ts';
+import type {SkillRunRevision} from '../../../skills/sqlite/contracts.ts';
 import type {SqliteDiscussionRuntime} from '../runtime.ts';
 import type {DiscussionAttempt} from '../contracts.ts';
 import {SqliteDiscussionSkillProtection} from '../skill-protection.ts';
@@ -29,7 +28,7 @@ const systemPrompt='你是面向用户真实联系人的中文关系沟通回复
 const candidateSystemPrompt=systemPrompt+'\n\n'+RELATIONSHIP_RETRIEVAL_GUIDE;
 export interface ReplyGenerationInput {contactId:string;discussionId:string;requestKey:string;text:string;confirmedContact:true;carriedSelectionId?:string;contextMessageIds?:string[];workspace?:ReplyWorkspace;signal?:AbortSignal}
 export type ReplyPreparationStage='accepted'|'context-frozen'|'runtime-available';
-interface Options {storage:SqliteStorage;service:SqliteReplyCandidateService;discussions:SqliteDiscussionService;runtime:SqliteDiscussionRuntime;model:HostReplyModelConfiguration;provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter;library?:SqliteSkillLibrary;authorize:(contactId:string)=>Promise<void>;onPreparationStage?:(stage:ReplyPreparationStage)=>void;/** 共享的本机检索索引；缺少语义模型时仍可使用BM25。 */retrieval?:Pick<RetrievalIndexLifecycle,'queryVector'|'wake'>;/** 可信装配仅可缩短历史搜索预算，供有界验证使用；页面与Tool不接收此参数。 */historySearchTimeoutMs?:number}
+interface Options {storage:SqliteStorage;service:SqliteReplyCandidateService;runtime:SqliteDiscussionRuntime;model:HostReplyModelConfiguration;provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter;library?:SqliteSkillLibrary;authorize:(contactId:string)=>Promise<void>;onPreparationStage?:(stage:ReplyPreparationStage)=>void;/** 共享的本机检索索引；缺少语义模型时仍可使用BM25。 */retrieval?:Pick<RetrievalIndexLifecycle,'queryVector'|'wake'>;/** 可信装配仅可缩短历史搜索预算，供有界验证使用；页面与Tool不接收此参数。 */historySearchTimeoutMs?:number}
 /** 与11共享实际DSH执行、provider和arbiter；候选不创建第二套调用身份或账本。 */
 export class SqliteReplyTurns {
  private readonly options:Options;private readonly work=new OwnedWork();
@@ -81,8 +80,7 @@ export class SqliteReplyTurns {
   const requestText=workspace?replyWorkspaceEntryText(workspace):input.text;
   const workspaceFingerprint=workspace?replyWorkspaceFingerprint(workspace,undefined,input.carriedSelectionId):undefined;
   const workspaceSnapshot:ReplyWorkspaceSnapshot|undefined=workspace?{...workspace,selectedPackageId:null,carriedSelectionId:input.carriedSelectionId??null}:undefined;
-  const begin=()=>o.service.begin({contactId:input.contactId,discussionId:input.discussionId,requestKey:input.requestKey,text:requestText,carriedSelectionId:input.carriedSelectionId,includeRelationshipContext:workspace?workspace.includeRelationshipContext:undefined,workspaceFingerprint,identity:{kind:'manual',confirmationId}});
-  const accepted=await begin();
+  const accepted=await o.service.begin({contactId:input.contactId,discussionId:input.discussionId,requestKey:input.requestKey,text:requestText,carriedSelectionId:input.carriedSelectionId,includeRelationshipContext:workspace?workspace.includeRelationshipContext:undefined,workspaceFingerprint,identity:{kind:'manual',confirmationId}});
   const attempt=accepted.attempt as DiscussionAttempt;
   if(accepted.replayed)return {discussionId:attempt.discussionId,replayed:true,segmented:false};
   const acceptedAt=Date.now();let modelExecutionStarted=false;
@@ -119,15 +117,27 @@ export class SqliteReplyTurns {
    const prompt=requestIntent+'\n\n实际输入材料（编号用于basis）：\n'+frozen.map(item=>`[${item.itemNo}] ${item.kind}\n${item.text}`).join('\n\n')+'\n\n输出检查：每条候选必须同时包含parts和basis两个字段；basis至少填写一个本次实际材料编号。只写parts的候选无法交付。';
    // 每次候选任务重建独立副本；旧候选只有显式选择才进入新输入。
    const configurationDigest=this.digest(attempt.requestId,revision);
-   await o.storage.execute('discussion.prepareCall',{...attempt,contextId,callId,operationId:randomUUID(),provider:o.model.provider,requestKey:callId,inputSeal:sha256(prompt),model:o.model.model,configurationId:configurationDigest,inputCap:o.model.budgetProfile.context_window_tokens-o.model.maxTokens-o.model.budgetProfile.safety_margin_tokens,outputCap:o.model.maxTokens});
-   if(skillDegraded)await o.storage.execute('discussion.skillUnavailable',{...attempt,contextId,callId});
-   const base=new SqliteDiscussionSkillProtection({storage:o.storage,attempt,contextId,callId,authorize:()=>o.authorize(input.contactId)});
+   await o.storage.execute('discussion.prepareCall',{
+    ...attempt,contextId,callId,operationId:randomUUID(),provider:o.model.provider,requestKey:callId,
+    inputSeal:sha256(prompt),model:o.model.model,configurationId:configurationDigest,
+    inputCap:o.model.budgetProfile.context_window_tokens-o.model.maxTokens-o.model.budgetProfile.safety_margin_tokens,
+    outputCap:o.model.maxTokens,skillUnavailable:skillDegraded,
+   });
    // Skill 的中间步骤只核任务及修订；候选实际出站和保存各自原子复验完整资料。
-   const protection:SkillRunProtection=base;
-  // 正常候选只通过官方目录按需读取 Skill 正文。
-  const openSkillRun=o.library&&!skillDegraded?()=>openSqliteSkillRun(o.library!,{contactId:input.contactId,callId},protection,input.signal):undefined;
-  modelExecutionStarted=true;
-  await runSingleDiscussionTurn({runtime:o.runtime,storage:o.storage,attempt,contextId,callId,configurationDigest,prompt,rebuildPrompt:prompt,systemPrompt:candidateSystemPrompt,search:(contextId,kind,query,signal)=>this.search(attempt,contextId,kind,query,signal),model:o.model,provider:o.provider,arbiter:o.arbiter,openSkillRun,skillProtection:protection,skillRevision:revision,commitAction:'reply.commitCandidates',dispatchAction:'reply.dispatchCall',onPhase:phase=>{observe(phase);o.service.phase(input.contactId,attempt.discussionId,input.requestKey,phase);},onRuntimeAvailable:()=>{this.stage('runtime-available');observe('ready','runtime_ready');},configurationForRevision:revision=>this.digest(attempt.requestId,revision),assertAuthorized:()=>o.authorize(input.contactId),signal:input.signal});
+   const authorize=()=>o.authorize(input.contactId);
+   const protection=new SqliteDiscussionSkillProtection({storage:o.storage,attempt,contextId,callId,authorize});
+   const library=o.library;
+   const openSkillRun=library&&!skillDegraded?()=>openSqliteSkillRun(library,{contactId:input.contactId,callId},protection,input.signal):undefined;
+   modelExecutionStarted=true;
+   await runSingleDiscussionTurn({
+    kind:'reply',runtime:o.runtime,storage:o.storage,attempt,contextId,callId,configurationDigest,prompt,
+    rebuildPrompt:prompt,systemPrompt:candidateSystemPrompt,
+    search:(contextId,kind,query,signal)=>this.search(attempt,contextId,kind,query,signal),
+    model:o.model,provider:o.provider,arbiter:o.arbiter,openSkillRun,skillProtection:protection,skillRevision:revision,
+    onPhase:phase=>{observe(phase);o.service.phase(input.contactId,attempt.discussionId,input.requestKey,phase);},
+    onRuntimeAvailable:()=>{this.stage('runtime-available');observe('ready','runtime_ready');},
+    configurationForRevision:revision=>this.digest(attempt.requestId,revision),assertAuthorized:authorize,signal:input.signal,
+   });
    return {discussionId:attempt.discussionId,replayed:false,segmented:accepted.segmented};
   }catch(error){
    const storageFailure=!modelExecutionStarted&&error instanceof StorageFailure&&error.code==='worker_failed'?o.storage.failureDiagnostic:null;

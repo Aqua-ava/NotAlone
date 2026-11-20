@@ -1,5 +1,6 @@
 import type {ManagedAddress} from '../../storage/sqlite/deletion/contracts.ts';
 export interface DiscussionScope {ownerId:string;contactId:string;discussionId:string}
+export type DiscussionRequestKind='discussion'|'reply';
 export interface Discussion {id:string;contactId:string;state:'active'|'deleting'|'deleted';generation:bigint;currentRuntimeId:string|null;createdAt:bigint;lastActivityAt:bigint;isCurrent:boolean}
 export interface RuntimeCopy extends DiscussionScope {
  id:string;sdkInstanceId:string;managedLocator:string;address:ManagedAddress|null;

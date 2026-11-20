@@ -58,7 +58,7 @@ export class SqliteDiscussionTurns {
   const openSkillRun=this.library?()=>openSqliteSkillRun(this.library!,{contactId:input.contactId,callId},protection,input.signal):undefined;
   const background=messages.length?'本次明确引用的聊天资料：\n'+messages.map(m=>`${m.sender_role==='owner'?'我':'对方'}：${m.text_body}`).join('\n')+'\n\n':'';
   const rebuilt=background+entries.map((e:any)=>`${e.role==='user'?'用户':'助手'}：${e.body}`).join('\n\n');
-  await runSingleDiscussionTurn({runtime:this.runtime,storage:this.storage,attempt,contextId,callId,configurationDigest,prompt:background+input.text,rebuildPrompt:rebuilt,systemPrompt,model:this.model,provider:this.provider,arbiter:this.arbiter,openSkillRun,skillProtection:protection,skillRevision:revision,configurationForRevision:revision=>this.digest(revision),assertAuthorized:()=>this.authorize(input.contactId),signal:input.signal});
+  await runSingleDiscussionTurn({kind:'discussion',runtime:this.runtime,storage:this.storage,attempt,contextId,callId,configurationDigest,prompt:background+input.text,rebuildPrompt:rebuilt,systemPrompt,model:this.model,provider:this.provider,arbiter:this.arbiter,openSkillRun,skillProtection:protection,skillRevision:revision,configurationForRevision:revision=>this.digest(revision),assertAuthorized:()=>this.authorize(input.contactId),signal:input.signal});
   return {replayed:false,discussionId:attempt.discussionId,segmented:accepted.segmented};
   }catch(error){
    await this.storage.execute('discussion.cancel',{...attempt,at:Date.now()}).catch(()=>{});

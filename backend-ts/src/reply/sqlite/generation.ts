@@ -18,7 +18,7 @@ import {ModelInputBudgetError} from '../../platform/models/model-input-budget.ts
 import type {installModelProvider} from '../../platform/models/model-provider.ts';
 import type {ModelPermitArbiter} from '../../platform/models/model-permits.ts';
 import {REPLY_EXECUTION_DEADLINE_MS} from '../../host/host-reply-config.ts';
-import type {DiscussionAttempt} from './contracts.ts';
+import type {DiscussionAttempt,DiscussionRequestKind} from './contracts.ts';
 import type {SqliteDiscussionRuntime} from './runtime.ts';
 
 export interface SingleDiscussionTurnOptions {
@@ -27,7 +27,7 @@ export interface SingleDiscussionTurnOptions {
  prompt:string;rebuildPrompt?:string;systemPrompt:string;model:HostReplyModelConfiguration;
  provider:Pick<ReturnType<typeof installModelProvider>,'beginCall'>;arbiter:ModelPermitArbiter;
  openSkillRun?:()=>Promise<SqliteSkillRun>;skillProtection:SkillRunProtection;skillRevision:SkillRunRevision;
- commitAction?:'reply.commitCandidates';dispatchAction?:'reply.dispatchCall';onPhase?:(phase:'queued'|'preparing'|'generating'|'saving')=>void;onRuntimeAvailable?:()=>void;
+ kind:DiscussionRequestKind;onPhase?:(phase:'queued'|'preparing'|'generating'|'saving')=>void;onRuntimeAvailable?:()=>void;
  configurationForRevision:(revision:SkillRunRevision)=>string;assertAuthorized:()=>Promise<void>;signal?:AbortSignal;
  search?:(contextId:string,kind:RelationshipSearchKind,query:string,signal:AbortSignal)=>Promise<ReplySearchResult>;
 }
@@ -41,17 +41,19 @@ function payload(options:GenerateOptions):object {
 
 /** 调用前宿主已prepareCall；准备、取消与失败都不会自动重送模型请求。 */
 export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOptions):Promise<SingleDiscussionTurnResult>{
+ const generatesCandidates=options.kind==='reply';
  const {attempt,callId,model}=options;let contextId=options.contextId,skillRevision=options.skillRevision,configurationDigest=options.configurationDigest;
  const skill={run:null as SqliteSkillRun|null};
  let fallback=false,totalCalls=0,lastCopyId:string|undefined,lastPhysicalCallId=callId,retainedInputPrompt='',budgetRejected=false;
- if(!options.prompt.trim()||options.prompt.length>100_000||!options.systemPrompt.trim()
-  ||!Number.isSafeInteger(model.deadline_ms)||model.deadline_ms<1||model.deadline_ms>REPLY_EXECUTION_DEADLINE_MS)fail('discussion_input_invalid');
  let dispatched=false,committed=false,failureEvidence:DiscussionFailureEvidence|undefined;
  const scope={ownerId:attempt.ownerId,contactId:attempt.contactId,callId};
  const deadline=new AbortController();let timer:NodeJS.Timeout|undefined;
  let permit:Awaited<ReturnType<ModelPermitArbiter['acquire']>>|undefined;
  const signal=options.signal?AbortSignal.any([options.signal,deadline.signal]):deadline.signal;
  try{
+  // 已准备的调用从执行预检开始即归本轮结算；未到发送也要结束原任务。
+  if(!options.prompt.trim()||options.prompt.length>100_000||!options.systemPrompt.trim()
+   ||!Number.isSafeInteger(model.deadline_ms)||model.deadline_ms<1||model.deadline_ms>REPLY_EXECUTION_DEADLINE_MS)fail('discussion_input_invalid');
   options.onPhase?.('queued');
   permit=await options.arbiter.acquire('foreground',signal);
   options.onPhase?.('preparing');
@@ -75,8 +77,8 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
    const binding={provider:model.provider,model:model.model,maxTokens:model.maxTokens,temperature:model.temperature,reasoningEffort:model.reasoningEffort};
    const allowedToolNames=skillRun?['skill','skill_resource']:[];
    const setup=async(agentCtx:Context)=>{
-    const documents=options.commitAction==='reply.commitCandidates'&&await options.storage.execute<boolean>('reply.documentToolAvailable',{...attempt,contextId});
-    const searches=!!options.search&&options.commitAction==='reply.commitCandidates'&&await options.storage.execute<boolean>('reply.searchAvailable',{...attempt,contextId});
+    const documents=generatesCandidates&&await options.storage.execute<boolean>('reply.documentToolAvailable',{...attempt,contextId});
+    const searches=!!options.search&&generatesCandidates&&await options.storage.execute<boolean>('reply.searchAvailable',{...attempt,contextId});
     installReplySkillTools(agentCtx,skillRun,requireCurrent,error=>{failure??=error;},documents,searches?RELATIONSHIP_SEARCH_TOOLS:[]);
     if(documents)installRelationshipDocumentTool(agentCtx,range=>options.storage.execute('reply.readDocument',{...attempt,contextId,...range}),requireCurrent,error=>{failure??=error;});
     if(searches)installRelationshipSearchTools(agentCtx,(kind,query,signal)=>options.search!(contextId,kind,query,signal),requireCurrent,error=>{failure??=error;});
@@ -100,7 +102,7 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
       call=options.provider.beginCall({sessionId:work.sessionId,attempt_id:physicalCallId,permit_id:permit!.id,binding,profile:model.budgetProfile,
        requireCurrent,beforeDispatch:async({budget})=>{
         await requireCurrent();await skillRun?.validate(combined);
-        await options.storage.execute(options.dispatchAction??'discussion.dispatchCall',{...attempt,copyId:work.copy.id,callId,contextId,requestPayload,budget,physicalCallId,skillRun:skillRevision});dispatchAuthorized=true;
+        await options.storage.execute(generatesCandidates?'reply.dispatchCall':'discussion.dispatchCall',{...attempt,copyId:work.copy.id,callId,contextId,requestPayload,budget,physicalCallId,skillRun:skillRevision});dispatchAuthorized=true;
         options.onPhase?.('generating');
        }});
       for await(const chunk of next()){
@@ -155,21 +157,21 @@ export async function runSingleDiscussionTurn(options:SingleDiscussionTurnOption
      ||event.data.message.content.some(block=>block.type==='tool-call'))fail('discussion_assistant_event_invalid');
     const text=event.data.message.content.filter(block=>block.type==='text').map(block=>block.text).join('');
     if(!text.trim()||text.length>100_000)fail('discussion_assistant_event_invalid');
-    await options.storage.execute(options.commitAction??'discussion.commitAssistant',{...attempt,copyId:work.copy.id,callId,physicalCallId:lastPhysicalCallId,contextId,text,sessionEvent:event,skillRun:skillRevision});
+    await options.storage.execute(generatesCandidates?'reply.commitCandidates':'discussion.commitAssistant',{...attempt,copyId:work.copy.id,callId,physicalCallId:lastPhysicalCallId,contextId,text,sessionEvent:event,skillRun:skillRevision});
     committed=true;return {text,copyId:work.copy.id,callId,sessionEvent:event};
    }finally{
     combined.removeEventListener('abort',cancel);
     try{await handle?.dispose();}finally{disposeSkill?.();}
    }
-  },signal,options.commitAction==='reply.commitCandidates'||!!options.skillRevision.eligible.length||fallback);}catch(error){
+  },signal,generatesCandidates||!!options.skillRevision.eligible.length||fallback);}catch(error){
    const skillBudgetFailed=!!skill.run?.revision.eligible.length&&(budgetRejected||error instanceof ModelInputBudgetError);
    const skillFailed=skillBudgetFailed||error instanceof ReplySkillUnavailable||isSkillReadFailure(error)||isSkillReadFailure(skill.run?.failure);
    if(fallback||!skillFailed||totalCalls>=REPLY_MODEL_CALL_LIMIT||!lastCopyId)throw error;
    signal.throwIfAborted();await options.assertAuthorized();
-   if(options.commitAction)await options.storage.execute('reply.assertInputWithoutSkill',{...attempt,contextId});
+   if(generatesCandidates)await options.storage.execute('reply.assertInputWithoutSkill',{...attempt,contextId});
    await options.runtime.discard(attempt,lastCopyId);
-   const dropped=await options.storage.execute<{contextId:string;newRevision:SkillRunRevision;retrievedInputs?:{itemNo:number;kind:string;text:string}[];documentInputs?:{itemNo:number;text:string}[]}>(options.commitAction?'reply.dropSkill':'discussion.dropSkill',{...attempt,contextId,callId});
-   const retained=dropped.retrievedInputs??dropped.documentInputs?.map(item=>({...item,kind:'document'}));
+   const dropped=await options.storage.execute<{contextId:string;newRevision:SkillRunRevision;retrievedInputs?:{itemNo:number;kind:string;text:string}[]}>(generatesCandidates?'reply.dropSkill':'discussion.dropSkill',{...attempt,contextId,callId});
+   const retained=dropped.retrievedInputs;
    retainedInputPrompt=retained?.length?'\n\n已读取的实际输入材料（编号保持，用于basis）：\n'+retained.map(item=>`[${item.itemNo}] ${item.kind}\n${item.text}`).join('\n\n'):'';
    contextId=dropped.contextId;skillRevision=dropped.newRevision;configurationDigest=options.configurationForRevision(skillRevision);
    skill.run?.close();skill.run=null;fallback=true;

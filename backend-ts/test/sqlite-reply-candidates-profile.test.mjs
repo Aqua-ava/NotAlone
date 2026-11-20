@@ -110,13 +110,16 @@ test('正式SQLite profile经共享模型和认证HTTP生成编辑选稿，双�
   const created=await api(`/api/contacts/${id}/assistant-sessions`,{body:{}});assert.equal(created.status,200,JSON.stringify(created.data));sessionIds.push(created.data.session_id);
   const path=`/api/contacts/${id}/assistant-sessions/${created.data.session_id}/reply-candidates`;paths.push(path);
   assert.equal((await api(path,{auth:false})).status,401);
-  const request={request_key:randomUUID(),text:index?'帮我回应合成乙。':'帮我回应合成甲。',confirmed_contact:true};
+  const text=index?'帮我回应合成乙。':'帮我回应合成甲。';
+  const request={request_key:randomUUID(),text,confirmed_contact:true,workspace:{action:'express',draftText:text,contextText:'',includeRelationshipContext:true}};
   const generated=await api(path,{body:request});assert.equal(generated.status,200,JSON.stringify(generated.data));assert.equal(generated.data.session_id,created.data.session_id);
   const records=await diagnosticRecordsWhen(root,rows=>rows.some(row=>row.event==='reply.state_changed'&&row.traceId===diagnosticTrace&&row.toState==='completed')&&rows.some(row=>row.event==='sql.summary'&&row.traceId===ledgerTrace));
   const phases=records.filter(row=>row.event==='reply.state_changed'&&row.traceId===diagnosticTrace);
   for(const phase of ['queued','generating','saving','completed'])assert.ok(phases.some(row=>row.toState===phase),`正常profile缺少${phase}诊断`);
   assert.ok(records.some(row=>row.event==='sql.summary'&&row.traceId===ledgerTrace),'正常未包裹域的认证HTTP须把合法trace传入真实SQLite');assert.doesNotMatch(JSON.stringify(records),/synthetic-private-trace/);
-  assert.equal((await api(`/api/contacts/${id}/assistant-sessions/${created.data.session_id}`)).data.runtime_recovery,'unchecked');
+  const discussion=await api(`/api/contacts/${id}/assistant-sessions/${created.data.session_id}`);
+  assert.equal(discussion.data.runtime_recovery,'unchecked');
+  assert.deepEqual(discussion.data.entries.map(entry=>entry.role),['user']);
   const read=await api(path);assert.equal(read.status,200);assert.equal(read.data.requests.length,1);
   const version=read.data.requests[0].candidates[0];versions.push({requestId:read.data.requests[0].requestId,...version});
   assert.equal(version.versionNo,1);assert.deepEqual(version.parts,['合成正式候选','第二条']);assert.equal(version.basis[0].verification,'actual_input');assert.ok(version.basis[0].text.includes(index?texts[index]:memoryText));

@@ -4,12 +4,12 @@ import {randomUUID} from 'node:crypto';
 import {withReplyValidation} from './validation.ts';
 import {StorageFailure,type StorageAction,type StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import {readCoverage} from '../../../history/sqlite/read.ts';
-import {discussionRequestActions,requireAttempt,decode} from '../requests.ts';
-import {discussionModelActions,dropSkillForCurrentCall,requireDiscussionCall} from '../model-actions.ts';
+import {beginDiscussionRequest,freezeDiscussionContext,requireAttempt,decode} from '../requests.ts';
+import {commitModelResponse,dispatchModelCall,dropSkillForCurrentCall,requireDiscussionCall} from '../model-actions.ts';
 import {requireDiscussion} from '../actions.ts';
 import {sanitizeDiscussionErrorCode} from '../failure.ts';
 import {emptyReplyKnowledge,type ReplyKnowledgeItem,type ReplyKnowledgeReader} from './contracts.ts';
-import {freezeReplyInput,requireReplyInput,requireSelection,replySourceContacts,selectionSourceContacts} from './input.ts';
+import {freezeReplyInput,requireReplyInput,requireSelection} from './input.ts';
 import {insertModelCandidates,parseReplyOutput,readParts,requireCandidate,versionView} from './versions.ts';
 import {readInputMaterials} from './input-materials.ts';
 export const INCOMPLETE_HISTORY_WARNING='历史覆盖不完整：本次使用当前可用资料，可能缺少重要语境。';
@@ -50,10 +50,6 @@ function snapshotReplyCoverage(tx:StorageTransaction,ownerId:string,contactId:st
  const coverage=readCoverage(tx,ownerId,contactId);
  return {coverage,warning:coverage.phase!=='complete'?INCOMPLETE_HISTORY_WARNING:null};
 }
-const begin=discussionRequestActions.find((a):a is Extract<StorageAction,{mode:'read'|'write'}>=>a.name==='discussion.begin'&&a.mode!=='maintenance')!;
-const freeze=discussionRequestActions.find((a):a is Extract<StorageAction,{mode:'read'|'write'}>=>a.name==='discussion.freezeContext'&&a.mode!=='maintenance')!;
-const commit=discussionModelActions.find((a):a is Extract<StorageAction,{mode:'read'|'write'}>=>a.name==='discussion.commitAssistant'&&a.mode!=='maintenance')!;
-const dispatch=discussionModelActions.find((a):a is Extract<StorageAction,{mode:'read'|'write'}>=>a.name==='discussion.dispatchCall'&&a.mode!=='maintenance')!;
 /** 只由受信任注册表安装正式08/09消费者；HTTP不能指定适配器。 */
 export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyReplyKnowledge):StorageAction[]{
  const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any,lease:any)=>unknown):StorageAction=>({name:`reply.${name}`,mode,retryBusy:mode==='write',execute:(tx,i,lease)=>withReplyValidation(tx,scoped=>execute(scoped,i,lease))});
@@ -83,7 +79,7 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
   const {coverage,warning:capturedWarning}=snapshotReplyCoverage(tx,i.ownerId,i.contactId),warning=i.includeRelationshipContext===false?null:capturedWarning;
   const coverageJson=requestCoverageJson(coverage,i.workspaceFingerprint);
   if(i.carriedSelectionId)requireSelection(tx,i,i.carriedSelectionId,reader);
-  const accepted=begin.execute(tx,{...i,kind:'reply',discussionId:randomUUID(),requestId:randomUUID(),entryId:randomUUID(),attemptId:randomUUID(),leaseToken:randomUUID()},lease) as any;
+  const accepted=beginDiscussionRequest(tx,{...i,discussionId:randomUUID(),requestId:randomUUID(),entryId:randomUUID(),attemptId:randomUUID(),leaseToken:randomUUID()},lease,'reply');
   const old=tx.get('SELECT * FROM reply_candidate_request WHERE owner_id=? AND request_id=?',[i.ownerId,accepted.attempt.requestId]);
   if(accepted.replayed){if(!old||old.carried_selection_id!==(i.carriedSelectionId??null))fail('reply_request_conflict');if(storedWorkspaceFingerprint(String(old.coverage_json))!==(i.workspaceFingerprint??null))fail('discussion_request_conflict');}
   else{
@@ -92,22 +88,24 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
   }
   return {...accepted,coverageWarning:accepted.replayed?old!.coverage_warning:warning};
  }),
- action('freezeInput','write',(tx,i,lease)=>{
+ action('freezeInput','write',(tx,i)=>{
   // 使用本次受理时冻结的覆盖事实，后台同步进展不阻断或改写当前请求。
-  freeze.execute(tx,i,lease);const inputs=freezeReplyInput(tx,i,reader);
+  freezeDiscussionContext(tx,i);const inputs=freezeReplyInput(tx,i,reader);
   if(!i.workspace||i.workspace.includeRelationshipContext)initializeReplySearch(tx,i,reader);
   return inputs;
  }),
  action('searchAvailable','read',(tx,i)=>hasReplySearchScope(tx,i,reader)),
  action('beginSearch','write',(tx,i)=>beginReplySearch(tx,i,reader)),
  action('finishSearch','write',(tx,i)=>finishReplySearch(tx,i,reader)),
- action('sourceContacts','read',(tx,i)=>{requireAttempt(tx,i);return replySourceContacts(tx,i,reader);}),
- action('selectionSourceContacts','read',(tx,i)=>{requireDiscussion(tx,i);return selectionSourceContacts(tx,i);}),
  action('documentToolAvailable','read',(tx,i)=>hasReplyDocumentTool(tx,i,reader)),
  action('readDocument','write',(tx,i)=>readReplyDocument(tx,i,reader)),
  action('assertInput','read',(tx,i)=>{requireAttempt(tx,i);requireReplyInput(tx,i,i.contextId,reader);return true;}),
  action('assertInputWithoutSkill','read',(tx,i)=>{requireAttempt(tx,i);requireReplyInput(tx,i,i.contextId,reader,{ignoreSkill:true});return true;}),
- action('dispatchCall','write',(tx,i,lease)=>{requireAttempt(tx,i);requireReplyInput(tx,i,i.contextId,reader);return dispatch.execute(tx,i,lease);}),
+ action('dispatchCall','write',(tx,i)=>{
+  const call=requireDiscussionCall(tx,i,'reply');
+  requireReplyInput(tx,i,i.contextId,reader);
+  return dispatchModelCall(tx,i,call);
+ }),
  action('dropSkill','write',(tx,i)=>{
   requireAttempt(tx,i);requireReplyInput(tx,i,i.contextId,reader,{ignoreSkill:true});
   const result=dropSkillForCurrentCall(tx,i);
@@ -117,13 +115,12 @@ export function createReplyCandidateActions(reader:ReplyKnowledgeReader=emptyRep
    .map(row=>({itemNo:Number(row.item_no),kind:String(row.kind),text:String(row.text_body)}));
   return {...result,retrievedInputs};
  }),
- action('commitCandidates','write',(tx,i,lease)=>{
-  requireDiscussionCall(tx,i);requireReplyInput(tx,i,i.contextId,reader);parseReplyOutput(i.text);
-  // 沿11真实调用结算合同；结构化候选不另存为可读讨论发言。
-  const result=commit.execute(tx,i,lease);
-  insertModelCandidates(tx,i);
-  tx.run("DELETE FROM discussion_entry WHERE owner_id=? AND origin_call_id=? AND role='assistant'",[i.ownerId,i.physicalCallId??i.callId]);
-  return result;
+ action('commitCandidates','write',(tx,i)=>{
+  const call=requireDiscussionCall(tx,i,'reply');
+  requireReplyInput(tx,i,i.contextId,reader);
+  const output=parseReplyOutput(i.text);
+  const {physicalCallId}=commitModelResponse(tx,i,call);
+  insertModelCandidates(tx,i,physicalCallId,output);
  }),
  action('view','read',(tx,i)=>{
   requireDiscussion(tx,i);

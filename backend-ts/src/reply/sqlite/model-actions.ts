@@ -1,5 +1,7 @@
 import {randomUUID} from 'node:crypto';
+import type {SessionEvent} from '@deepseek-ai/dsh-session';
 import {sha256} from '../../platform/sha256.ts';
+import type {MessagesBudgetReceipt} from '../../platform/models/model-input-budget.ts';
 import {StorageFailure,type StorageAction,type StorageRow,type StorageTransaction,type StorageLease} from '../../storage/sqlite/contracts.ts';
 import {requireSkillRevision,requireSkillRun} from '../../skills/sqlite/storage.ts';
 import type {SkillRunRevision} from '../../skills/sqlite/contracts.ts';
@@ -8,20 +10,25 @@ import {requireRuntimeCurrent} from './runtime-actions.ts';
 import {identifier} from './actions.ts';
 import {sanitizeDiscussionFailure,sanitizeDiscussionErrorCode} from './failure.ts';
 import {dropSkillContext} from './skill-fallback.ts';
+import type {DiscussionAttempt,DiscussionRequestKind} from './contracts.ts';
+
+type ModelCallInput=DiscussionAttempt&{contextId:string;callId:string};
+type PhysicalCallInput=ModelCallInput&{copyId:string;physicalCallId?:string;skillRun:SkillRunRevision|null};
+type ModelResponseInput=PhysicalCallInput&{physicalCallId:string;text:string;sessionEvent:SessionEvent<'assistant/message'>};
 function fail(code:string):never{throw new StorageFailure(code);}
 function context(tx:StorageTransaction,i:any):StorageRow{
  const row=tx.get("SELECT * FROM reply_context WHERE owner_id=? AND id=? AND request_id=? AND attempt_id=? AND contact_id=? AND discussion_id=? AND state='active'",[i.ownerId,i.contextId,i.requestId,i.attemptId,i.contactId,i.discussionId])??fail('discussion_context_invalid');
  return row;
 }
-function call(tx:StorageTransaction,i:any):StorageRow{
+export function requireDiscussionCall(tx:StorageTransaction,i:ModelCallInput,kind?:DiscussionRequestKind):StorageRow{
  const row=tx.get(`SELECT c.*,o.commit_forbidden_at,o.reply_request_id,o.state operation_state FROM model_call c JOIN model_operation o ON o.owner_id=c.owner_id AND o.id=c.operation_id WHERE c.owner_id=? AND c.id=? AND c.reply_attempt_id=? AND c.reply_context_id=?`,[i.ownerId,i.callId,i.attemptId,i.contextId]);
  if(row&&row.reply_request_id===i.requestId&&row.commit_forbidden_at!==null)fail('discussion_call_invalidated');
- requireAttempt(tx,i);context(tx,i);
+ const attempt=requireAttempt(tx,i);context(tx,i);
  if(!row)fail('discussion_call_invalid');
  if(row.reply_request_id!==i.requestId||row.commit_forbidden_at!==null||!['prepared','in_flight'].includes(String(row.operation_state))||!['prepared','sending'].includes(String(row.state)))fail('discussion_call_invalidated');
+ if(kind!==undefined&&attempt.request_kind!==kind)fail('discussion_request_kind_mismatch');
  return row;
 }
-export {call as requireDiscussionCall};
 function revision(tx:StorageTransaction,i:any,run:SkillRunRevision|null):void{
  if(run!==null){requireSkillRun(tx,i.ownerId,run);if(encode(run)!==context(tx,i).skill_run_json)fail('discussion_skill_revision_conflict');}
 }
@@ -62,10 +69,60 @@ function abandonUnknown(tx:StorageTransaction,ownerId:string,operationId:string,
 const action=(name:string,mode:'read'|'write',execute:(tx:StorageTransaction,i:any,lease:StorageLease)=>unknown):StorageAction=>({name:`discussion.${name}`,mode,retryBusy:mode==='write',execute});
 /** 候选入口必须先通过自己的正式知识reader；这里继续复验共同的调用与来源。 */
 export function dropSkillForCurrentCall(tx:StorageTransaction,i:any){
- call(tx,i);const result=dropSkillContext(tx,i,context(tx,i));
+ requireDiscussionCall(tx,i);const result=dropSkillContext(tx,i,context(tx,i));
  event(tx,i,'skill_unavailable',{message:'回复策略暂不可用'});
  return result;
 }
+// 调用记录由动作在同一事务内按真实请求类型核验；候选动作还要复验自己的冻结材料。
+export function dispatchModelCall(tx:StorageTransaction,i:PhysicalCallInput&{budget:MessagesBudgetReceipt;requestPayload:unknown},c:StorageRow):string{
+ revision(tx,i,i.skillRun);requireRuntimeCurrent(tx,i);
+ const physicalCallId=identifier(i.physicalCallId??i.callId),first=physicalCallId===i.callId;
+ if(first&&c.state!=='prepared')fail('discussion_call_already_dispatched');
+ if(!first){
+  if(c.state!=='sending'||c.settlement_state!=='settled')fail('discussion_step_not_settled');
+  const previous=tx.all('SELECT id,state,settlement_state FROM model_call WHERE owner_id=? AND operation_id=? ORDER BY attempt_no',[i.ownerId,c.operation_id]);
+  if(previous.length>=5)fail('discussion_call_limit');
+  if(previous.some(p=>p.id===physicalCallId))fail('discussion_call_already_dispatched');
+  if(previous.some(p=>p.id!==i.callId&&(p.state!=='succeeded'||p.settlement_state!=='settled')))fail('discussion_step_not_settled');
+  tx.run("INSERT INTO model_call(owner_id,id,operation_id,attempt_no,reply_attempt_id,reply_context_id,provider,request_key,state,reserved_budget_units,settlement_state,model,configuration_id,input_cap,output_cap) VALUES(?,?,?,?,?,?,?,?,'prepared',0,'reserved',?,?,?,?)",[i.ownerId,physicalCallId,c.operation_id,previous.length+1,i.attemptId,i.contextId,c.provider,physicalCallId,c.model,c.configuration_id,c.input_cap,c.output_cap]);
+ }
+ if(!tx.get("SELECT 1 FROM runtime_context WHERE owner_id=? AND copy_id=? AND context_id=? AND provenance_state='verified'",[i.ownerId,i.copyId,i.contextId]))fail('discussion_runtime_input_missing');
+ const b=i.budget;
+ if(!b||b.provider!==c.provider||b.model!==c.model||b.maxTokens!==Number(c.output_cap)
+  ||!Number.isSafeInteger(b.input_tokens)||b.input_tokens<=0||b.input_tokens>Number(c.input_cap)
+  ||!Number.isSafeInteger(b.input_tokens+b.maxTokens)||!Number.isSafeInteger(b.serialized_bytes)||b.serialized_bytes<=0
+  ||b.measurement_kind!=='approximate'||typeof b.measurement_id!=='string'||!b.measurement_id||!/^[a-f0-9]{64}$/.test(b.request_sha256))fail('discussion_call_budget_invalid');
+ const payload=JSON.stringify(i.requestPayload);if(!payload||Buffer.byteLength(payload,'utf8')>16*1024*1024)fail('discussion_call_payload_invalid');
+ const id=event(tx,{...i,callId:physicalCallId},'model_request',{format:'dsh-input-v1',request:i.requestPayload});inheritSources(tx,i,id,true);
+ tx.run("UPDATE model_call SET state='sending',sent_at=?,reserved_budget_units=?,receipt=? WHERE owner_id=? AND id=?",[Date.now(),b.input_tokens+b.maxTokens,JSON.stringify({format:'dsh-budget-v1',inputBudget:b}),i.ownerId,physicalCallId]);
+ tx.run("UPDATE operation_scope SET state='sent' WHERE owner_id=? AND operation_id=?",[i.ownerId,c.operation_id]);
+ tx.run("UPDATE model_operation SET state='in_flight' WHERE owner_id=? AND id=?",[i.ownerId,c.operation_id]);
+ return id;
+}
+
+/** 结算真实模型输出与追踪；普通发言和候选版本由各自的动作在同一事务内写入。 */
+export function commitModelResponse(tx:StorageTransaction,i:ModelResponseInput,c:StorageRow):{physicalCallId:string;eventId:string}{
+ revision(tx,i,i.skillRun);const runtime=requireRuntimeCurrent(tx,i);
+ const e=i.sessionEvent,message=e?.data?.message;
+ const text=Array.isArray(message?.content)?message.content.filter(p=>p.type==='text').map(p=>p.text).join(''):null;
+ if(c.state!=='sending'||runtime.state!=='dirty'||e?.type!=='assistant/message'||e.data.interrupted||text!==i.text||typeof text!=='string'||!text.trim()||message.source?.provider!==c.provider)fail('discussion_assistant_event_invalid');
+ if(tx.get("SELECT 1 FROM model_call WHERE owner_id=? AND operation_id=? AND id<>? AND (state<>'succeeded' OR settlement_state<>'settled')",[i.ownerId,c.operation_id,i.callId]))fail('discussion_step_not_settled');
+ const physicalCallId=identifier(i.physicalCallId);
+ const physical=tx.get('SELECT * FROM model_call WHERE owner_id=? AND id=? AND operation_id=? AND reply_context_id=? AND reply_attempt_id=?',[i.ownerId,physicalCallId,c.operation_id,i.contextId,i.attemptId]);
+ const finalReceipt=physical?.receipt?JSON.parse(String(physical.receipt)):null;
+ if(c.settlement_state!=='settled'||!physical||physical.settlement_state!=='settled'||finalReceipt?.format!=='dsh-physical-step-v1'||finalReceipt.reason!=='stop'
+  ||finalReceipt.seq!==null&&finalReceipt.seq!==e.seq
+  ||tx.get('SELECT 1 FROM model_call WHERE owner_id=? AND operation_id=? AND attempt_no>?',[i.ownerId,c.operation_id,physical.attempt_no]))fail('discussion_assistant_event_invalid');
+ // settleStep 已记录实际用量和回执；业务提交仅关闭首条模型调用的在途资格。
+ tx.run("UPDATE model_call SET state='succeeded' WHERE owner_id=? AND id=?",[i.ownerId,i.callId]);
+ tx.run("UPDATE operation_scope SET state='released' WHERE owner_id=? AND operation_id=?",[i.ownerId,c.operation_id]);
+ tx.run("UPDATE model_operation SET state='applied' WHERE owner_id=? AND id=?",[i.ownerId,c.operation_id]);
+ const id=event(tx,{...i,callId:physicalCallId},'assistant_message',{text,sessionEvent:e});inheritSources(tx,i,id,true);
+ tx.run("UPDATE reply_attempt SET state='committed',finished_at=? WHERE owner_id=? AND id=?",[Date.now(),i.ownerId,i.attemptId]);tx.run("UPDATE reply_request SET state='committed' WHERE owner_id=? AND id=?",[i.ownerId,i.requestId]);
+ tx.run('UPDATE runtime_copy SET committed_request_id=? WHERE owner_id=? AND id=?',[i.requestId,i.ownerId,i.copyId]);
+ return {physicalCallId,eventId:id};
+}
+
 export const discussionModelActions:StorageAction[]=[
  action('unconfirmed','read',(tx,i)=>{
   const ownerId=identifier(i.owner_id),contactId=i.contact_id===null?null:identifier(i.contact_id);
@@ -117,16 +174,16 @@ export const discussionModelActions:StorageAction[]=[
   tx.run("INSERT INTO model_operation(owner_id,id,purpose,reply_request_id,slot,input_seal,state) VALUES(?,?,'discussion',?,0,?,'prepared')",[i.ownerId,i.operationId,i.requestId,i.inputSeal]);
   tx.run("INSERT INTO model_call(owner_id,id,operation_id,attempt_no,reply_attempt_id,reply_context_id,provider,request_key,state,reserved_budget_units,settlement_state,model,configuration_id,input_cap,output_cap) VALUES(?,?,?,1,?,?,?,?,'prepared',0,'reserved',?,?,?,?)",[i.ownerId,i.callId,i.operationId,i.attemptId,i.contextId,i.provider,i.requestKey,i.model,i.configurationId,i.inputCap,i.outputCap]);
   tx.run("INSERT INTO operation_scope VALUES(?,?,?,'discussion','reserved')",[i.ownerId,i.operationId,i.contactId]);
+  if(i.skillUnavailable===true)event(tx,i,'skill_unavailable',{message:'回复策略暂不可用'});
   return {callId:i.callId,operationId:i.operationId};
  }),
- action('assertSkillCall','read',(tx,i)=>{call(tx,i);revision(tx,i,i.runRevision);return true;}),
- action('skillUnavailable','write',(tx,i)=>{call(tx,i);return event(tx,i,'skill_unavailable',{message:'回复策略暂不可用'});}),
+ action('assertSkillCall','read',(tx,i)=>{requireDiscussionCall(tx,i);revision(tx,i,i.runRevision);return true;}),
  action('dropSkill','write',(tx,i)=>{
   if(tx.get('SELECT kind FROM reply_request WHERE owner_id=? AND id=?',[i.ownerId,i.requestId])?.kind!=='discussion')fail('discussion_skill_fallback_scope');
   return dropSkillForCurrentCall(tx,i);
  }),
  action('skillSelection','write',(tx,i)=>{
-  call(tx,i);const frozen=decode<SkillRunRevision>(String(context(tx,i).skill_run_json));revision(tx,i,frozen);
+  requireDiscussionCall(tx,i);const frozen=decode<SkillRunRevision>(String(context(tx,i).skill_run_json));revision(tx,i,frozen);
   if(i.selected!==null){requireSkillRevision(tx,i.ownerId,i.selected);if(!frozen.eligible.some(a=>encode(a)===encode(i.selected)))fail('discussion_skill_revision_conflict');}
   const name=i.name===undefined?null:i.name,preload=i.preload===undefined?null:i.preload;
   if(name!==null&&(typeof name!=='string'||!name||name.length>4096)
@@ -134,7 +191,7 @@ export const discussionModelActions:StorageAction[]=[
   event(tx,i,'skill_selection',{selected:i.selected,...(name===null?{}:{name}),preload});
  }),
  action('skillInput','write',(tx,i)=>{
-  call(tx,i);revision(tx,i,i.runRevision);requireSkillRevision(tx,i.ownerId,i.loaded);
+  requireDiscussionCall(tx,i);revision(tx,i,i.runRevision);requireSkillRevision(tx,i.ownerId,i.loaded);
   if(!i.runRevision.eligible.some((a:any)=>encode(a)===encode(i.loaded))||typeof i.text!=='string'||Buffer.byteLength(i.text,'utf8')>1024*1024||sha256(i.text)!==i.payloadDigest)fail('discussion_skill_input_invalid');
   if(i.name!==undefined&&(typeof i.name!=='string'||!i.name||i.name.length>4096))fail('discussion_skill_input_invalid');
   if(i.preload!==undefined&&(!i.preload||i.preload.origin!=='explicit'||typeof i.preload.catalogRevision!=='string'||!i.preload.catalogRevision||i.preload.catalogRevision.length>65536))fail('discussion_skill_input_invalid');
@@ -144,33 +201,9 @@ export const discussionModelActions:StorageAction[]=[
   const id=event(tx,i,'skill_input',{selected:i.selected,loaded:i.loaded,relativePath:i.relativePath,text:i.text,payloadDigest:i.payloadDigest,...(i.name===undefined?{}:{name:i.name}),...(i.preload===undefined?{}:{preload:i.preload})});
   tx.run('INSERT INTO execution_input(owner_id,event_id,input_no,role,presentation_no,reply_context_id,context_item_no) VALUES(?,?,1,?,?,?,?)',[i.ownerId,id,'loaded_skill',next,i.contextId,next]);
  }),
- action('dispatchCall','write',(tx,i)=>{
-  const c=call(tx,i);revision(tx,i,i.skillRun);requireRuntimeCurrent(tx,i);
-  const physicalCallId=identifier(i.physicalCallId??i.callId),first=physicalCallId===i.callId;
-  if(first&&c.state!=='prepared')fail('discussion_call_already_dispatched');
-  if(!first){
-   if(c.state!=='sending'||c.settlement_state!=='settled')fail('discussion_step_not_settled');
-   const previous=tx.all('SELECT id,state,settlement_state FROM model_call WHERE owner_id=? AND operation_id=? ORDER BY attempt_no',[i.ownerId,c.operation_id]);
-   if(previous.length>=5)fail('discussion_call_limit');
-   if(previous.some(p=>p.id===physicalCallId))fail('discussion_call_already_dispatched');
-   if(previous.some(p=>p.id!==i.callId&&(p.state!=='succeeded'||p.settlement_state!=='settled')))fail('discussion_step_not_settled');
-   tx.run("INSERT INTO model_call(owner_id,id,operation_id,attempt_no,reply_attempt_id,reply_context_id,provider,request_key,state,reserved_budget_units,settlement_state,model,configuration_id,input_cap,output_cap) VALUES(?,?,?,?,?,?,?,?,'prepared',0,'reserved',?,?,?,?)",[i.ownerId,physicalCallId,c.operation_id,previous.length+1,i.attemptId,i.contextId,c.provider,physicalCallId,c.model,c.configuration_id,c.input_cap,c.output_cap]);
-  }
-  if(!tx.get("SELECT 1 FROM runtime_context WHERE owner_id=? AND copy_id=? AND context_id=? AND provenance_state='verified'",[i.ownerId,i.copyId,i.contextId]))fail('discussion_runtime_input_missing');
-  const b=i.budget;
-  if(!b||b.provider!==c.provider||b.model!==c.model||b.maxTokens!==Number(c.output_cap)
-   ||!Number.isSafeInteger(b.input_tokens)||b.input_tokens<=0||b.input_tokens>Number(c.input_cap)
-   ||!Number.isSafeInteger(b.input_tokens+b.maxTokens)||!Number.isSafeInteger(b.serialized_bytes)||b.serialized_bytes<=0
-   ||b.measurement_kind!=='approximate'||typeof b.measurement_id!=='string'||!b.measurement_id||!/^[a-f0-9]{64}$/.test(b.request_sha256))fail('discussion_call_budget_invalid');
-  const payload=JSON.stringify(i.requestPayload);if(!payload||Buffer.byteLength(payload,'utf8')>16*1024*1024)fail('discussion_call_payload_invalid');
-  const id=event(tx,{...i,callId:physicalCallId},'model_request',{format:'dsh-input-v1',request:i.requestPayload});inheritSources(tx,i,id,true);
-  tx.run("UPDATE model_call SET state='sending',sent_at=?,reserved_budget_units=?,receipt=? WHERE owner_id=? AND id=?",[Date.now(),b.input_tokens+b.maxTokens,JSON.stringify({format:'dsh-budget-v1',inputBudget:b}),i.ownerId,physicalCallId]);
-  tx.run("UPDATE operation_scope SET state='sent' WHERE owner_id=? AND operation_id=?",[i.ownerId,c.operation_id]);
-  tx.run("UPDATE model_operation SET state='in_flight' WHERE owner_id=? AND id=?",[i.ownerId,c.operation_id]);
-  return id;
- }),
+ action('dispatchCall','write',(tx,i)=>dispatchModelCall(tx,i,requireDiscussionCall(tx,i,'discussion'))),
  action('settleStep','write',(tx,i)=>{
-  const base=call(tx,i),physicalCallId=identifier(i.physicalCallId??i.callId);
+  const base=requireDiscussionCall(tx,i),physicalCallId=identifier(i.physicalCallId??i.callId);
   const physical=tx.get("SELECT * FROM model_call WHERE owner_id=? AND id=? AND operation_id=? AND reply_attempt_id=? AND reply_context_id=? AND state='sending'",[i.ownerId,physicalCallId,base.operation_id,i.attemptId,i.contextId])??fail('discussion_call_invalid');
   if(physical.settlement_state!=='reserved'||!['stop','tool-calls'].includes(i.reason)||i.seq!==undefined&&i.seq!==null&&(!Number.isSafeInteger(i.seq)||i.seq<0))fail('discussion_step_receipt_invalid');
   const actual=usageUnits(i.usage),receipt={format:'dsh-physical-step-v1',seq:i.seq??null,reason:i.reason,usage:i.usage??null,inputBudget:JSON.parse(String(physical.receipt)).inputBudget};
@@ -180,30 +213,10 @@ export const discussionModelActions:StorageAction[]=[
   return true;
  }),
  action('commitAssistant','write',(tx,i)=>{
-  const c=call(tx,i);revision(tx,i,i.skillRun);const runtime=requireRuntimeCurrent(tx,i);
-  const e=i.sessionEvent,message=e?.data?.message;
-  const text=Array.isArray(message?.content)?message.content.filter((p:any)=>p.type==='text').map((p:any)=>p.text).join(''):null;
-  if(c.state!=='sending'||runtime.state!=='dirty'||e.type!=='assistant/message'||e.data.interrupted||text!==i.text||typeof text!=='string'||!text.trim()||message.source?.provider!==c.provider)fail('discussion_assistant_event_invalid');
-  if(tx.get("SELECT 1 FROM model_call WHERE owner_id=? AND operation_id=? AND id<>? AND (state<>'succeeded' OR settlement_state<>'settled')",[i.ownerId,c.operation_id,i.callId]))fail('discussion_step_not_settled');
-  const receipt=JSON.parse(String(c.receipt)),physicalSettled=receipt.format==='dsh-physical-step-v1';
-  const physicalCallId=identifier(i.physicalCallId??i.callId);
-  if(i.physicalCallId!==undefined||physicalSettled){
-   const physical=tx.get('SELECT * FROM model_call WHERE owner_id=? AND id=? AND operation_id=? AND reply_context_id=? AND reply_attempt_id=?',[i.ownerId,physicalCallId,c.operation_id,i.contextId,i.attemptId]);
-   const finalReceipt=physical?.receipt?JSON.parse(String(physical.receipt)):null;
-   if(!physical||physical.settlement_state!=='settled'||finalReceipt?.format!=='dsh-physical-step-v1'||finalReceipt.reason!=='stop'
-    ||finalReceipt.seq!==null&&finalReceipt.seq!==e.seq
-    ||tx.get('SELECT 1 FROM model_call WHERE owner_id=? AND operation_id=? AND attempt_no>?',[i.ownerId,c.operation_id,physical.attempt_no]))fail('discussion_assistant_event_invalid');
-  }
-  const usage=physicalSettled?receipt.usage:e.data.usage,actual=usageUnits(usage);
-  tx.run("UPDATE model_call SET state='succeeded',received_at=COALESCE(received_at,?),actual_budget_units=?,receipt=?,settlement_state='settled' WHERE owner_id=? AND id=?",[Date.now(),actual,JSON.stringify(physicalSettled?receipt:{format:'dsh-assistant-event-v1',seq:e.seq,usage:usage??null,inputBudget:receipt.inputBudget}),i.ownerId,i.callId]);
-  tx.run("UPDATE operation_scope SET state='released' WHERE owner_id=? AND operation_id=?",[i.ownerId,c.operation_id]);
-  tx.run("UPDATE model_operation SET state='applied' WHERE owner_id=? AND id=?",[i.ownerId,c.operation_id]);
-  const id=event(tx,{...i,callId:physicalCallId},'assistant_message',{text,sessionEvent:e});inheritSources(tx,i,id,true);
+  const {physicalCallId,eventId}=commitModelResponse(tx,i,requireDiscussionCall(tx,i,'discussion'));
   const pos=tx.get('SELECT COALESCE(MAX(position),0)+1 n FROM discussion_entry WHERE owner_id=? AND discussion_id=?',[i.ownerId,i.discussionId])!.n;
-  tx.run("INSERT INTO discussion_entry(owner_id,id,contact_id,discussion_id,position,role,body,origin_request_id,origin_call_id,origin_event_id,content_state) VALUES(?,?,?,?,?,'assistant',?,?,?,?,'available')",[i.ownerId,randomUUID(),i.contactId,i.discussionId,pos,text,i.requestId,physicalCallId,id]);
-  tx.run("UPDATE reply_attempt SET state='committed',finished_at=? WHERE owner_id=? AND id=?",[Date.now(),i.ownerId,i.attemptId]);tx.run("UPDATE reply_request SET state='committed' WHERE owner_id=? AND id=?",[i.ownerId,i.requestId]);
-  tx.run('UPDATE runtime_copy SET committed_request_id=? WHERE owner_id=? AND id=?',[i.requestId,i.ownerId,i.copyId]);
-  return {requestId:i.requestId,callId:i.callId,entryEventId:id};
+  tx.run("INSERT INTO discussion_entry(owner_id,id,contact_id,discussion_id,position,role,body,origin_request_id,origin_call_id,origin_event_id,content_state) VALUES(?,?,?,?,?,'assistant',?,?,?,?,'available')",[i.ownerId,randomUUID(),i.contactId,i.discussionId,pos,i.text,i.requestId,physicalCallId,eventId]);
+  return {requestId:i.requestId,callId:i.callId,entryEventId:eventId};
  }),
  action('failCall','write',(tx,i)=>{
   // 迟到回执只结算已有调用，永远不创建讨论/恢复业务资格，也不写正文。

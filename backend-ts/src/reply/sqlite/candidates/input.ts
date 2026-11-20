@@ -16,27 +16,6 @@ function initialReplyKnowledge(tx:StorageTransaction,scope:DiscussionScope,reade
  return selectReplyDocuments(reader.readDocuments(tx,scope));
 }
 export interface FrozenReplyInput {itemNo:number;kind:string;text:string;identity:object;sources:ReplySource[]}
-export function selectionSourceContacts(tx:StorageTransaction,i:DiscussionScope&{selectionId:string}):string[]{
- const row=tx.get(`SELECT r.id FROM reply_selection s JOIN reply_candidate k ON k.owner_id=s.owner_id AND k.id=s.candidate_id
-  JOIN reply_request r ON r.owner_id=k.owner_id AND r.id=k.request_id JOIN reply_candidate_version v ON v.owner_id=s.owner_id AND v.candidate_id=s.candidate_id AND v.version_no=s.version_no
-  WHERE s.owner_id=? AND s.id=? AND r.contact_id=? AND r.discussion_id=? AND r.state='committed' AND v.content_state='available'`,[i.ownerId,i.selectionId,i.contactId,i.discussionId])??fail('reply_selection_unavailable');
- return tx.all(`SELECT x.source_contact_id FROM reply_context c JOIN reply_context_item x ON x.owner_id=c.owner_id AND x.context_id=c.id
-  WHERE c.owner_id=? AND c.request_id=? AND x.kind='message' UNION SELECT x.source_contact_id FROM reply_context c
-  JOIN reply_candidate_input_source x ON x.owner_id=c.owner_id AND x.context_id=c.id WHERE c.owner_id=? AND c.request_id=?`,[i.ownerId,row.id,i.ownerId,row.id]).map(source=>String(source.source_contact_id));
-}
-/** 来源准备只涉及本次输入实际引用的联系人，不扫描或恢复整个联系人目录；旧讨论 entry 不提供候选来源。 */
-export function replySourceContacts(tx:StorageTransaction,i:DiscussionScope&{requestId:string;items:{kind:string;sourceContactId?:string}[];workspace?:ReplyWorkspaceSnapshot},reader:ReplyKnowledgeReader):string[]{
- const contacts=new Set<string>();
- for(const item of i.items){
-  if(item.kind==='message'&&item.sourceContactId===i.contactId)contacts.add(i.contactId);
- }
- if(!i.workspace||i.workspace.includeRelationshipContext){
-  for(const item of initialReplyKnowledge(tx,i,reader))for(const source of item.sources)contacts.add(source.contactId);
-  const carried=tx.get('SELECT carried_selection_id FROM reply_candidate_request WHERE owner_id=? AND request_id=?',[i.ownerId,i.requestId]);
-  if(carried?.carried_selection_id)for(const contactId of selectionSourceContacts(tx,{...i,selectionId:String(carried.carried_selection_id)}))contacts.add(contactId);
- }
- return [...contacts];
-}
 /** 校验已冻结来源仍是同一接纳修订的可用消息；按 (owner,contact,id) 键逐行查找。 */
 export function replySourceValidationSql(rows:number):string{
  return `WITH expected(contact_id,message_id,revision) AS (VALUES ${Array.from({length:rows},()=>'(?,?,?)').join(',')})
