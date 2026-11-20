@@ -4,13 +4,13 @@ import {readStatusCoverages,StatusCoverageMemo} from '../src/history/sqlite/stat
 import {fixture,record} from './fixtures/memory-sqlite/support.mjs';
 
 // 状态轮询的覆盖读取：每一步都与“当场逐批重算”逐字段相同，任何写入后立即反映。
-const direct=f=>bindings=>readStatusCoverages(bindings,id=>f.service.coverage(id),ids=>f.service.coverages(ids));
+const direct=f=>bindings=>readStatusCoverages(bindings,ids=>f.service.coverages(ids));
 async function status(f,read){return read((await f.contacts.syncSnapshot()).directory.bindings);}
 
 // 生产状态入口使用的复用读取：记录实际发起的批量覆盖次数。
 function memoized(f){
  const memo=new StatusCoverageMemo(()=>f.storage.quiescentWriteGeneration);const calls={batches:0};
- return {calls,read:bindings=>memo.read(bindings,id=>f.service.coverage(id),ids=>{calls.batches++;return f.service.coverages(ids);})};
+ return {calls,read:bindings=>memo.read(bindings,ids=>{calls.batches++;return f.service.coverages(ids);})};
 }
 async function scenario(t,makeRead,checkpoint=()=>{}){
  const f=await fixture(t),{read,calls}=makeRead(f),[a,b]=f.saved;

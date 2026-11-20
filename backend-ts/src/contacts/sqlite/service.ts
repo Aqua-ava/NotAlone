@@ -4,7 +4,6 @@ import type { SqliteStorage } from '../../storage/sqlite/client.ts';
 import type { AccountEvidence, ContactMetadataPort, ContactSelection, ReadEligibility, SavedContactBinding, WechatVersionCompatibility } from './contracts.ts';
 import { WECHAT_METADATA_SUPPORT } from '../../history/wechat/support-profile.ts';
 import { normalizeContactAvatar, type ContactAvatar } from './avatar.ts';
-import { projectContactSyncStatus } from './sync-status.ts';
 import {isUuid as uuid} from '../../platform/uuid.ts';
 function fail(code:string):never {throw new StorageFailure(code);}
 const identity=(v:unknown):v is string=>typeof v==='string'&&/^[A-Za-z0-9_.@-]{1,255}$/.test(v);
@@ -63,8 +62,7 @@ export class SqliteContactService {
  syncDirectory(){return this.execute<Pick<Directory,'read_enabled'|'bindings'>>('identity.syncDirectory',{});}
  async syncSnapshot(){
   const directory=await this.syncDirectory();
-  const status=projectContactSyncStatus(directory,await this.avatarRevision());
-  return {directory,status};
+  return {directory,avatarRevision:await this.avatarRevision()};
  }
  foregroundSnapshot(){return this.execute<import('../../foreground/sqlite-foreground.ts').ForegroundSnapshot>('identity.foregroundSnapshot',{});}
  private readMetadata<T>(read:()=>Promise<T>):Promise<T>{

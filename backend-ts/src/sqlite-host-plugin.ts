@@ -40,6 +40,7 @@ import { ManagedFiles } from './storage/sqlite/deletion/managed-files.ts';
 import { SqliteDeletionHttp, deletionQueryAllowed } from './storage/sqlite/deletion/http.ts';
 import { SqliteHistoryService } from './history/sqlite/service.ts';
 import { SqliteHistoryHttp, historyQueryAllowed, projectHistorySyncStatus } from './history/sqlite/http.ts';
+import {projectContactSyncBase} from './contacts/sqlite/sync-status.ts';
 import { SqliteHistoryClearService } from './history/sqlite/clear.ts';
 import { SqliteHistoryResyncService } from './history/sqlite/resync.ts';
 import { SqliteHistoryClearHttp, clearQueryAllowed } from './history/sqlite/clear-http.ts';
@@ -248,8 +249,9 @@ async function applySqliteHost(ctx: Context, config: LaunchConfiguration & {home
     // 库自上次读取后没有任何可写动作时复用覆盖（与重算结果相同）；轮询间隔内增量与记忆写入照常使其重算。
     const statusCoverages=new StatusCoverageMemo(()=>storage?.quiescentWriteGeneration);
     const readHistoryStatus=async()=>{
-      const {directory,status}=await contacts!.syncSnapshot();
-      const coverage=await statusCoverages.read(directory.bindings,contactId=>history!.coverage(contactId),contactIds=>history!.coverages(contactIds));
+      const {directory,avatarRevision}=await contacts!.syncSnapshot();
+      const coverage=await statusCoverages.read(directory.bindings,contactIds=>history!.coverages(contactIds));
+      const status=projectContactSyncBase(directory.read_enabled,coverage.length,avatarRevision);
       return projectHistorySyncStatus(status,coverage,firstHistory?.getState(),incremental?.getState(),
         await history!.bodyAvailable(coverage.map(row=>row.contactId)));
     };

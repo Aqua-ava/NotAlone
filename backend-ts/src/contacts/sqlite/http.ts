@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { StorageFailure } from '../../storage/sqlite/contracts.ts';
 import { readHttpBody, HttpBodyError } from '../../platform/http/body.ts';
 import type { SqliteContactService } from './service.ts';
+import {projectContactSyncStatus} from './sync-status.ts';
 import type { ContactSelection, WechatVersionCompatibility } from './contracts.ts';
 type SetupExtra={wechat_compatibility?:WechatVersionCompatibility};
 function object(v:unknown):Record<string,unknown>{if(!v||typeof v!=='object'||Array.isArray(v))throw new StorageFailure('identity_request_invalid');return v as Record<string,unknown>;}
@@ -20,6 +21,10 @@ export class SqliteContactHttp {
  private readonly service:SqliteContactService;
  private readonly manualContext=randomUUID();
  constructor(service:SqliteContactService){this.service=service;}
+ private async syncStatus(){
+  const {directory,avatarRevision}=await this.service.syncSnapshot();
+  return projectContactSyncStatus(directory,avatarRevision);
+ }
  async handle(req:IncomingMessage,res:ServerResponse):Promise<boolean>{
   const path=req.url??'';
   const methods=new Map([['/api/setup/status','GET'],['/api/contacts','GET'],['/api/setup/wechat','GET'],['/api/setup/wechat/detect','POST'],['/api/setup/wechat/confirm','POST'],['/api/sync/cli-bindings','GET'],['/api/sync/cli-sessions','GET'],['/api/sync/cli-bindings/confirm','POST'],['/api/sync/cli-bindings/revoke','POST'],['/api/sync/status','GET'],['/api/sync/enable','POST'],['/api/sync/disable','POST']]);
@@ -62,14 +67,14 @@ export class SqliteContactHttp {
     exact(body,['snapshot_token','selections','history_authorized']);
     if(typeof body.snapshot_token!=='string'||body.history_authorized!==true||!Array.isArray(body.selections))throw new StorageFailure('identity_request_invalid');
     const choices=body.selections.map(raw=>{const row=object(raw);if(Object.keys(row).some(k=>!['locator','contact_id','display_name','observed_display_name','expected_selection_generation'].includes(k))||typeof row.locator!=='string'||typeof row.observed_display_name!=='string'||typeof row.expected_selection_generation!=='string'||row.contact_id!==undefined&&typeof row.contact_id!=='string')throw new StorageFailure('identity_request_invalid');return row as unknown as ContactSelection;});
-    await this.service.confirm(body.snapshot_token,choices,controller.signal);value=(await this.service.syncSnapshot()).status;
+    await this.service.confirm(body.snapshot_token,choices,controller.signal);value=await this.syncStatus();
    }else if(path.endsWith('/cli-bindings/revoke')){
     exact(body,['contact_id','binding_id','expected_selection_generation']);
     if(typeof body.contact_id!=='string'||typeof body.binding_id!=='string'||typeof body.expected_selection_generation!=='string')throw new StorageFailure('identity_request_invalid');
     await this.service.revoke(body.contact_id,body.binding_id,body.expected_selection_generation);
     value=(await this.service.directory()).bindings.find(b=>b.binding_id===body.binding_id&&b.contact_id===body.contact_id);
-   }else if(path==='/api/sync/status')value=(await this.service.syncSnapshot()).status;
-   else{exact(body,[]);await this.service.setReading(path.endsWith('/enable'));value=(await this.service.syncSnapshot()).status;}
+   }else if(path==='/api/sync/status')value=await this.syncStatus();
+   else{exact(body,[]);await this.service.setReading(path.endsWith('/enable'));value=await this.syncStatus();}
    result(res,200,value);
   }catch(error){
    const code=error instanceof StorageFailure?error.code:error instanceof HttpBodyError?error.code:'identity_request_failed';

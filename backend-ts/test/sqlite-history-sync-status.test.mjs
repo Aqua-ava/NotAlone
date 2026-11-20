@@ -49,3 +49,14 @@ test('当前能力认证后清除泛化不可用占位并投影后台阶段，�
  const failed=projectHistorySyncStatus(base,[{...coverage('a'),phase:'incomplete',failureCode:'history_native_unavailable'}],undefined,undefined,true);
  assert.equal(failed.cli_sync_phase,'degraded');assert.equal(failed.cli_failure_code,'history_native_unavailable');
 });
+
+test('同步状态逐联系人合并两种调度事实，每份事实只读取一次联系人编号',()=>{
+ let inspected=0;
+ const rows=Array.from({length:285},(_,index)=>coverage(`contact-${index}`));
+ const first={phase:'running',lastError:null,contacts:rows.map(row=>({get contactId(){inspected++;return row.contactId;},phase:'running',lastError:null}))};
+ const incremental={phase:'running',lastError:null,contacts:[...rows].reverse().map(row=>({get contactId(){inspected++;return row.contactId;},phase:'degraded',lastError:`error-${row.contactId}`}))};
+ const report=projectHistorySyncStatus({sync_enabled:true},rows,first,incremental,true);
+ assert.deepEqual(report.cli_history_coverages.map(row=>[row.contact_id,row.incremental_phase,row.incremental_failure_code]),
+  rows.map(row=>[row.contactId,'incomplete',`error-${row.contactId}`]));
+ assert.equal(inspected,2*rows.length);
+});
