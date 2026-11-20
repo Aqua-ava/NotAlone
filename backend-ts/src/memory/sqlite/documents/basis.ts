@@ -5,7 +5,7 @@ import type {L3ProfileDocument,L3ProfileEntry} from '../../profiles/index.ts';
 import {sha256} from '../../../platform/sha256.ts';
 import {assertSourceEligibility,assertSourcesEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
 import type {MessageSourceReference} from '../../../history/sqlite/contracts.ts';
-import {qualificationSources,mergeKnowledgeSources,withQualificationSources} from '../management/dependencies.ts';
+import {mergeKnowledgeSources,withQualificationSources} from '../management/dependencies.ts';
 import {sourceVerificationState} from '../management/evidence.ts';
 import {memoryTimeEligibility} from '../management/temporal.ts';
 import {versionFact} from '../management/version-fact.ts';
@@ -51,9 +51,9 @@ function memorySources(tx:StorageTransaction,ownerId:string,m:StorageRow,v:Stora
  return sources;
 }
 function memorySourcesUncached(tx:StorageTransaction,ownerId:string,m:StorageRow,v:StorageRow,sourceEligibility:SourceEligibility):ReplySource[] {
- const citations=requireVersion(tx,ownerId,m,v,sourceEligibility);
+ const {citations,dependencies}=requireVersion(tx,ownerId,m,v,sourceEligibility);
  if(v.adoption_mode==='auto'&&sourceVerificationState(tx,ownerId,{memoryId:String(m.id),versionNo:v.version_no as bigint},sourceEligibility)!=='verified')fail('document_memory_unverified');
- return mergeKnowledgeSources(qualificationSources(tx,ownerId,{memoryId:String(m.id),versionNo:v.version_no as bigint},sourceEligibility),citations.map(r=>({contactId:String(r.source_contact_id),messageId:String(r.message_id),recordId:String(r.record_id),acceptedRevision:r.accepted_revision as bigint})));
+ return mergeKnowledgeSources(dependencies,citations.map(r=>({contactId:String(r.source_contact_id),messageId:String(r.message_id),recordId:String(r.record_id),acceptedRevision:r.accepted_revision as bigint})));
 }
 export function memoryBasis(tx:StorageTransaction,ownerId:string,m:StorageRow,v:StorageRow):{memory:L2ScenarioMemory;sources:ReplySource[]} {
  if(m.state!=='active'||m.current_version_no!==v.version_no)fail('document_memory_stale');

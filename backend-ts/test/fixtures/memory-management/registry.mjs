@@ -1,14 +1,14 @@
 import {registry as base} from '../../../src/storage/sqlite/registry.ts';
 import {createMemoryKnowledgeReader} from '../../../src/memory/sqlite/management/knowledge.ts';
 import {createReplyLocalKnowledgeReader} from '../../../src/memory/sqlite/documents/knowledge.ts';
-import {qualificationSources,mergeKnowledgeSources} from '../../../src/memory/sqlite/management/dependencies.ts';
+import {mergeKnowledgeSources} from '../../../src/memory/sqlite/management/dependencies.ts';
 import {requireSources} from '../../../src/memory/sqlite/management/qualification.ts';
 import {readMemories} from '../reply-knowledge.mjs';
 const reader=createMemoryKnowledgeReader();
 const localReader=createReplyLocalKnowledgeReader();
 const candidateSources=(tx,i)=>{
- const citationSources=requireSources(tx,i.ownerId,{candidateId:i.candidateId}).map(r=>({contactId:String(r.source_contact_id),messageId:String(r.message_id),recordId:String(r.record_id),acceptedRevision:r.accepted_revision}));
- const dependencies=qualificationSources(tx,i.ownerId,{candidateId:i.candidateId});
+ const {citations,dependencies}=requireSources(tx,i.ownerId,{candidateId:i.candidateId});
+ const citationSources=citations.map(r=>({contactId:String(r.source_contact_id),messageId:String(r.message_id),recordId:String(r.record_id),acceptedRevision:r.accepted_revision}));
  return {citationSources,qualificationSources:dependencies,sources:mergeKnowledgeSources(citationSources,dependencies)};
 };
 export const registry={...base,actions:[...base.actions,

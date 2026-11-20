@@ -6,27 +6,18 @@ import {join} from 'node:path';
 import {fixture,owner,record} from './fixtures/memory-sqlite/support.mjs';
 import {adjudicationFixture} from './fixtures/memory-management/adjudication-support.mjs';
 import {SqliteMemoryManagement} from '../src/memory/sqlite/management/service.ts';
-import {managementRead,versionView} from '../src/memory/sqlite/management/read.ts';
-import {requireVersion} from '../src/memory/sqlite/management/qualification.ts';
-import {assertReplyLocalSource} from '../src/history/sqlite/reply-local-source.ts';
+import {managementRead,checkedVersion} from '../src/memory/sqlite/management/read.ts';
 
 function transaction(db,queries=[]){
  const all=(sql,values=[])=>{queries.push(sql);const statement=db.prepare(sql);statement.setReadBigInts(true);return statement.all(...values);};
  return {all,get:(sql,values)=>all(sql,values)[0],run:(sql,values=[])=>db.prepare(sql).run(...values)};
 }
 const sourceQueries=queries=>queries.filter(sql=>sql.includes('wanted AS ('));
-function singleVersion(tx,m,v){
- try{if(v.content_state==='present')requireVersion(tx,owner,m,v);return versionView(tx,owner,v);}
- catch{
-  if(v.content_state==='present')try{requireVersion(tx,owner,m,v,assertReplyLocalSource);return {...versionView(tx,owner,v,assertReplyLocalSource),sourcePendingRecheck:true};}catch{}
-  return {...versionView(tx,owner,{...v,body:null,content_state:'redacted'}),sources:[],provenanceState:'invalidated'};
- }
-}
 function assertSingleVersions(tx,view){
  for(const memory of view.memories){
   const m=tx.get('SELECT * FROM memory WHERE owner_id=? AND id=?',[owner,memory.id]);
   const v=tx.get('SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? ORDER BY version_no DESC LIMIT 1',[owner,memory.id]);
-  assert.deepEqual(memory.versions,[singleVersion(tx,m,v)]);
+  assert.deepEqual(memory.versions,[checkedVersion(tx,owner,m,v)]);
  }
 }
 async function seeded(t,count){
@@ -55,6 +46,9 @@ test('管理页10／100／400条来源以同联系人一次资格SQL核验，结
   const queries=[],view=managementRead(transaction(f.db,queries),{ownerId:owner,scope});
   assert.equal(view.memories.length,2);assertSingleVersions(f.tx,view);
   assert.equal(sourceQueries(queries).length,1,`同联系人本页${count}条来源不可逐条查资格`);
+  const citationQueries=queries.filter(sql=>sql.includes('SELECT c.*,m.text_body,m.sent_at,m.time_precision')).length;
+  assert.equal(citationQueries,view.memories.length,'展示复用同一事务已核验的引文');
+  t.diagnostic(JSON.stringify({sourcesPerMemory:count,citationQueries}));
  });
 });
 

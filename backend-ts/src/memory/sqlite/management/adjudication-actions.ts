@@ -5,7 +5,6 @@ import {StorageFailure,type StorageAction,type StorageLease,type StorageTransact
 import {assertSourceEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
 import type {MessageSourceReference} from '../../../history/sqlite/contracts.ts';
 import {assertTaskContributions} from '../qualification.ts';
-import {verifiedExtractionOutput} from '../outputs.ts';
 import {validateModelLedgerReceipt,type ModelLedgerReceipt} from '../../../platform/models/model-ledger-contract.ts';
 import type {ModelTaskClaim} from '../../../platform/models/model-permit-port.ts';
 import {adjudicationPages} from '../../adoption/pages.ts';
@@ -20,8 +19,8 @@ import {applyDecision,recordCandidateGate,retireMergedParents} from './actions.t
 import {sourceVerificationState} from './evidence.ts';
 import {memoryTimeEligibility} from './temporal.ts';
 import {versionFact} from './version-fact.ts';
-import {available,fail,id,requireAutomaticCandidate,requireVersion,requireSources} from './qualification.ts';
-import {qualificationSources,mergeKnowledgeSources,withQualificationSources} from './dependencies.ts';
+import {available,fail,id,requireAutomaticCandidate,requireVersion} from './qualification.ts';
+import {mergeKnowledgeSources,withQualificationSources} from './dependencies.ts';
 import type {SqliteAdjudicationModelPurpose} from './model-port.ts';
 const purposes=['adjudication','relation_verification','merge_verification'] as const;
 const digest=(value:unknown)=>sha256(JSON.stringify(value,(_key,v)=>typeof v==='bigint'?v.toString():v));
@@ -69,17 +68,13 @@ function revision(tx:StorageTransaction,ownerId:string,scopeKind:string,contactI
  const r=scopeKind==='self'?tx.get('SELECT memory_revision FROM owner WHERE owner_id=?',[ownerId]):tx.get('SELECT memory_revision FROM contact WHERE owner_id=? AND id=?',[ownerId,contactId]);
  return r?.memory_revision as bigint??fail('memory_scope_stale');
 }
-function sources(tx:StorageTransaction,ownerId:string,parent:{candidateId?:string;memoryId?:string;versionNo?:bigint}):AdjudicationSource[] {
- const rows=requireSources(tx,ownerId,parent,!!parent.memoryId&&tx.get('SELECT adoption_mode FROM memory_version WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,parent.memoryId,parent.versionNo!])?.adoption_mode==='manual',adjudicationSourceEligibility);
- return rows.map(row=>resolveContentCitation(tx,ownerId,row).source);
-}
-function freeze(tx:StorageTransaction,ownerId:string,candidateId:string):Basis {
- const c=tx.get('SELECT * FROM memory_candidate WHERE owner_id=? AND id=?',[ownerId,candidateId]);if(!c)fail('memory_candidate_stale');requireAutomaticCandidate(tx,ownerId,c!,adjudicationSourceEligibility);
- const output=verifiedExtractionOutput(tx,{ownerId,eventId:String(c!.event_id)},adjudicationSourceEligibility);
+function freeze(tx:StorageTransaction,ownerId:string,candidateId:string){
+ const c=tx.get('SELECT * FROM memory_candidate WHERE owner_id=? AND id=?',[ownerId,candidateId]);if(!c)return fail('memory_candidate_stale');
+ const candidate=requireAutomaticCandidate(tx,ownerId,c,adjudicationSourceEligibility);
  const task=tx.get(`SELECT t.*,r.intent_revision,r.pause_requested_at FROM step_attempt a JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id JOIN processing_run r ON r.owner_id=t.owner_id AND r.id=t.run_id WHERE a.owner_id=? AND a.id=?`,[ownerId,c!.produced_attempt_id])!;
  if(task.pause_requested_at!==null)fail('memory_adjudication_paused');
  const scopeKind=c!.scope_kind as 'self'|'contact',contactId=c!.contact_id as string|null;available(tx,ownerId,{scopeKind,contactId},true);
- const fact=output.fact;
+ const fact=candidate.output.fact;
  // 事件标注不可核实属可选信息：丢弃标注、正文继续（现行规格第 4 条），并在采纳历史留 time_unverified 痕。
  const eventTimeUnverified=fact.event&&(!fact.event.stage_verified||!fact.event.occurrence_verified&&fact.event.occurrence_start!==null)?1:undefined;
  const effectiveFact=eventTimeUnverified?{...fact,event:null}:fact;
@@ -91,13 +86,15 @@ function freeze(tx:StorageTransaction,ownerId:string,candidateId:string):Basis {
  if(ambiguity)fail(AMBIGUITY_UNCONFIRMED);
  const memories=tx.all("SELECT * FROM memory WHERE owner_id=? AND scope_kind=? AND contact_id IS ? AND state IN ('active','withdrawn') ORDER BY id",[ownerId,scopeKind,contactId]);
  const parents:Basis['parents']=[],similar:SimilarMemory[]=[];
+ const comparisonProofs=new Map<string,ReturnType<typeof requireVersion>>();
  for(const m of memories){
   const v=tx.get('SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,m.id,m.current_version_no]);if(!v)fail('memory_head_conflict');
   if(memoryTimeEligibility(tx,ownerId,{memoryId:String(m.id),versionNo:v!.version_no as bigint})!=='eligible')continue;
   let prior:Record<string,any>|null,textSources:AdjudicationSource[];
   try{
-   requireVersion(tx,ownerId,m,v!,adjudicationSourceEligibility);
-   prior=versionFact(tx,ownerId,v!);textSources=sources(tx,ownerId,{memoryId:String(m.id),versionNo:v!.version_no as bigint});
+   const proof=requireVersion(tx,ownerId,m,v!,adjudicationSourceEligibility);
+   prior=versionFact(tx,ownerId,v!);textSources=proof.citations.map(row=>resolveContentCitation(tx,ownerId,row).source);
+   comparisonProofs.set(String(m.id),proof);
   }catch(error){
    // 自动采纳的有效记忆若来源已不是当前有效来源（如旧绑定副本退出），它不再是可信的比较对象：只跳过它，
    // 不能让同范围所有候选都因它而无法裁决。已撤回或人工保护的资料仍须按原样阻断，避免被无声绕过。
@@ -107,9 +104,10 @@ function freeze(tx:StorageTransaction,ownerId:string,candidateId:string):Basis {
   parents.push({id:String(m.id),versionNo:String(v!.version_no),headRevision:String(m.head_revision),protected:m.manual_protection===1n||m.state==='withdrawn'});
   similar.push({memory_id:String(m.id),revision:String(v!.version_no),text:String(v!.body),category:prior?.category??'user_memory',topic:prior?.topic??'',subject:scopeKind==='self'?'self':'contact',adoption_method:v!.adoption_mode==='auto'&&m.state==='active'&&sourceVerificationState(tx,ownerId,{memoryId:String(m.id),versionNo:v!.version_no as bigint},adjudicationSourceEligibility)==='verified'?'auto':'manual',source_message_ids:[...new Set(textSources.map(s=>s.message_id))],source_texts:textSources,statement_time:textSources.map(s=>s.occurred_at).filter((s):s is string=>s!==null).sort().at(-1)??null,valid_at:prior?.valid_at??null,invalid_at:prior?.invalid_at??null,event:prior?.event??null,conditions:prior?.conditions??null,source_receipt:digest(textSources),source_dependency_mode:prior?.source_dependency_mode??'all',requires_all_sources:prior?.requires_all_sources??true});
  }
- const candidateSources=sources(tx,ownerId,{candidateId});
+ const candidateSources=candidate.citations.map(row=>resolveContentCitation(tx,ownerId,row).source);
  const item:AdjudicationItem={candidate_index:0,candidate:effectiveFact,candidate_source_receipt:digest(candidateSources),candidate_source_texts:candidateSources,relation_source_receipt:digest({candidateSources,similar}),similar};
- return {policyRevision:adjudicationPolicyRevision,pageIndex:0,candidateId,candidateRevision:String(c!.state_revision),runId:String(task.run_id),taskId:String(task.id),scopeKind,contactId,memoryRevision:String(revision(tx,ownerId,scopeKind,contactId)),intentRevision:String(task.intent_revision),...(eventTimeUnverified?{eventTimeUnverified}:{}),item,parents};
+ const basis:Basis={policyRevision:adjudicationPolicyRevision,pageIndex:0,candidateId,candidateRevision:String(c.state_revision),runId:String(task.run_id),taskId:String(task.id),scopeKind,contactId,memoryRevision:String(revision(tx,ownerId,scopeKind,contactId)),intentRevision:String(task.intent_revision),...(eventTimeUnverified?{eventTimeUnverified}:{}),item,parents};
+ return {basis,candidate,comparisonProofs};
 }
 function record(tx:StorageTransaction,ownerId:string,attemptId:string,kind:string,payload:unknown,callId?:string,reused=false,pageOnly=false):string {
  const a=tx.get('SELECT step_id FROM step_attempt WHERE owner_id=? AND id=?',[ownerId,attemptId]);if(!a)fail('memory_adjudication_stale');
@@ -130,7 +128,8 @@ function record(tx:StorageTransaction,ownerId:string,attemptId:string,kind:strin
  }
  return eventId;
 }
-function makeStep(tx:StorageTransaction,ownerId:string,basis:Basis,kind:SqliteAdjudicationModelPurpose,lease:StorageLease):AdjudicationClaim {
+function makeStep(tx:StorageTransaction,ownerId:string,frozen:ReturnType<typeof freeze>,kind:SqliteAdjudicationModelPurpose,lease:StorageLease):AdjudicationClaim {
+ const {basis,candidate,comparisonProofs}=frozen;
  const stepId=randomUUID(),attemptId=randomUUID(),task=tx.get('SELECT * FROM processing_task WHERE owner_id=? AND id=?',[ownerId,basis.taskId])!;
  if((task.resume_no as bigint)>BigInt(Number.MAX_SAFE_INTEGER))fail('memory_adjudication_revision_limit');
  const n=tx.get('SELECT coalesce(max(step_no),0)+1 AS n FROM processing_step WHERE owner_id=? AND task_id=?',[ownerId,basis.taskId])!.n;
@@ -138,25 +137,26 @@ function makeStep(tx:StorageTransaction,ownerId:string,basis:Basis,kind:SqliteAd
  let inputNo=0;
  tx.run("INSERT INTO step_input(owner_id,step_id,input_no,kind,candidate_id,accepted_state_revision) VALUES(?,?,?,'candidate',?,?)",[ownerId,stepId,++inputNo,basis.candidateId,BigInt(basis.candidateRevision)]);
  for(const p of basis.parents)tx.run("INSERT INTO step_input(owner_id,step_id,input_no,kind,memory_id,memory_version_no,accepted_head_revision) VALUES(?,?,?,'memory',?,?,?)",[ownerId,stepId,++inputNo,p.id,BigInt(p.versionNo),BigInt(p.headRevision)]);
- const dependencies=mergeKnowledgeSources(qualificationSources(tx,ownerId,{candidateId:basis.candidateId},adjudicationSourceEligibility),...basis.parents.map(p=>qualificationSources(tx,ownerId,{memoryId:p.id,versionNo:BigInt(p.versionNo)},adjudicationSourceEligibility)),...requireSources(tx,ownerId,{candidateId:basis.candidateId},false,adjudicationSourceEligibility).map(r=>[{contactId:String(r.source_contact_id),messageId:String(r.message_id),recordId:String(r.record_id),acceptedRevision:r.accepted_revision as bigint}]),...basis.parents.map(p=>requireSources(tx,ownerId,{memoryId:p.id,versionNo:BigInt(p.versionNo)},true,adjudicationSourceEligibility).map(r=>({contactId:String(r.source_contact_id),messageId:String(r.message_id),recordId:String(r.record_id),acceptedRevision:r.accepted_revision as bigint}))));
- for(const source of dependencies)tx.run("INSERT INTO step_input(owner_id,step_id,input_no,kind,source_contact_id,message_id,record_id,accepted_revision) VALUES(?,?,?,'message',?,?,?,?)",[ownerId,stepId,++inputNo,source.contactId,source.messageId,source.recordId,source.acceptedRevision]);
+ const proofs=[candidate,...comparisonProofs.values()];
+ const messageSources=mergeKnowledgeSources(...proofs.map(proof=>proof.dependencies),...proofs.map(proof=>proof.citations.map(row=>({contactId:String(row.source_contact_id),messageId:String(row.message_id),recordId:String(row.record_id),acceptedRevision:row.accepted_revision as bigint}))));
+ for(const source of messageSources)tx.run("INSERT INTO step_input(owner_id,step_id,input_no,kind,source_contact_id,message_id,record_id,accepted_revision) VALUES(?,?,?,'message',?,?,?,?)",[ownerId,stepId,++inputNo,source.contactId,source.messageId,source.recordId,source.acceptedRevision]);
  tx.run("INSERT INTO step_attempt VALUES(?,?,?,1,?,?,?,?,?,'running',?,NULL,NULL)",[ownerId,attemptId,stepId,task.resume_no,randomUUID(),Date.now()+300_000,task.control_revision,lease.runtimeId,Date.now()]);
  record(tx,ownerId,attemptId,'adjudication_basis',basis);
  return {attemptId,stepId,basis,claim:{task_id:basis.taskId,step_id:stepId,step_name:kind,worker_id:lease.runtimeId,lease_generation:Number(task.resume_no)}};
 }
-function current(tx:StorageTransaction,ownerId:string,attemptId:string,lease:StorageLease,validatedBasis?:Basis) {
+function current(tx:StorageTransaction,ownerId:string,attemptId:string,lease:StorageLease,validated?:ReturnType<typeof freeze>) {
  const a=tx.get("SELECT a.*,s.kind,s.accepted_memory_revision,t.control_revision,t.resume_no AS current_resume_no,t.run_id,t.id AS task_id FROM step_attempt a JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id JOIN processing_task t ON t.owner_id=s.owner_id AND t.id=s.task_id WHERE a.owner_id=? AND a.id=? AND a.state='running' AND s.state='running' AND t.state IN ('succeeded','awaiting_decision')",[ownerId,attemptId]);
  if(!a||a.runtime_token!==lease.runtimeId||BigInt(Date.now())>(a.lease_expires_at as bigint)||a.accepted_control_revision!==a.control_revision||a.resume_no!==a.current_resume_no)return fail('memory_adjudication_stale');
  const event=tx.get("SELECT payload FROM execution_event WHERE owner_id=? AND step_attempt_id=? AND kind='adjudication_basis'",[ownerId,attemptId]);if(!event)fail('memory_adjudication_stale');const basis=JSON.parse(String(event!.payload)) as Basis;
  if(BigInt(basis.memoryRevision)!==a.accepted_memory_revision||revision(tx,ownerId,basis.scopeKind,basis.contactId)!==a.accepted_memory_revision)fail('memory_head_conflict');
  assertTaskContributions(tx,ownerId,basis.runId,basis.taskId);
  // 同步组校验只重建一次完整冻结池；其他成员仍须逐项通过租约、控制及自身消息修订检查。
- const fresh={...(validatedBasis??freeze(tx,ownerId,basis.candidateId)),pageIndex:basis.pageIndex};if(digest(fresh)!==digest(basis))fail('memory_adjudication_stale');
+ const frozen=validated??freeze(tx,ownerId,basis.candidateId),fresh={...frozen.basis,pageIndex:basis.pageIndex};if(digest(fresh)!==digest(basis))fail('memory_adjudication_stale');
  for(const s of tx.all("SELECT * FROM step_input WHERE owner_id=? AND step_id=? AND kind='message'",[ownerId,a.step_id])){
   adjudicationSourceEligibility(tx,{owner_id:ownerId,contact_id:String(s.source_contact_id),message_id:String(s.message_id),record_id:String(s.record_id)});
   if(!tx.get('SELECT 1 FROM message WHERE owner_id=? AND contact_id=? AND id=? AND interpretation_revision=?',[ownerId,s.source_contact_id,s.message_id,s.accepted_revision]))fail('memory_source_stale');
  }
- return {attempt:a,basis};
+ return {attempt:a,basis,frozen};
 }
 /** 已结算成功输出是唯一续期进展；不扩大租期、不复活过期或未知的执行组。 */
 function renew(tx:StorageTransaction,input:unknown,lease:StorageLease) {
@@ -168,7 +168,7 @@ function renew(tx:StorageTransaction,input:unknown,lease:StorageLease) {
  if(!progress||progress.state!=='succeeded'||progress.settlement_state!=='settled'||progress.commit_forbidden_at!==null
   ||!attemptIds.includes(String(progress.step_attempt_id)))return fail('memory_adjudication_progress_invalid');
  const anchor=current(tx,ownerId,String(progress.step_attempt_id),lease),members=[anchor];
- for(const attemptId of attemptIds)if(attemptId!==progress.step_attempt_id)members.push(current(tx,ownerId,attemptId,lease,anchor.basis));
+ for(const attemptId of attemptIds)if(attemptId!==progress.step_attempt_id)members.push(current(tx,ownerId,attemptId,lease,anchor.frozen));
  const active=tx.all(`SELECT DISTINCT a.id FROM step_attempt a JOIN processing_step s ON s.owner_id=a.owner_id AND s.id=a.step_id
   JOIN step_input ci ON ci.owner_id=s.owner_id AND ci.step_id=s.id AND ci.kind='candidate'
   WHERE a.owner_id=? AND s.task_id=? AND ci.candidate_id=? AND a.state='running' AND s.state='running' ORDER BY a.id`,[ownerId,anchor.basis.taskId,anchor.basis.candidateId]);
@@ -210,7 +210,10 @@ function relationCovered(item:AdjudicationItem,kind:string,ids:readonly string[]
 }
 function finish(tx:StorageTransaction,raw:unknown,lease:StorageLease) {
  const i=raw as {ownerId:string;attemptIds:string[]},ownerId=id(i.ownerId);if(!Array.isArray(i.attemptIds)||!i.attemptIds.length||i.attemptIds.length>10000)fail('memory_adjudication_stale');
- const stages=i.attemptIds.map(a=>({id:a,...current(tx,ownerId,id(a),lease)})),first=stages[0]!,basis=first.basis,item=basis.item;
+ const stages=i.attemptIds.map(stageId=>{
+  const {attempt,basis}=current(tx,ownerId,id(stageId),lease);
+  return {id:stageId,attempt,basis};
+ }),first=stages[0]!,basis=first.basis,item=basis.item;
  if(first.attempt.kind!=='adjudication'||stages.some(s=>digest({...s.basis,pageIndex:0})!==digest({...basis,pageIndex:0}))||new Set(stages.map(s=>`${s.attempt.kind}:${s.basis.pageIndex}`)).size!==stages.length)fail('memory_adjudication_stale');
  let action:'auto_accept'|'auto_update'|'auto_noop'='auto_accept',target:Basis['parents'][number]|undefined,text:string|undefined,formation:'adoption'|'change'|'correction'='adoption',parents:Basis['parents']=[],reason:string|null=null,skippedSources:{duplicateMemoryId:string;newSources:string[]}|undefined;
  const pages=adjudicationPages(item),pageCount=pages.length;
@@ -285,7 +288,7 @@ export const memoryAdjudicationActions:StorageAction[]=[
   if(i.contactId!==undefined){id(i.contactId);const candidate=tx.get('SELECT scope_kind,contact_id FROM memory_candidate WHERE owner_id=? AND id=?',[i.ownerId,i.candidateId]);if(!candidate||candidate.scope_kind!=='contact'||candidate.contact_id!==i.contactId)fail('memory_adjudication_scope_invalid');}
   const prior=tx.all(`SELECT s.state,e.payload FROM step_input i JOIN processing_step s ON s.owner_id=i.owner_id AND s.id=i.step_id JOIN step_attempt a ON a.owner_id=s.owner_id AND a.step_id=s.id JOIN execution_event e ON e.owner_id=a.owner_id AND e.step_attempt_id=a.id AND e.kind='adjudication_basis' WHERE i.owner_id=? AND i.candidate_id=? AND s.kind='adjudication' ORDER BY s.step_no DESC`,[i.ownerId,i.candidateId]);
   if(prior.some(p=>p.state==='running'||p.state==='unknown'))return null;
-  try{const basis=freeze(tx,i.ownerId,i.candidateId);
+  try{const frozen=freeze(tx,i.ownerId,i.candidateId),{basis}=frozen;
   // 仅显式联系人收尾可重试已知失败；历史尝试和回执全部结清后才允许建立新调用，不改写旧账本或整轮控制修订。
   const retryKnownFailure=i.retryKnownFailures===true&&prior[0]?.state==='failed'&&!tx.get(`SELECT 1 FROM step_input i
    JOIN processing_step s ON s.owner_id=i.owner_id AND s.id=i.step_id
@@ -303,14 +306,14 @@ export const memoryAdjudicationActions:StorageAction[]=[
   if(prior.length&&decidedWithSameBasis(tx,i.ownerId,i.candidateId,basis))return null;
   // 同一任务的目标资料已被未知裁决调用占位：继续领取只会在建调用前撞唯一索引，改为明确停止。
   if(unknownOccupancy(tx,i.ownerId,basis.taskId))fail('memory_adjudication_receipt_unknown');
-  return makeStep(tx,i.ownerId,basis,'adjudication',lease);} catch(error){if(error instanceof StorageFailure&&['memory_conditions_pending','memory_verification_pending','memory_withdrawn_scope_pending','memory_adjudication_pool_limit','memory_adjudication_paused',AMBIGUITY_UNCONFIRMED].includes(error.code)){try{if(error.code==='memory_conditions_pending'||error.code===AMBIGUITY_UNCONFIRMED)recordCandidateGate(tx,i.ownerId,id(i.candidateId),error.code);}catch{/* 留痕失败不改变原有门槛失败语义 */}return null;}throw error;}
+  return makeStep(tx,i.ownerId,frozen,'adjudication',lease);} catch(error){if(error instanceof StorageFailure&&['memory_conditions_pending','memory_verification_pending','memory_withdrawn_scope_pending','memory_adjudication_pool_limit','memory_adjudication_paused',AMBIGUITY_UNCONFIRMED].includes(error.code)){try{if(error.code==='memory_conditions_pending'||error.code===AMBIGUITY_UNCONFIRMED)recordCandidateGate(tx,i.ownerId,id(i.candidateId),error.code);}catch{/* 留痕失败不改变原有门槛失败语义 */}return null;}throw error;}
  }),
- act('stage','write',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string;purpose:SqliteAdjudicationModelPurpose;pageIndex:number};if(!purposes.includes(i.purpose)||!Number.isSafeInteger(i.pageIndex)||i.pageIndex<0)fail('memory_adjudication_purpose_invalid');const {basis}=current(tx,i.ownerId,i.attemptId,lease);if(i.pageIndex>=Math.max(1,adjudicationPages(basis.item).length))fail('memory_adjudication_purpose_invalid');return makeStep(tx,i.ownerId,{...basis,pageIndex:i.pageIndex},i.purpose,lease);}),
+ act('stage','write',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string;purpose:SqliteAdjudicationModelPurpose;pageIndex:number};if(!purposes.includes(i.purpose)||!Number.isSafeInteger(i.pageIndex)||i.pageIndex<0)fail('memory_adjudication_purpose_invalid');const {basis,frozen}=current(tx,i.ownerId,i.attemptId,lease);if(i.pageIndex>=Math.max(1,adjudicationPages(basis.item).length))fail('memory_adjudication_purpose_invalid');return makeStep(tx,i.ownerId,{...frozen,basis:{...basis,pageIndex:i.pageIndex}},i.purpose,lease);}),
  act('holders','read',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string};const {attempt}=current(tx,i.ownerId,i.attemptId,lease);return tx.all("SELECT c.id AS contactId,c.data_generation AS generation FROM step_input i JOIN contact c ON c.owner_id=i.owner_id AND c.id=i.source_contact_id WHERE i.owner_id=? AND i.step_id=? AND i.kind='message' UNION SELECT c.id AS contactId,c.data_generation AS generation FROM task_contribution tc JOIN contact c ON c.owner_id=tc.owner_id AND c.id=tc.source_contact_id WHERE tc.owner_id=? AND tc.task_id=?",[i.ownerId,attempt.step_id,i.ownerId,attempt.task_id]).map(r=>({contactId:String(r.contactId),generation:String(r.generation)}));}),
  act('current','read',(tx,raw,lease)=>{const i=raw as {ownerId:string;attemptId:string};current(tx,id(i.ownerId),id(i.attemptId),lease);return true;}),
  act('renew','write',renew),
  act('materials','read',(tx,raw,lease)=>{
-  const i=raw as {ownerId:string;attemptId:string;sources:ContentSource[]};const {basis}=current(tx,i.ownerId,i.attemptId,lease);
+  const i=raw as {ownerId:string;attemptId:string;sources:ContentSource[]};const {basis,frozen:{candidate,comparisonProofs}}=current(tx,i.ownerId,i.attemptId,lease);
   if(!Array.isArray(i.sources))fail('memory_adjudication_input_invalid');
   const page=adjudicationPages(basis.item)[basis.pageIndex]?.similar??[];
   const allowed=[...basis.item.candidate_source_texts,...page.flatMap(parent=>parent.source_texts)];
@@ -318,9 +321,7 @@ export const memoryAdjudicationActions:StorageAction[]=[
   // 原文已随当前来源快照进入请求；只为视觉附件异步物化，避免逐条原文重建完整比较池。
   const visual=i.sources.filter(source=>sourceImageReference(source)!==null);
   if(!visual.length)return [];
-  const rows=[...requireSources(tx,i.ownerId,{candidateId:basis.candidateId},false,adjudicationSourceEligibility),
-   ...basis.parents.filter(parent=>page.some(memory=>memory.memory_id===parent.id))
-    .flatMap(parent=>requireSources(tx,i.ownerId,{memoryId:parent.id,versionNo:BigInt(parent.versionNo)},true,adjudicationSourceEligibility))];
+  const rows=[...candidate.citations,...page.flatMap(parent=>comparisonProofs.get(parent.memory_id)!.citations)];
   const resolved=rows.map(row=>resolveContentCitation(tx,i.ownerId,row)),seen=new Set<string>();
   return visual.flatMap(source=>{
    const material=resolved.find(value=>digest(value.source)===digest(source));if(!material)fail('memory_source_stale');

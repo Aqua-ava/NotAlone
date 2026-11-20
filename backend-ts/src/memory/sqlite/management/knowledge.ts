@@ -1,10 +1,10 @@
 import {assertSourceEligibility,type SourceEligibility} from '../../../history/sqlite/source.ts';
 import {sourceVerificationState} from './evidence.ts';
-import {qualificationSources,mergeKnowledgeSources} from './dependencies.ts';
+import {mergeKnowledgeSources} from './dependencies.ts';
 import type {StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
 import type {DiscussionScope} from '../../../reply/sqlite/contracts.ts';
 import type {ReplyKnowledgeHeader,ReplyKnowledgeItem,ReplyMemoryReader,ReplySource} from '../../../reply/sqlite/candidates/contracts.ts';
-import {available,fail,requireAutomaticCandidate,requireSources,requireVersion} from './qualification.ts';
+import {available,fail,requireAutomaticCandidate,requireVersion} from './qualification.ts';
 import {memoryTimeEligibility} from './temporal.ts';
 /** identity_json保留额外修订；版本不变的保护操作也必须使旧快照失效。 */
 export interface MemoryKnowledgeItem extends ReplyKnowledgeItem {headRevision:bigint;citationSources:ReplySource[];qualificationSources:ReplySource[]}
@@ -22,14 +22,13 @@ function frozenItem(tx:StorageTransaction,scope:DiscussionScope,selected:Pick<Re
    const v=tx.get('SELECT * FROM memory_version WHERE owner_id=? AND memory_id=? AND version_no=?',[ownerId,m.id,m.current_version_no]);if(!v)return null;
    if(memoryTimeEligibility(tx,ownerId,{memoryId:String(m.id),versionNo:v.version_no as bigint})!=='eligible')return null;
    if(v.adoption_mode==='auto'&&sourceVerificationState(tx,ownerId,{memoryId:String(m.id),versionNo:v.version_no as bigint},sourceEligibility)!=='verified')return null;
-   const rows=requireVersion(tx,ownerId,m,v,sourceEligibility),citations=knowledgeSources(rows),dependencies=qualificationSources(tx,ownerId,{memoryId:String(m.id),versionNo:v.version_no as bigint},sourceEligibility);
+   const proof=requireVersion(tx,ownerId,m,v,sourceEligibility),citations=knowledgeSources(proof.citations),dependencies=proof.dependencies;
    return {kind:'memory',id:String(m.id),versionNo:v.version_no as bigint,headRevision:m.head_revision as bigint,scopeKind:m.scope_kind==='self'?'owner':'contact',contactId:m.contact_id as string|null,publicationId:null,text:String(v.body),qualification:v.adoption_mode==='auto'?'auto':'confirmed',sources:mergeKnowledgeSources(citations,dependencies),citationSources:citations,qualificationSources:dependencies};
   }
   if(selected.kind==='memory_candidate'){
    const c=tx.get("SELECT * FROM memory_candidate WHERE owner_id=? AND state='pending' AND (scope_kind='self' OR contact_id=?) AND id=?",[ownerId,scope.contactId,selected.id]);if(!c)return null;
    if(memoryTimeEligibility(tx,ownerId,{candidateId:String(c.id)})!=='eligible')return null;
-   requireAutomaticCandidate(tx,ownerId,c,sourceEligibility);
-   const rows=requireSources(tx,ownerId,{candidateId:String(c.id)},false,sourceEligibility),citations=knowledgeSources(rows),dependencies=qualificationSources(tx,ownerId,{candidateId:String(c.id)},sourceEligibility);
+   const proof=requireAutomaticCandidate(tx,ownerId,c,sourceEligibility),citations=knowledgeSources(proof.citations),dependencies=proof.dependencies;
    return {kind:'memory_candidate',id:String(c.id),versionNo:1n,headRevision:c.state_revision as bigint,scopeKind:c.scope_kind==='self'?'owner':'contact',contactId:c.contact_id as string|null,publicationId:null,text:String(c.proposed_body),qualification:'unconfirmed',sources:mergeKnowledgeSources(citations,dependencies),citationSources:citations,qualificationSources:dependencies};
   }
  }catch{/* 失效来源不进入生成或历史回看；不在读取时补证或改变正文。 */}

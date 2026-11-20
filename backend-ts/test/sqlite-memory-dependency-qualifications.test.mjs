@@ -83,3 +83,23 @@ test('冻结依赖缓存保留两个root并集与返回值独立性，部分失�
  });
  assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
 });
+
+test('仅比较时使用的来源失效会阻止修改正式记忆，来源恢复后原请求可重试',async t=>{
+ const f=await adjudicationFixture(t);
+ await f.extract(['我长期喜欢合成园艺。'],{publish:true});
+ const original=(await f.read()).memories[0];
+ await f.extract(Array.from({length:8},(_,i)=>`我记录了合成背景${i+1}。`));
+ await f.extract(['我长期偏好合成白茶。'],{publish:true});
+ const selected=(await f.read()).memories.find(item=>item.id!==original.id);
+ assert.match(selected.current.body,/合成白茶/);
+ assert.ok(selected.current.sources.every(source=>source.messageId!==original.current.sources[0].messageId));
+ const request={requestKey:'synthetic-correction-after-source-recovery',action:'correct',memoryId:selected.id,expectedVersionNo:selected.current.versionNo,expectedHeadRevision:selected.headRevision,body:'联系人偏好合成白茶。'};
+ await f.storage.execute('fixture.quarantineMemorySources',{ownerId:f.owner,memoryId:original.id});
+ await assert.rejects(f.management.decide(request),{code:'history_source_not_available'});
+ assert.equal((await f.read()).memories.find(item=>item.id===selected.id).current,null);
+ await f.storage.execute('fixture.releaseMemorySources',{ownerId:f.owner,memoryId:original.id});
+ const changed=await f.management.decide(request);
+ assert.equal(changed.versionNo,'2');
+ assert.equal((await f.read()).memories.find(item=>item.id===selected.id).current.body,request.body);
+ assert.deepEqual(await f.storage.check(),{integrity:'ok',foreignKeys:'ok'});
+});

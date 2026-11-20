@@ -24,36 +24,41 @@ export function citations(tx:StorageTransaction,ownerId:string,parent:{candidate
  const rows=tx.all(`SELECT c.*,m.text_body,m.sent_at,m.time_precision FROM memory_citation c INDEXED BY ${parent.candidateId?'memory_citation_candidate':'memory_citation_version'} JOIN message m ON m.owner_id=c.owner_id AND m.contact_id=c.source_contact_id AND m.id=c.message_id WHERE c.owner_id=? AND ${parent.candidateId?'c.candidate_id=?':'c.memory_id=? AND c.version_no=?'} ORDER BY c.source_contact_id,c.message_id,c.record_id`,parent.candidateId?[ownerId,parent.candidateId]:[ownerId,parent.memoryId!,parent.versionNo!]);
  return projectCitations(tx,ownerId,parent,rows,sourceEligibility);
 }
-export function requireSources(tx:StorageTransaction,ownerId:string,parent:{candidateId?:string;memoryId?:string;versionNo?:bigint},manual=false,sourceEligibility:SourceEligibility=assertSourceEligibility):StorageRow[]{
+/** 同一版本或候选同时复验直接引文和完整执行依赖。两者保持各自的用途与删除语义。 */
+export function requireSources(tx:StorageTransaction,ownerId:string,parent:{candidateId?:string;memoryId?:string;versionNo?:bigint},manual=false,sourceEligibility:SourceEligibility=assertSourceEligibility){
  const rows=citations(tx,ownerId,parent,sourceEligibility);
  const required=tx.all(`SELECT source_contact_id,message_id FROM memory_required_message WHERE owner_id=? AND ${parent.candidateId?'candidate_id=?':'memory_id=? AND version_no=?'}`,parent.candidateId?[ownerId,parent.candidateId]:[ownerId,parent.memoryId!,parent.versionNo!]);
  if(!manual&&(!rows.length||!required.length))fail('memory_source_stale');
- const uncited=required.filter(r=>!rows.some(c=>c.source_contact_id===r.source_contact_id&&c.message_id===r.message_id));
- if(uncited.length){
-  const dependencies=qualificationSources(tx,ownerId,parent,sourceEligibility);
-  if(uncited.some(r=>!dependencies.some(d=>d.contactId===r.source_contact_id&&d.messageId===r.message_id)))fail('memory_source_stale');
- }
+ const dependencies=qualificationSources(tx,ownerId,parent,sourceEligibility);
+ const messageKey=(contactId:unknown,messageId:unknown)=>JSON.stringify([contactId,messageId]);
+ const supported=new Set([
+  ...rows.map(row=>messageKey(row.source_contact_id,row.message_id)),
+  ...dependencies.map(source=>messageKey(source.contactId,source.messageId)),
+ ]);
+ if(required.some(row=>!supported.has(messageKey(row.source_contact_id,row.message_id))))fail('memory_source_stale');
  for(const r of rows){
   sourceEligibility(tx,{owner_id:ownerId,contact_id:String(r.source_contact_id),message_id:String(r.message_id),record_id:String(r.record_id)});
   const m=tx.get('SELECT interpretation_revision,text_body FROM message WHERE owner_id=? AND contact_id=? AND id=?',[ownerId,r.source_contact_id,r.message_id]);
   if(!m||m.interpretation_revision!==r.accepted_revision)fail('memory_source_stale');
   resolveContentCitation(tx,ownerId,r);
  }
- return rows;
+ return {citations:rows,dependencies};
 }
 export function requireCandidate(tx:StorageTransaction,ownerId:string,c:StorageRow,sourceEligibility:SourceEligibility=assertSourceEligibility){
  if(c.state!=='pending'||typeof c.event_id!=='string')fail('memory_candidate_stale');
  const output=verifiedExtractionOutput(tx,{ownerId,eventId:String(c.event_id)},sourceEligibility);
  if(output.proposedBody!==c.proposed_body||output.producedAttemptId!==c.produced_attempt_id||output.scopeKind!==c.scope_kind||output.contactId!==c.contact_id||output.outputNo!==c.output_no)fail('memory_candidate_stale');
- const actual=requireSources(tx,ownerId,{candidateId:String(c.id)},false,sourceEligibility);
+ const sources=requireSources(tx,ownerId,{candidateId:String(c.id)},false,sourceEligibility),actual=sources.citations;
  if(output.semanticVerification.state==='verified'&&(actual.length!==output.citations.length||output.citations.some(expected=>!actual.some(row=>row.source_contact_id===expected.contactId&&row.message_id===expected.messageId&&row.record_id===expected.recordId&&row.accepted_revision===expected.interpretationRevision&&row.span_start===expected.spanStart&&row.span_end===expected.spanEnd
   &&(row.content_kind??'text')===(expected.contentKind??'text')&&(expected.contentRef?JSON.stringify(JSON.parse(String(row.content_ref_json)))===JSON.stringify(expected.contentRef):true)))))fail('memory_candidate_stale');
- return output.semanticVerification;
+ return {output,...sources};
 }
-export function requireAutomaticCandidate(tx:StorageTransaction,ownerId:string,c:StorageRow,sourceEligibility:SourceEligibility=assertSourceEligibility):void{
- if(requireCandidate(tx,ownerId,c,sourceEligibility).state!=='verified')fail('memory_verification_pending');
+export function requireAutomaticCandidate(tx:StorageTransaction,ownerId:string,c:StorageRow,sourceEligibility:SourceEligibility=assertSourceEligibility){
+ const proof=requireCandidate(tx,ownerId,c,sourceEligibility);
+ if(proof.output.semanticVerification.state!=='verified')fail('memory_verification_pending');
+ return proof;
 }
-export function requireVersion(tx:StorageTransaction,ownerId:string,m:StorageRow,v:StorageRow,sourceEligibility:SourceEligibility=assertSourceEligibility):StorageRow[]{
+export function requireVersion(tx:StorageTransaction,ownerId:string,m:StorageRow,v:StorageRow,sourceEligibility:SourceEligibility=assertSourceEligibility){
  available(tx,ownerId,{scopeKind:m.scope_kind as 'self'|'contact',contactId:m.contact_id as string|null});
  if(v.content_state!=='present'||v.provenance_state!=='eligible'||typeof v.body!=='string')fail('memory_source_stale');
  return requireSources(tx,ownerId,{memoryId:String(m.id),versionNo:v.version_no as bigint},v.adoption_mode==='manual',sourceEligibility);

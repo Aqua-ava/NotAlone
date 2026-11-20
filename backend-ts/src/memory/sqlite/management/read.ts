@@ -1,9 +1,9 @@
 import {archivedExtractionOutput} from '../outputs.ts';
 import {sourceVerificationState} from './evidence.ts';
 import {memoryTimeEligibility} from './temporal.ts';
-import {qualificationSources,qualificationSourceRows,frozenContributingContactIds} from './dependencies.ts';
+import {qualificationSourceRows,frozenContributingContactIds} from './dependencies.ts';
 import type {StorageRow,StorageTransaction} from '../../../storage/sqlite/contracts.ts';
-import {available,citations,fail,id,requireCandidate,requireSources,requireVersion,scope} from './qualification.ts';
+import {available,fail,id,requireCandidate,requireSources,requireVersion,scope} from './qualification.ts';
 import type {MemoryCandidateView,MemoryManagementView,MemoryScope,MemorySource,MemoryVersionView,MemoryView,MemoryHistoryView} from './contracts.ts';
 import {resolveContentCitation} from '../content-citation.ts';
 import {decodePage,encodePage,managementPageSize,pageScope} from './pagination.ts';
@@ -36,8 +36,19 @@ export function sourceViews(tx:StorageTransaction,ownerId:string,rows:StorageRow
 function mergeParents(tx:StorageTransaction,ownerId:string,decisionId:string){
  return tx.all("SELECT m.id,m.current_version_no,m.head_revision FROM memory_decision r JOIN memory_decision d ON d.owner_id=r.owner_id AND d.execution_id=r.execution_id JOIN memory m ON m.owner_id=r.owner_id AND m.id=r.target_memory_id WHERE d.owner_id=? AND d.id=? AND d.action='auto_update' AND r.action='auto_retire' AND r.actor_kind='system' AND r.outcome='applied' ORDER BY m.id",[ownerId,decisionId]).map(m=>({memoryId:String(m.id),versionNo:String(m.current_version_no),headRevision:String(m.head_revision)}));
 }
-/** sourceEligibility 默认要求当前读取授权；读取授权暂时不可用时由 checkedVersion 改用已保存来源的资格（与回复一致）。 */
-export function versionView(tx:StorageTransaction,ownerId:string,v:StorageRow,sourceEligibility:SourceEligibility=assertSourceEligibility):MemoryVersionView{const parents=mergeParents(tx,ownerId,String(v.decision_id));if(v.content_state==='present')qualificationSources(tx,ownerId,{memoryId:String(v.memory_id),versionNo:v.version_no as bigint},sourceEligibility);return {timeStatus:v.content_state==='present'?memoryTimeEligibility(tx,ownerId,{memoryId:String(v.memory_id),versionNo:v.version_no as bigint}):'invalid',mergeParents:parents,mergeParentCount:parents.length?parents.length+1:0,verificationState:v.content_state==='present'?sourceVerificationState(tx,ownerId,{memoryId:String(v.memory_id),versionNo:v.version_no as bigint},sourceEligibility):'pending',versionNo:String(v.version_no),body:v.body as string|null,formationKind:String(v.formation_kind),adoptionMode:String(v.adoption_mode),previousVersionNo:v.previous_version_no===null?null:String(v.previous_version_no),restoredFromVersionNo:v.restored_from_version_no===null?null:String(v.restored_from_version_no),contentState:String(v.content_state),provenanceState:String(v.provenance_state),decisionId:String(v.decision_id),contributingContactIds:v.content_state==='present'?frozenContributingContactIds(tx,ownerId,{memoryId:String(v.memory_id),versionNo:v.version_no as bigint}):[],sources:sourceViews(tx,ownerId,citations(tx,ownerId,{memoryId:String(v.memory_id),versionNo:v.version_no as bigint},sourceEligibility))};}
+function versionView(tx:StorageTransaction,ownerId:string,v:StorageRow,citations:StorageRow[],sourceEligibility:SourceEligibility):MemoryVersionView{
+ const parents=mergeParents(tx,ownerId,String(v.decision_id)),present=v.content_state==='present';
+ const parent={memoryId:String(v.memory_id),versionNo:v.version_no as bigint};
+ return {
+  timeStatus:present?memoryTimeEligibility(tx,ownerId,parent):'invalid',
+  mergeParents:parents,mergeParentCount:parents.length?parents.length+1:0,
+  verificationState:present?sourceVerificationState(tx,ownerId,parent,sourceEligibility):'pending',
+  versionNo:String(v.version_no),body:v.body as string|null,formationKind:String(v.formation_kind),adoptionMode:String(v.adoption_mode),
+  previousVersionNo:v.previous_version_no===null?null:String(v.previous_version_no),restoredFromVersionNo:v.restored_from_version_no===null?null:String(v.restored_from_version_no),
+  contentState:String(v.content_state),provenanceState:String(v.provenance_state),decisionId:String(v.decision_id),
+  contributingContactIds:present?frozenContributingContactIds(tx,ownerId,parent):[],sources:sourceViews(tx,ownerId,citations),
+ };
+}
 
 /** pending 候选的派生状态：有裁决原因或门槛留痕才是真待确认；无结果且无留痕按处理未完成呈现（查询层派生，不改表）。 */
 function pendingDerivation(tx:StorageTransaction,ownerId:string,c:StorageRow):{stage:'decision_pending'|'processing_incomplete';reason:string|null}{
@@ -54,30 +65,28 @@ function pendingDerivation(tx:StorageTransaction,ownerId:string,c:StorageRow):{s
 }
 function candidateView(tx:StorageTransaction,ownerId:string,s:MemoryScope,c:StorageRow,sourceEligibility:SourceEligibility=assertSourceEligibility):MemoryCandidateView|null {
  if(!['pending','adopted','rejected','duplicate'].includes(String(c.state)))return null;
- let verificationState:'verified'|'pending';
  try{
-  if(c.state==='pending')verificationState=requireCandidate(tx,ownerId,c,sourceEligibility).state;
-  else{
-   const out=archivedExtractionOutput(tx,{ownerId,eventId:String(c.event_id)},sourceEligibility);
-   if(out.proposedBody!==c.proposed_body||out.producedAttemptId!==c.produced_attempt_id||out.scopeKind!==c.scope_kind||out.contactId!==c.contact_id||out.outputNo!==c.output_no)fail('memory_candidate_stale');
-   requireSources(tx,ownerId,{candidateId:String(c.id)},false,sourceEligibility);verificationState=out.semanticVerification.state;
-  }
-  qualificationSources(tx,ownerId,{candidateId:String(c.id)},sourceEligibility);
+  const proof=c.state==='pending'?requireCandidate(tx,ownerId,c,sourceEligibility):archivedCandidate(tx,ownerId,c,sourceEligibility);
   const pendingFields=String(c.state)==='pending'?(()=>{const pending=pendingDerivation(tx,ownerId,c);return {pendingStage:pending.stage,pendingReason:pending.reason};})():undefined;
-  return {...pendingFields,verificationState,id:String(c.id),scopeKind:s.scopeKind,contactId:s.contactId,body:String(c.proposed_body),state:c.state as MemoryCandidateView['state'],stateRevision:String(c.state_revision),eventId:String(c.event_id),contributingContactIds:frozenContributingContactIds(tx,ownerId,{candidateId:String(c.id)}),sources:sourceViews(tx,ownerId,citations(tx,ownerId,{candidateId:String(c.id)},sourceEligibility))};
+  return {...pendingFields,verificationState:proof.output.semanticVerification.state,id:String(c.id),scopeKind:s.scopeKind,contactId:s.contactId,body:String(c.proposed_body),state:c.state as MemoryCandidateView['state'],stateRevision:String(c.state_revision),eventId:String(c.event_id),contributingContactIds:frozenContributingContactIds(tx,ownerId,{candidateId:String(c.id)}),sources:sourceViews(tx,ownerId,proof.citations)};
  }catch{return null;}
 }
-function checkedVersion(tx:StorageTransaction,ownerId:string,m:StorageRow,v:StorageRow,sources?:PageSources):MemoryVersionView {
+function archivedCandidate(tx:StorageTransaction,ownerId:string,c:StorageRow,sourceEligibility:SourceEligibility){
+ const output=archivedExtractionOutput(tx,{ownerId,eventId:String(c.event_id)},sourceEligibility);
+ if(output.proposedBody!==c.proposed_body||output.producedAttemptId!==c.produced_attempt_id||output.scopeKind!==c.scope_kind||output.contactId!==c.contact_id||output.outputNo!==c.output_no)fail('memory_candidate_stale');
+ return {output,...requireSources(tx,ownerId,{candidateId:String(c.id)},false,sourceEligibility)};
+}
+export function checkedVersion(tx:StorageTransaction,ownerId:string,m:StorageRow,v:StorageRow,sources?:PageSources):MemoryVersionView {
  const current=sources?.current??assertSourceEligibility,saved=sources?.saved??assertReplyLocalSource;
- try{if(v.content_state==='present')requireVersion(tx,ownerId,m,v,current);return versionView(tx,ownerId,v,current);}
+ if(v.content_state!=='present')return versionView(tx,ownerId,v,[],current);
+ try{return versionView(tx,ownerId,v,requireVersion(tx,ownerId,m,v,current).citations,current);}
  catch{
   // 读取授权暂时不可用（如重启后尚未重建）时，已保存且来源仍有效的记忆继续可查看，并标注待重新核验；
   // 来源被删除、隔离、换绑或失证时本地资格同样不通过，仍隐藏正文。写入与实时核验入口保持严格。
-  if(v.content_state==='present')try{
-   requireVersion(tx,ownerId,m,v,saved);
-   return {...versionView(tx,ownerId,v,saved),sourcePendingRecheck:true};
+  try{
+   return {...versionView(tx,ownerId,v,requireVersion(tx,ownerId,m,v,saved).citations,saved),sourcePendingRecheck:true};
   }catch{/* 本地资格也不通过：按失效处理。 */}
-  return {...versionView(tx,ownerId,{...v,body:null,content_state:'redacted'},current),sources:[],provenanceState:'invalidated'};
+  return versionView(tx,ownerId,{...v,body:null,content_state:'redacted',provenance_state:'invalidated'},[],current);
  }
 }
 function owned(s:MemoryScope,display:string|null,value:{sources:MemorySource[];contributingContactIds:string[]}):boolean {
