@@ -29,6 +29,28 @@ test('同一已核验范围的多个旧目标无顺序证明时，不凭旧完�
  assert.equal(await f.current.storage.execute('history.pending',{token,report}),null);
 });
 
+test('增量覆盖跳过不匹配的更新目标，并对无序号的旧目标隐藏游标',async t=>{
+ const f=await fixture(t,{registryModule});f.state.pageRecords=[record('shard-a','1')];
+ const history=await f.current.history.synchronize(f.contactA);
+ const seed=goals=>f.current.storage.execute('fixture.coverageIncrementalGoals',{ownerId:owner,historyGoalId:history.goalId,goals});
+ await seed([
+  {id:'legacy-a',generation:'source-1',sequence:null},
+  {id:'legacy-b',generation:'source-1',sequence:null},
+  {id:'outside-current-scope',generation:'retired-source',sequence:101n},
+ ]);
+ const legacy=(await f.current.history.coverage(f.contactA)).incremental;
+ assert.equal(legacy.goalId,'legacy-b');
+ assert.equal(legacy.phase,'incomplete');
+ assert.equal(legacy.failureCode,'history_goal_order_unverified');
+ assert.equal(legacy.cursorPresent,false);
+
+ await seed([{id:'ordered-current',generation:'source-1',sequence:100n}]);
+ const current=(await f.current.history.coverage(f.contactA)).incremental;
+ assert.equal(current.goalId,'ordered-current');
+ assert.equal(current.phase,'ready');
+ assert.equal(current.cursorPresent,true);
+});
+
 test('仅属于旧来源的消息隔离保持失效，但不阻挡当前独立消息的覆盖',async t=>{
  const f=await fixture(t,{registryModule});f.state.pageRecords=[record('shard-a','1')];await f.current.history.synchronize(f.contactA);
  const original=(await f.current.history.read(f.contactA)).messages[0];

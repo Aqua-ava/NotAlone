@@ -71,12 +71,23 @@ function incrementalCoverage(historyGoal:StorageRow|undefined,incrementalGoal:St
   ...(emptyTargetAwaitingMessages?{emptyTargetAwaitingMessages:true}:{})};
  return {goalId:null,phase:'not_started',failureCode:null,cursorPresent:false,pagesAccepted:0,lastAcceptedAt:null,resumedFromGoalId:null};
 }
+function readCoverageGoal(tx:StorageTransaction,owner:string,contact:string,kind:'history'|'incremental'):
+ {goal:StorageRow|undefined;legacyAmbiguous:boolean} {
+ const candidates=`WITH ${currentSourceScopeCTE} SELECT g.* FROM read_goal g
+  WHERE g.owner_id=? AND g.contact_id=? AND g.kind=? AND ${currentGoalPredicate('g')}`;
+ const values=[owner,contact,contact,owner,contact,kind];
+ // 创建序号唯一，沿现有索引从最新开始核验，有匹配时无需扫描更早目标。
+ const ordered=tx.get(`${candidates} AND g.creation_no IS NOT NULL ORDER BY g.creation_no DESC LIMIT 1`,values);
+ if(ordered)return {goal:ordered,legacyAmbiguous:false};
+ // 旧历史只需区分一条与多条匹配记录，仍以原时间和 ID 顺序定位展示目标。
+ const [legacy,other]=tx.all(`${candidates} AND g.creation_no IS NULL ORDER BY g.created_at DESC,g.id DESC LIMIT 2`,values);
+ return {goal:legacy,legacyAmbiguous:other!==undefined};
+}
 /** 历史目标与增量目标分别取各自最新一行；增量交接不得把历史阶段覆盖成运行中。 */
 export function readCoverage(tx:StorageTransaction,owner:string,contact:string):HistoryCoverage {
  assertContact(tx,owner,contact);
- const historyGoal=tx.get(`WITH ${currentSourceScopeCTE} SELECT g.*,count(*) OVER() goal_count FROM read_goal g WHERE g.owner_id=? AND g.contact_id=? AND g.kind='history' AND ${currentGoalPredicate('g')} ORDER BY g.creation_no DESC,g.created_at DESC,g.id DESC LIMIT 1`,[owner,contact,contact,owner,contact]);
- const incrementalGoal=tx.get(`WITH ${currentSourceScopeCTE} SELECT g.*,count(*) OVER() goal_count FROM read_goal g WHERE g.owner_id=? AND g.contact_id=? AND g.kind='incremental' AND ${currentGoalPredicate('g')} ORDER BY g.creation_no DESC,g.created_at DESC,g.id DESC LIMIT 1`,[owner,contact,contact,owner,contact]);
- const legacyAmbiguous=historyGoal?.creation_no===null&&(historyGoal.goal_count as bigint)>1n;
+ const {goal:historyGoal,legacyAmbiguous}=readCoverageGoal(tx,owner,contact,'history');
+ const {goal:incrementalGoal}=readCoverageGoal(tx,owner,contact,'incremental');
  const goal=legacyAmbiguous?{...historyGoal,state:'incomplete',failure_code:'history_goal_order_unverified',cursor:null}:historyGoal;
  const safeIncremental=incrementalGoal?.creation_no===null?{...incrementalGoal,state:'incomplete',failure_code:'history_goal_order_unverified',cursor:null}:incrementalGoal;
  const continuityBlocked=Boolean(tx.get("SELECT 1 FROM source_proof WHERE owner_id=? AND contact_id=? AND state='needs_confirmation'",[owner,contact]));

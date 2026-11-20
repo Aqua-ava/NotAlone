@@ -18,6 +18,15 @@ export const registry={...base,actions:[...base.actions,
   tx.run('DROP TRIGGER read_goal_creation_immutable');tx.run('UPDATE read_goal SET creation_no=NULL WHERE owner_id=? AND contact_id=?',[i.ownerId,i.contactId]);
   tx.run("CREATE TRIGGER read_goal_creation_immutable BEFORE UPDATE OF creation_no ON read_goal BEGIN SELECT RAISE(ABORT,'history_goal_order_immutable'); END");
  }},
+ {name:'fixture.coverageIncrementalGoals',mode:'write',retryBusy:false,execute(tx,i){
+  for(const goal of i.goals)tx.run(`INSERT INTO read_goal(owner_id,id,contact_id,binding_id,grant_id,accepted_data_generation,
+   accepted_barrier_generation,kind,target_protocol,target_descriptor,target_json,eligibility_json,support_json,
+   state,coverage_state,created_at,creation_no,cursor)
+   SELECT owner_id,?,contact_id,binding_id,grant_id,accepted_data_generation,accepted_barrier_generation,
+   'incremental',target_protocol,target_descriptor,json_set(target_json,'$.sourceGeneration',?),
+   eligibility_json,support_json,'running','ready',9999999999999,?,'synthetic-cursor'
+   FROM read_goal WHERE owner_id=? AND id=?`,[goal.id,goal.generation,goal.sequence,i.ownerId,i.historyGoalId]);
+ }},
  {name:'fixture.quarantineRetiredOnly',mode:'write',retryBusy:false,execute(tx,i){
   const message=tx.get('SELECT id FROM message WHERE owner_id=? AND contact_id=? ORDER BY display_no DESC LIMIT 1',[i.ownerId,i.contactId]);
   tx.run("INSERT INTO history_message_quarantine VALUES(?,?,?,'message_state_unverified')",[i.ownerId,i.contactId,message.id]);
