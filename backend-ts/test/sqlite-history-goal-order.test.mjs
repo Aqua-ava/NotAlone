@@ -16,7 +16,7 @@ for(const legacyOnly of [false,true])test(`旧目标审计不能用未来时间�
  const old=await f.current.storage.execute('fixture.seedLegacyScope',{ownerId:owner,contactId:f.contactA,recordId:original.sourceRecordIds[0],otherTable:true,oldOnly:true});
  await f.current.storage.execute('fixture.reorderGoals',{ownerId:owner,contactId:f.contactA,sameTime:false});
  if(legacyOnly)await f.current.storage.execute('fixture.legacyGoalSequence',{ownerId:owner,contactId:f.contactA});
- const read=await f.current.history.read(f.contactA);assert.equal(read.coverage.quarantinedCount,0);assert.deepEqual(read.messages.map(m=>m.id),[original.id]);assert.ok(read.messages[0].sourceRecordIds.includes(original.sourceRecordIds[0]));assert.ok(!read.messages[0].sourceRecordIds.includes(old.recordId));
+ const read=await f.current.history.read(f.contactA);assert.equal(read.coverage.quarantinedCount,0);assert.equal(read.coverage.messageCount,1);assert.deepEqual(read.messages.map(m=>m.id),[original.id]);assert.ok(read.messages[0].sourceRecordIds.includes(original.sourceRecordIds[0]));assert.ok(!read.messages[0].sourceRecordIds.includes(old.recordId));
  await assert.rejects(f.current.history.source(f.contactA,old.recordId),{code:'history_source_not_found'});
 });
 

@@ -162,7 +162,9 @@ test('联系人HTTP目录消息数等于当前可见规范消息，来源删除�
  const other=new SqliteContactService(storage,'00000000-0000-4000-8000-000000000002',{account:async()=>{throw new Error('不读取外部元数据');},sessions:async()=>[]});await other.initialize();assert.deepEqual((await other.directory()).contacts,[]);await other.close();
  const {DeletionService}=await import('../src/storage/sqlite/deletion/service.ts'),{ManagedFiles}=await import('../src/storage/sqlite/deletion/managed-files.ts');const deletion=new DeletionService(storage,service.holders,new ManagedFiles(root));
  const source=(await service.read(a.contact_id)).messages[0].sourceRecordIds[0],plan=await deletion.plan({ownerId:owner,requestKey:'synthetic-directory-source',scope:{kind:'source',contactId:a.contact_id,sourceId:source}});
- assert.equal((await service.read(a.contact_id)).messages.length,7);assert.equal(await count(a.contact_id),7);assert.equal(await count(b.contact_id),3);
+ const pending=await service.read(a.contact_id);
+ assert.equal(pending.messages.length,7);assert.equal(pending.coverage.messageCount,7);
+ assert.equal(await count(a.contact_id),7);assert.equal(await count(b.contact_id),3);
  assert.equal((await deletion.advance(plan)).state,'completed');assert.equal(await count(a.contact_id),7);
  for(const message of (await service.read(a.contact_id)).messages){const clear=await deletion.plan({ownerId:owner,requestKey:`synthetic-directory-clear-${message.id}`,scope:{kind:'source',contactId:a.contact_id,sourceId:message.sourceRecordIds[0]}});assert.equal((await deletion.advance(clear)).state,'completed');}
  assert.equal((await service.read(a.contact_id)).messages.length,0);assert.equal(await count(a.contact_id),0);assert.equal(await count(b.contact_id),3);
@@ -171,7 +173,8 @@ test('跨分片同localId分别保存，server0不合并，补齐别名及排序
  const {service,channel,saved,target}=await fixture(t);target.partitions=['shard-a','shard-b'];target.tables=target.partitions.map(partition=>({partition,instance:'table-instance-1'}));
  let turn=0;channel.page=async(_s,_t,cursor)=>({target:target.descriptor,cursorIn:cursor,cursorOut:null,records:turn++===0?[record('1'),record('1',{partition:'shard-b'})]:[record('1',{serverId:'18446744073709551615',orderScheme:'synthetic-seq',orderKey:'100'}),record('2',{serverId:'18446744073709551615',text:'合成正文1'})],completedPartitions:target.partitions,exhausted:true});
  const contact=saved[0].contact_id;await service.synchronize(contact);assert.equal((await service.read(contact)).messages.length,2);
- await service.synchronize(contact);const result=await service.read(contact);assert.equal(result.messages.length,2);assert.equal(result.coverage.quarantinedCount,0);
+ await service.synchronize(contact);const result=await service.read(contact);
+ assert.equal(result.messages.length,2);assert.equal(result.coverage.messageCount,2);assert.equal(result.coverage.quarantinedCount,0);
  assert.equal(result.messages.find(m=>m.text==='合成正文1'&&m.sourceRecordIds.length===2)?.sourceRecordIds.length,2);
 });
 test('未知身份与内容冲突隔离，非文字夹带正文不保存，覆盖不能完整',async t=>{

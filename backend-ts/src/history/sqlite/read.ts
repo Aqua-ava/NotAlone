@@ -92,7 +92,20 @@ export function readCoverage(tx:StorageTransaction,owner:string,contact:string):
  const safeIncremental=incrementalGoal?.creation_no===null?{...incrementalGoal,state:'incomplete',failure_code:'history_goal_order_unverified',cursor:null}:incrementalGoal;
  const continuityBlocked=Boolean(tx.get("SELECT 1 FROM source_proof WHERE owner_id=? AND contact_id=? AND state='needs_confirmation'",[owner,contact]));
  const blockedBinding=continuityBlocked&&!goal?tx.get("SELECT id FROM conversation_binding WHERE owner_id=? AND contact_id=? AND state='verified'",[owner,contact]):undefined;
- const typeRows=tx.all(`WITH ${currentSourceScopeCTE} SELECT m.kind,m.original_type,count(*) AS n FROM message m WHERE owner_id=? AND contact_id=? AND availability='available' AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id) AND ${currentMessageSource} GROUP BY m.kind,m.original_type`,[owner,contact,contact,owner,contact]);
+ // 同一捕获可支撑多条消息。先解析本联系人的捕获与绑定关系，再逐个出现键核验来源范围。
+ const typeRows=tx.all(`WITH ${currentSourceScopeCTE}, capture_bindings AS MATERIALIZED (
+  SELECT c.id,g.binding_id FROM history_scope_request req
+  JOIN sync_capture c ON c.owner_id=req.owner_id AND c.contact_id=req.contact_id
+  JOIN read_goal g ON g.owner_id=c.owner_id AND g.id=c.goal_id
+ )
+ SELECT m.kind,m.original_type,count(*) AS n FROM message m
+ WHERE m.owner_id=? AND m.contact_id=? AND m.availability='available'
+ AND NOT EXISTS (SELECT 1 FROM history_message_quarantine q
+  WHERE q.owner_id=m.owner_id AND q.contact_id=m.contact_id AND q.message_id=m.id)
+ AND EXISTS (SELECT 1 FROM capture_record r JOIN capture_bindings b ON b.id=r.capture_id
+  WHERE r.owner_id=m.owner_id AND r.contact_id=m.contact_id AND r.message_id=m.id
+  AND r.state='normalized' AND r.availability='available' AND ${currentSourcePredicate('r','b')})
+ GROUP BY m.kind,m.original_type`,[owner,contact,contact,owner,contact]);
  const counts={messages:0n,nontext:0n},typeCounts=new Map<HistoryMessageType,bigint>();
  for(const row of typeRows){
   const n=row.n as bigint;counts.messages+=n;
